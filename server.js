@@ -1,0 +1,36 @@
+import "dotenv/config";
+import express from "express";
+import cookieParser from "cookie-parser";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import pg from "pg";
+import OpenAI from "openai";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename=fileURLToPath(import.meta.url);
+const __dirname=path.dirname(__filename);
+const app=express();
+const port=Number(process.env.PORT||3000);
+const db=new pg.Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.NODE_ENV==="production"?{rejectUnauthorized:false}:false});
+app.use(express.json({limit:"100kb"}));
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname,"public")));
+const cookie={httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"lax",maxAge:14*24*60*60*1000};
+const token=user=>jwt.sign({id:user.id,email:user.email},process.env.JWT_SECRET,{expiresIn:"14d"});
+function auth(req,res,next){try{req.user=jwt.verify(req.cookies.finkaif_token||"",process.env.JWT_SECRET);next()}catch{res.status(401).json({error:"Требуется вход в аккаунт."})}}
+function fail(res,e){console.error(e);res.status(500).json({error:"Ошибка сервера. Проверьте DATABASE_URL и настройки базы."})}
+app.get("/health",async(_req,res)=>{try{await db.query("select 1");res.status(200).json({ok:true})}catch{res.status(503).json({ok:false})}});
+app.post("/api/auth/register",async(req,res)=>{try{const email=String(req.body.email||"").toLowerCase().trim(),password=String(req.body.password||"");if(!/^\S+@\S+\.\S+$/.test(email)||password.length<6)return res.status(400).json({error:"Введите корректный email и пароль не короче 6 символов."});const hash=await bcrypt.hash(password,12);const r=await db.query("insert into users(email,password_hash) values($1,$2) returning id,email",[email,hash]);res.cookie("finkaif_token",token(r.rows[0]),cookie).json({user:r.rows[0]})}catch(e){if(e.code==="23505")return res.status(409).json({error:"Этот email уже зарегистрирован."});fail(res,e)}});
+app.post("/api/auth/login",async(req,res)=>{try{const email=String(req.body.email||"").toLowerCase().trim(),password=String(req.body.password||"");const r=await db.query("select id,email,password_hash from users where email=$1",[email]);const user=r.rows[0];if(!user||!await bcrypt.compare(password,user.password_hash))return res.status(401).json({error:"Неверный email или пароль."});res.cookie("finkaif_token",token(user),cookie).json({user:{id:user.id,email:user.email}})}catch(e){fail(res,e)}});
+app.post("/api/auth/logout",(_req,res)=>res.clearCookie("finkaif_token",cookie).json({ok:true}));app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
+const tables={transactions:"transactions",budgets:"budgets",goals:"goals"};
+app.get("/api/:resource",auth,async(req,res)=>{try{const table=tables[req.params.resource];if(!table)return res.status(404).json({error:"Не найдено."});const sort=table==="transactions"?"occurred_on desc, created_at desc":"created_at desc";const r=await db.query(`select * from ${table} where user_id=$1 order by ${sort}`,[req.user.id]);res.json(r.rows)}catch(e){fail(res,e)}});
+app.post("/api/transactions",auth,async(req,res)=>{try{const x=req.body;if(!["income","expense"].includes(x.type)||!String(x.category||"").trim()||!(Number(x.amount)>0))return res.status(400).json({error:"Проверьте тип, категорию и сумму операции."});const r=await db.query("insert into transactions(user_id,type,category,description,amount,occurred_on) values($1,$2,$3,$4,$5,$6) returning *",[req.user.id,x.type,String(x.category).trim(),String(x.description||"").trim(),Number(x.amount),x.occurred_on||new Date().toISOString().slice(0,10)]);res.json(r.rows[0])}catch(e){fail(res,e)}});
+app.post("/api/budgets",auth,async(req,res)=>{try{const x=req.body;if(!String(x.category||"").trim()||!(Number(x.limit_amount)>0))return res.status(400).json({error:"Проверьте категорию и сумму лимита."});const r=await db.query("insert into budgets(user_id,category,limit_amount) values($1,$2,$3) on conflict(user_id,category) do update set limit_amount=excluded.limit_amount returning *",[req.user.id,String(x.category).trim(),Number(x.limit_amount)]);res.json(r.rows[0])}catch(e){fail(res,e)}});
+app.post("/api/goals",auth,async(req,res)=>{try{const x=req.body;if(!String(x.name||"").trim()||!(Number(x.target_amount)>0))return res.status(400).json({error:"Проверьте название и сумму цели."});const r=await db.query("insert into goals(user_id,name,target_amount,saved_amount) values($1,$2,$3,$4) returning *",[req.user.id,String(x.name).trim(),Number(x.target_amount),Math.max(0,Number(x.saved_amount)||0)]);res.json(r.rows[0])}catch(e){fail(res,e)}});
+app.delete("/api/:resource/:id",auth,async(req,res)=>{try{const table=tables[req.params.resource];if(!table)return res.status(404).json({error:"Не найдено."});await db.query(`delete from ${table} where id=$1 and user_id=$2`,[req.params.id,req.user.id]);res.json({ok:true})}catch(e){fail(res,e)}});
+app.get("/api/chat",auth,async(req,res)=>{try{const r=await db.query("select role,content,created_at from chat_messages where user_id=$1 order by created_at asc limit 80",[req.user.id]);res.json(r.rows)}catch(e){fail(res,e)}});
+app.post("/api/assistant",auth,async(req,res)=>{try{const question=String(req.body.question||"").trim();if(!question)return res.status(400).json({error:"Введите вопрос."});if(!process.env.OPENAI_API_KEY)return res.status(503).json({error:"ИИ ещё не подключён. Добавьте OPENAI_API_KEY в Railway Variables."});const [tr,bu,go]=await Promise.all([db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250",[req.user.id]),db.query("select category,limit_amount from budgets where user_id=$1",[req.user.id]),db.query("select name,target_amount,saved_amount from goals where user_id=$1",[req.user.id])]);const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const prompt=`Ты — внимательный русскоязычный помощник Finkaif по личным финансам. Отвечай естественно, подробно, но без воды. Анализируй вопрос и финансовый контекст. Сначала объясни ситуацию, затем предложи конкретные действия, суммы или формулу если хватает данных. Если данных не хватает, задай не более двух точных вопросов. Не выдумывай факты. Не проси пароли, номера карт или банковские реквизиты. Не обещай доходность и не выдавай ответ за персональную инвестиционную, юридическую или кредитную рекомендацию. Контекст: ${JSON.stringify({transactions:tr.rows,budgets:bu.rows,goals:go.rows})}`;const r=await client.chat.completions.create({model:process.env.OPENAI_MODEL||"gpt-4o-mini",temperature:.45,messages:[{role:"system",content:prompt},{role:"user",content:question}]});const answer=r.choices[0]?.message?.content||"Не удалось получить ответ.";await db.query("insert into chat_messages(user_id,role,content) values($1,$2,$3),($1,$4,$5)",[req.user.id,"user",question,"assistant",answer]);res.json({answer})}catch(e){console.error(e);res.status(500).json({error:"Не удалось получить ответ ИИ. Проверьте OPENAI_API_KEY."})}});
+app.get("*",(_req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
+app.listen(port,"0.0.0.0",()=>console.log(`Finkaif is running on port ${port}`));
