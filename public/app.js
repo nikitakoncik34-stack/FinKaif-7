@@ -245,7 +245,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.1</span>
+          <span class="brand-badge">8.3</span>
         </div>
       </div>
 
