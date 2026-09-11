@@ -128,6 +128,44 @@ app.get("/api/me", auth, (req, res) => {
   res.json({ user: req.user });
 });
 
+app.get("/api/profile", auth, async (req, res) => {
+  try {
+    const r = await db.query("select display_name, avatar, currency from user_settings where user_id=$1", [req.user.id]);
+    if (r.rows[0]) {
+      res.json(r.rows[0]);
+    } else {
+      res.json({ display_name: "", avatar: "⚡", currency: "RUB" });
+    }
+  } catch (e) {
+    console.warn("Profile fetch fallback:", e.message);
+    res.json({ display_name: "", avatar: "⚡", currency: "RUB" });
+  }
+});
+
+app.post("/api/profile", auth, async (req, res) => {
+  try {
+    const { display_name, avatar, currency } = req.body;
+    const name = String(display_name || "").slice(0, 50).trim();
+    const av = String(avatar || "⚡").slice(0, 100).trim();
+    const cur = ["RUB", "USD", "EUR", "KZT"].includes(currency) ? currency : "RUB";
+
+    const r = await db.query(
+      `insert into user_settings(user_id, display_name, avatar, currency, updated_at)
+       values($1, $2, $3, $4, now())
+       on conflict(user_id) do update set
+         display_name=excluded.display_name,
+         avatar=excluded.avatar,
+         currency=excluded.currency,
+         updated_at=now()
+       returning display_name, avatar, currency`,
+      [req.user.id, name, av, cur]
+    );
+    res.json(r.rows[0]);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 const tables = { transactions: "transactions", budgets: "budgets", goals: "goals" };
 
 app.get("/api/:resource", auth, async (req, res) => {
