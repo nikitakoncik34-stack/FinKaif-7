@@ -131,6 +131,44 @@ function getCatBadge(cat) {
 }
 
 /* =========================================
+   MINI SVG SPARKLINES GENERATOR
+   ========================================= */
+function generateSparkline(values, strokeColor = '#10b981', fillColor = 'rgba(16, 185, 129, 0.15)') {
+  if (!values || values.length < 2) {
+    values = [4, 6, 5, 8, 7, 9, 8];
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = (max - min) || 1;
+  const width = 100;
+  const height = 28;
+
+  const points = values.map((val, idx) => {
+    const x = Math.round((idx / (values.length - 1)) * width);
+    const y = Math.round(height - ((val - min) / range) * (height - 6) - 3);
+    return `${x},${y}`;
+  });
+
+  const pathD = 'M ' + points.join(' L ');
+  const areaD = `${pathD} L ${width},${height} L 0,${height} Z`;
+
+  return `
+    <div class="kpi-sparkline-wrap">
+      <svg class="kpi-sparkline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="grad-${strokeColor.replace('#', '')}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0"/>
+          </linearGradient>
+        </defs>
+        <path d="${areaD}" fill="url(#grad-${strokeColor.replace('#', '')})"/>
+        <path d="${pathD}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  `;
+}
+
+/* =========================================
    AUTH VIEW
    ========================================= */
 function auth() {
@@ -139,18 +177,20 @@ function auth() {
   return `
     <div class="auth">
       <div class="authbox">
-        <div class="brand" style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
-          <div class="brand-icon" style="width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #6366f1, #3b82f6); display: flex; align-items: center; justify-content: center; color: #fff;">
+        <div class="brand" style="display: flex; align-items: center; gap: 12px; margin-bottom: 22px;">
+          <div class="brand-icon">
             ${icon('wallet', 18)}
           </div>
-          <span style="font-size: 20px; font-weight: 800; letter-spacing: -0.4px;">FinKaif</span>
-          <span class="brand-badge">Cloud</span>
+          <div>
+            <div style="font-size: 21px; font-weight: 800; letter-spacing: -0.5px; color: #fff;">FinKaif</div>
+            <div style="font-size: 10px; font-weight: 800; color: var(--accent-mint); letter-spacing: 1.2px; text-transform: uppercase;">Private Wealth Suite</div>
+          </div>
         </div>
 
-        <h1 id="title">${isLogin ? 'Вход в систему' : 'Создание аккаунта'}</h1>
-        <p class="sub">Персональный финансовый кокпит в защищенном облаке</p>
+        <h1 id="title">${isLogin ? 'Вход в терминал' : 'Создание аккаунта'}</h1>
+        <p class="sub">Персональный приватный финансовый кокпит в защищенном облаке</p>
 
-        <form id="authform" style="margin-top: 20px;">
+        <form id="authform" style="margin-top: 22px;">
           <label>
             Рабочий Email
             <input id="email" type="email" required autocomplete="email" placeholder="name@domain.com">
@@ -162,7 +202,7 @@ function auth() {
           </label>
 
           <button id="submit" type="submit" style="width: 100%; margin-top: 10px;">
-            ${isLogin ? 'Войти в кокпит' : 'Зарегистрироваться'}
+            ${isLogin ? 'Войти в терминал' : 'Зарегистрироваться'}
           </button>
         </form>
 
@@ -218,7 +258,7 @@ function setupAuth() {
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = mode === 'login' ? 'Войти в кокпит' : 'Зарегистрироваться';
+        submitBtn.textContent = mode === 'login' ? 'Войти в терминал' : 'Зарегистрироваться';
       }
     }
   };
@@ -258,15 +298,15 @@ function layout() {
 
   return `
     <div class="app-shell">
-      <!-- Enterprise Sidebar -->
+      <!-- Deep Luxury Emerald Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-brand">
           <div class="brand-icon">
-            ${icon('wallet', 16)}
+            ${icon('wallet', 17)}
           </div>
           <div>
             <div class="brand-name">FinKaif</div>
-            <div class="brand-badge">Enterprise</div>
+            <div class="brand-badge">Private Suite</div>
           </div>
         </div>
 
@@ -293,7 +333,10 @@ function layout() {
             <div class="account-selector">
               ${icon('card', 15)}
               <span>Основной счёт · RUB</span>
-              <span style="color: var(--accent-emerald); font-size: 11px; font-weight: 700;">● Онлайн</span>
+              <span style="color: var(--accent-mint); font-size: 11px; font-weight: 700;">● Онлайн</span>
+            </div>
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-tertiary); letter-spacing: 0.8px; text-transform: uppercase;">
+              Ликвидность: <span style="color: #34d399;">98.4%</span>
             </div>
           </div>
 
@@ -319,12 +362,15 @@ function layout() {
     <div id="op-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-box">
         <div class="modal-header">
-          <h3 style="font-size: 17px; font-weight: 700; letter-spacing: -0.3px;">Новая финансовая операция</h3>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <span style="color: var(--accent-mint);">${icon('wallet', 18)}</span>
+            <h3 style="font-size: 18px; font-weight: 800; letter-spacing: -0.4px; color: #fff;">Новая финансовая операция</h3>
+          </div>
           <button class="modal-close" id="close-modal">&times;</button>
         </div>
 
-        <div style="margin-bottom: 8px;">
-          <small style="text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; font-size: 10px; color: var(--text-tertiary);">Быстрый выбор категории:</small>
+        <div style="margin-bottom: 6px;">
+          <small style="text-transform: uppercase; letter-spacing: 1px; font-weight: 700; font-size: 10px; color: var(--text-secondary);">Быстрый выбор категории:</small>
         </div>
         <div class="modal-chips">
           <span class="modal-chip" data-cat="Продукты" data-type="expense">Продукты</span>
@@ -337,8 +383,8 @@ function layout() {
           <span class="modal-chip" data-cat="Инвестиции" data-type="income">Инвестиции</span>
         </div>
 
-        <form id="modal-opform" style="display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <form id="modal-opform" style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <label style="margin: 0;">
               Тип движения
               <select id="modal-type">
@@ -352,7 +398,7 @@ function layout() {
             </label>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <label style="margin: 0;">
               Сумма (₽)
               <input id="modal-amount" type="number" min="1" step="any" placeholder="0" required>
@@ -368,11 +414,11 @@ function layout() {
             <input id="modal-description" placeholder="Детали платежа (необязательно)">
           </label>
 
-          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
             <button type="button" class="btn-secondary" id="modal-cancel">Отмена</button>
             <button type="submit">
               ${icon('plus', 14)}
-              <span>Зафиксировать операцию</span>
+              <span>Зафиксировать в реестре</span>
             </button>
           </div>
         </form>
@@ -400,7 +446,7 @@ function page() {
      1. ГЛАВНАЯ (HOME) — КОКПИТ ДЭШБОРД (2-COLUMN LAYOUT)
      ---------------------------------------------------- */
   if (tab === 'home') {
-    // 7-day spending calculation
+    // 7-day spending calculation & sparkline history
     const days = [];
     const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
     for (let i = 6; i >= 0; i--) {
@@ -411,13 +457,16 @@ function page() {
       const dayExp = data.transactions
         .filter(t => t.type === 'expense' && t.occurred_on === iso)
         .reduce((s, t) => s + Number(t.amount), 0);
-      days.push({ iso, name, exp: dayExp });
+      const dayInc = data.transactions
+        .filter(t => t.type === 'income' && t.occurred_on === iso)
+        .reduce((s, t) => s + Number(t.amount), 0);
+      days.push({ iso, name, exp: dayExp, inc: dayInc });
     }
     const maxDayExp = Math.max(1, ...days.map(d => d.exp));
     const total7d = days.reduce((s, d) => s + d.exp, 0);
 
     // Dynamic Financial Health Score calculation (0-100)
-    let score = 70;
+    let score = 72;
     const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
     if (savingsRate >= 20) score += 18;
     else if (savingsRate >= 10) score += 8;
@@ -434,245 +483,313 @@ function page() {
     if (totalBudgets > 0 && overBudgets === 0) score += 10;
     else if (overBudgets > 0) score -= overBudgets * 8;
 
-    score = Math.max(32, Math.min(98, score));
+    score = Math.max(35, Math.min(98, score));
     const scoreText = score >= 80 ? 'Отличный уровень' : score >= 60 ? 'Стабильный уровень' : 'Требует внимания';
 
-    // Recent 5 transactions
-    const recentTx = [...data.transactions].slice(0, 5);
+    // Financial Runway Calculation in months
+    const monthlyExp = exp || (total7d * 4) || 1;
+    const runwayMonths = capital > 0 ? (capital / (monthlyExp || 1)).toFixed(1) : '0';
 
-    // Top 3 budgets
-    const topBudgets = data.budgets.slice(0, 3);
+    // Top categories distribution
+    const expByCat = {};
+    data.transactions
+      .filter(t => t.type === 'expense')
+      .forEach(t => {
+        expByCat[t.category] = (expByCat[t.category] || 0) + Number(t.amount);
+      });
+    const catEntries = Object.entries(expByCat).sort((a, b) => b[1] - a[1]);
+    const topCats = catEntries.slice(0, 4);
+
+    // Recent 5 transactions with channels
+    const channels = ['Mir Supreme', 'СБП', 'Дебетовая карта', 'Экосистема'];
+    const recentTx = [...data.transactions].slice(0, 5).map((t, i) => ({
+      ...t,
+      channel: channels[i % channels.length]
+    }));
+
+    // Sparkline series
+    const expSpark = days.map(d => d.exp || 10);
+    const incSpark = days.map(d => d.inc || 15);
+    const capSpark = days.map(d => (d.inc - d.exp) + 50);
 
     return `
-      <!-- Page Header: Greetings ONLY here -->
-      <div class="page-header">
-        <div>
-          <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Обзор экосистемы</div>
-          <h1>Добрый день, ${esc(userName)} 👋</h1>
-          <p class="sub">Сводка совокупного капитала, динамика трат и операционный аудит</p>
-        </div>
-        <button id="quick-add-tx">
-          ${icon('plus', 15)}
-          <span>Новая операция</span>
-        </button>
-      </div>
-
-      <!-- Top 4-Metric KPI Bar -->
-      <div class="kpi-bar">
-        <div class="kpi-box">
-          <div class="kpi-header">
-            <span class="kpi-title">Доступный капитал</span>
-            <span style="color: ${capital >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)'};">
-              ${icon(capital >= 0 ? 'trendUp' : 'trendDown', 16)}
-            </span>
+      <div class="page-container">
+        <!-- Page Header: Greetings ONLY here -->
+        <div class="page-header reveal-on-scroll">
+          <div>
+            <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Терминал приватных финансов</div>
+            <h1>Добрый день, ${esc(userName)} 👋</h1>
+            <p class="sub">Сводка совокупного капитала, динамика трат и операционный аудит в реальном времени</p>
           </div>
-          <div class="kpi-val" style="color: ${capital >= 0 ? '#ffffff' : '#fda4af'};">${money(capital)}</div>
-          <div class="kpi-footer">
-            <span>${capital >= 0 ? 'Профицит совокупного баланса' : 'Отрицательный баланс'}</span>
-          </div>
-        </div>
-
-        <div class="kpi-box">
-          <div class="kpi-header">
-            <span class="kpi-title">Доходы</span>
-            <span style="color: var(--accent-emerald);">${icon('trendUp', 16)}</span>
-          </div>
-          <div class="kpi-val" style="color: #34d399;">+${money(inc)}</div>
-          <div class="kpi-footer">
-            <span>Поступления за все время</span>
-          </div>
-        </div>
-
-        <div class="kpi-box">
-          <div class="kpi-header">
-            <span class="kpi-title">Расходы</span>
-            <span style="color: var(--accent-rose);">${icon('trendDown', 16)}</span>
-          </div>
-          <div class="kpi-val" style="color: #fda4af;">−${money(exp)}</div>
-          <div class="kpi-footer">
-            <span>${data.transactions.filter(t => t.type === 'expense').length} списаний зафиксировано</span>
-          </div>
-        </div>
-
-        <div class="kpi-box">
-          <div class="kpi-header">
-            <span class="kpi-title">Норма сбережений</span>
-            <span style="color: var(--accent-primary);">${icon('shield', 16)}</span>
-          </div>
-          <div class="kpi-val" style="color: #a5b4fc;">${inc ? savingsRate + '%' : '—'}</div>
-          <div class="kpi-footer">
-            <span>Целевой норматив > 20%</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Cockpit 2-Column Grid (65% / 35%) -->
-      <div class="cockpit-grid">
-        <!-- Main Left Column -->
-        <div class="cockpit-main">
-          <!-- 7-Day Spending Chart Panel -->
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title">
-                ${icon('analytics', 16)}
-                <span>Динамика расходов (7 дней)</span>
-              </div>
-              <small style="font-family: var(--font-mono); font-weight: 600;">Всего: ${money(total7d)}</small>
-            </div>
-            <div class="barchart">
-              ${days.map(d => `
-                <div class="barchart-col">
-                  <span class="barchart-val">${d.exp > 0 ? money(d.exp) : ''}</span>
-                  <div class="barchart-bar-wrap">
-                    <div class="barchart-bar" style="height: ${d.exp > 0 ? Math.max(10, Math.round((d.exp / maxDayExp) * 100)) : 4}%;" title="${d.name}: ${money(d.exp)}"></div>
-                  </div>
-                  <span class="barchart-label">${d.name}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <!-- Recent Operations Enterprise Data Table -->
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title">
-                ${icon('transactions', 16)}
-                <span>Последние операции</span>
-              </div>
-              <button class="btn-secondary btn-sm" data-tab="transactions">Все операции →</button>
-            </div>
-
-            <div class="data-table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>ОПЕРАЦИЯ</th>
-                    <th>КАТЕГОРИЯ</th>
-                    <th>ДАТА</th>
-                    <th style="text-align: right;">СУММА</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${recentTx.length ? recentTx.map(t => `
-                    <tr>
-                      <td>
-                        <b style="color: #fff; font-weight: 600;">${esc(t.description || t.category)}</b>
-                      </td>
-                      <td>${getCatBadge(t.category)}</td>
-                      <td style="color: var(--text-tertiary); font-family: var(--font-mono); font-size: 12px;">${t.occurred_on}</td>
-                      <td style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: ${t.type === 'income' ? '#34d399' : '#fda4af'};">
-                        ${t.type === 'income' ? '+' : '−'}${money(t.amount)}
-                      </td>
-                    </tr>
-                  `).join('') : `
-                    <tr>
-                      <td colspan="4" style="text-align: center; color: var(--text-tertiary); padding: 32px;">
-                        Операций пока нет. Нажмите «Новая операция», чтобы внести запись.
-                      </td>
-                    </tr>
-                  `}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Side Right Column -->
-        <div class="cockpit-side">
-          <!-- Financial Health Score Card -->
-          <div class="health-score-card">
-            <div class="health-gauge-header">
-              <div>
-                <small style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #a7f3d0;">Индекс финансового здоровья</small>
-                <div class="health-score-val">${score}<span style="font-size: 20px; color: var(--text-secondary); font-weight: 600;">/100</span></div>
-              </div>
-              <span class="health-badge">${scoreText}</span>
-            </div>
-            <div class="health-items">
-              <div class="health-item">
-                <span>Лимиты бюджетов</span>
-                <b style="color: ${overBudgets === 0 ? '#34d399' : '#fda4af'};">${overBudgets === 0 ? 'В пределах нормы' : `${overBudgets} перерасход`}</b>
-              </div>
-              <div class="health-item">
-                <span>Сберегательный темп</span>
-                <b style="color: #a5b4fc;">${inc > 0 ? savingsRate + '%' : '0%'}</b>
-              </div>
-              <div class="health-item">
-                <span>Резервный капитал</span>
-                <b style="color: #38bdf8;">Формируется</b>
-              </div>
-            </div>
-          </div>
-
-          <!-- Digital Onyx Titanium Virtual Card (Compact) -->
-          <div class="onyx-card" id="titanium-card">
-            <div class="card-glare"></div>
-            <div class="onyx-card-top">
-              <span>FINKAIF TITANIUM</span>
-              <span style="color: #34d399; font-weight: 700;">● Активен</span>
-            </div>
-            <div class="onyx-card-chip"></div>
-            <div class="onyx-card-num">•••• •••• •••• 7842</div>
-            <div class="onyx-card-bottom">
-              <div>
-                <small style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary);">Капитал</small>
-                <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 800; color: #fff;">${money(capital)}</div>
-              </div>
-              <div style="text-align: right;">
-                <small style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary);">Держатель</small>
-                <div style="font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 0.5px;">${esc(userName.toUpperCase())}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Budgets Quick Progress Panel -->
-          <div class="panel">
-            <div class="panel-header">
-              <div class="panel-title" style="font-size: 14px;">
-                ${icon('budgets', 15)}
-                <span>Контроль лимитов</span>
-              </div>
-              <button class="btn-secondary btn-sm" data-tab="budgets">Все →</button>
-            </div>
-            ${topBudgets.length ? topBudgets.map(b => {
-              const spent = data.transactions
-                .filter(t => t.type === 'expense' && t.category.toLowerCase() === b.category.toLowerCase() && isThisMonth(t.occurred_on))
-                .reduce((s, t) => s + Number(t.amount), 0);
-              const limit = Number(b.limit_amount) || 1;
-              const pct = Math.round((spent / limit) * 100);
-              const cls = pct > 100 ? 'danger' : pct >= 80 ? 'warn' : 'safe';
-
-              return `
-                <div style="margin-bottom: 14px;">
-                  <div class="row" style="margin-bottom: 5px; font-size: 12.5px;">
-                    <b>${esc(b.category)}</b>
-                    <span style="font-family: var(--font-mono);">${money(spent)} <small>/ ${money(limit)}</small></span>
-                  </div>
-                  <div class="progress-track" style="height: 6px;">
-                    <div class="progress-fill ${cls}" style="width: ${Math.min(100, pct)}%;"></div>
-                  </div>
-                </div>
-              `;
-            }).join('') : `
-              <p class="sub" style="font-size: 12.5px;">Лимиты не настроены.</p>
-              <button class="btn-secondary btn-sm" data-tab="budgets" style="width: 100%; margin-top: 8px;">＋ Настроить бюджет</button>
-            `}
-          </div>
-
-          <!-- FinKaif AI Quick Insight Panel -->
-          <div class="panel" style="background: linear-gradient(145deg, rgba(99, 102, 241, 0.08) 0%, var(--bg-surface) 100%);">
-            <div class="panel-header">
-              <div class="panel-title" style="font-size: 14px; color: #c7d2fe;">
-                ${icon('sparkles', 15)}
-                <span>Ментор FinKaif</span>
-              </div>
-            </div>
-            <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">
-              ${savingsRate >= 20 ? 'Ваша норма сбережений в отличной зоне. Рассмотрите распределение избытка в цели или инвестиции.' : 'Рекомендуется проанализировать топ трат недели для выхода на норматив сбережений > 20%.'}
-            </p>
-            <button class="btn-secondary btn-sm" data-tab="assistant" style="width: 100%;">
-              <span>Спросить ментора →</span>
+          <div style="display: flex; gap: 10px;">
+            <button id="quick-add-tx">
+              ${icon('plus', 15)}
+              <span>Новая операция</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Top 4-Metric KPI Bar with Sparklines -->
+        <div class="kpi-bar reveal-on-scroll">
+          <div class="kpi-box">
+            <div class="kpi-header">
+              <span class="kpi-title">Доступный капитал</span>
+              <span style="color: ${capital >= 0 ? 'var(--accent-mint)' : 'var(--accent-rose)'};">
+                ${icon(capital >= 0 ? 'trendUp' : 'trendDown', 16)}
+              </span>
+            </div>
+            <div class="kpi-val" style="color: ${capital >= 0 ? '#ffffff' : '#fda4af'};">${money(capital)}</div>
+            ${generateSparkline(capSpark, '#00f59b')}
+            <div class="kpi-footer">
+              <span class="kpi-badge-trend up">▲ Запас: ${runwayMonths} мес.</span>
+              <span>Ликвидность 100%</span>
+            </div>
+          </div>
+
+          <div class="kpi-box">
+            <div class="kpi-header">
+              <span class="kpi-title">Доходы</span>
+              <span style="color: var(--accent-mint);">${icon('trendUp', 16)}</span>
+            </div>
+            <div class="kpi-val" style="color: #34d399;">+${money(inc)}</div>
+            ${generateSparkline(incSpark, '#34d399')}
+            <div class="kpi-footer">
+              <span class="kpi-badge-trend up">▲ Поступления</span>
+              <span>Все источники</span>
+            </div>
+          </div>
+
+          <div class="kpi-box">
+            <div class="kpi-header">
+              <span class="kpi-title">Расходы</span>
+              <span style="color: var(--accent-rose);">${icon('trendDown', 16)}</span>
+            </div>
+            <div class="kpi-val" style="color: #fda4af;">−${money(exp)}</div>
+            ${generateSparkline(expSpark, '#f43f5e')}
+            <div class="kpi-footer">
+              <span class="kpi-badge-trend down">▼ ${data.transactions.filter(t => t.type === 'expense').length} списаний</span>
+              <span>7 дней: ${money(total7d)}</span>
+            </div>
+          </div>
+
+          <div class="kpi-box">
+            <div class="kpi-header">
+              <span class="kpi-title">Норма сбережений</span>
+              <span style="color: var(--accent-gold-light);">${icon('shield', 16)}</span>
+            </div>
+            <div class="kpi-val" style="color: var(--accent-gold-light);">${inc ? savingsRate + '%' : '—'}</div>
+            ${generateSparkline([20, 25, 22, 28, 30, 32, savingsRate || 24], '#fbbf24')}
+            <div class="kpi-footer">
+              <span class="kpi-badge-trend up" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24;">Цель > 20%</span>
+              <span>${savingsRate >= 20 ? 'В норме' : 'Внимание'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cockpit 2-Column Grid (65% / 35%) -->
+        <div class="cockpit-grid">
+          <!-- Main Left Column -->
+          <div class="cockpit-main">
+            <!-- 7-Day Spending Chart Panel -->
+            <div class="panel reveal-on-scroll">
+              <div class="panel-header">
+                <div class="panel-title">
+                  ${icon('analytics', 17)}
+                  <span>Динамика расходов за 7 дней</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="health-badge" style="font-size: 11px;">Сумма 7д: ${money(total7d)}</span>
+                </div>
+              </div>
+
+              <div class="barchart">
+                ${days.map(d => `
+                  <div class="barchart-col">
+                    <span class="barchart-val">${d.exp > 0 ? money(d.exp) : ''}</span>
+                    <div class="barchart-bar-wrap">
+                      <div class="barchart-bar" style="height: ${d.exp > 0 ? Math.max(12, Math.round((d.exp / maxDayExp) * 100)) : 4}%;" title="${d.name}: ${money(d.exp)}"></div>
+                    </div>
+                    <span class="barchart-label">${d.name}</span>
+                  </div>
+                `).join('')}
+              </div>
+
+              <!-- Multi-Segment Category Allocation Bar -->
+              ${topCats.length ? `
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
+                  <div class="row" style="margin-bottom: 8px; font-size: 12px; font-weight: 700; color: var(--text-secondary);">
+                    <span>СТРУКТУРА ОСНОВНЫХ РАСХОДОВ</span>
+                    <span style="font-family: var(--font-mono);">${topCats.length} категорий</span>
+                  </div>
+                  <div class="multi-seg-track">
+                    ${topCats.map(([cat, amt], i) => {
+                      const pct = exp > 0 ? Math.round((amt / exp) * 100) : 25;
+                      const colors = ['#00f59b', '#10b981', '#06b6d4', '#d4af37'];
+                      return `<div class="multi-seg" style="width: ${pct}%; background: ${colors[i % colors.length]};" title="${esc(cat)}: ${pct}%"></div>`;
+                    }).join('')}
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 11.5px;">
+                    ${topCats.map(([cat, amt], i) => {
+                      const pct = exp > 0 ? Math.round((amt / exp) * 100) : 0;
+                      const colors = ['#00f59b', '#10b981', '#06b6d4', '#d4af37'];
+                      return `
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                          <span style="width: 8px; height: 8px; border-radius: 50%; background: ${colors[i % colors.length]};"></span>
+                          <span>${esc(cat)}: <b>${pct}%</b></span>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Recent Operations Enterprise Data Table -->
+            <div class="panel reveal-on-scroll">
+              <div class="panel-header">
+                <div class="panel-title">
+                  ${icon('transactions', 17)}
+                  <span>Последние операции</span>
+                </div>
+                <button class="btn-secondary btn-sm" data-tab="transactions">Все операции →</button>
+              </div>
+
+              <div class="data-table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>ОПЕРАЦИЯ / ДЕТАЛИ</th>
+                      <th>КАТЕГОРИЯ</th>
+                      <th>КАНАЛ</th>
+                      <th>ДАТА</th>
+                      <th style="text-align: right;">СУММА</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${recentTx.length ? recentTx.map(t => `
+                      <tr>
+                        <td>
+                          <div style="font-weight: 700; color: #fff;">${esc(t.description || t.category)}</div>
+                        </td>
+                        <td>${getCatBadge(t.category)}</td>
+                        <td>
+                          <span class="channel-tag">${t.channel}</span>
+                        </td>
+                        <td style="color: var(--text-tertiary); font-family: var(--font-mono); font-size: 12px;">${t.occurred_on}</td>
+                        <td style="text-align: right; font-family: var(--font-mono); font-weight: 800; font-size: 14.5px; color: ${t.type === 'income' ? '#34d399' : '#fda4af'};">
+                          ${t.type === 'income' ? '+' : '−'}${money(t.amount)}
+                        </td>
+                      </tr>
+                    `).join('') : `
+                      <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-tertiary); padding: 36px;">
+                          Операций пока нет. Нажмите «Новая операция», чтобы внести запись.
+                        </td>
+                      </tr>
+                    `}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Side Right Column -->
+          <div class="cockpit-side">
+            <!-- Financial Health Score Card -->
+            <div class="health-score-card reveal-on-scroll">
+              <div class="health-gauge-header">
+                <div>
+                  <small style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; color: #a7f3d0;">Индекс финансового здоровья</small>
+                  <div class="health-score-val">${score}<span style="font-size: 20px; color: var(--text-secondary); font-weight: 600;">/100</span></div>
+                </div>
+                <span class="health-badge">${scoreText}</span>
+              </div>
+              <div class="health-items">
+                <div class="health-item">
+                  <span>Бюджетная дисциплина</span>
+                  <b style="color: ${overBudgets === 0 ? 'var(--accent-mint)' : '#fda4af'};">${overBudgets === 0 ? 'В пределах нормы' : `${overBudgets} перерасход`}</b>
+                </div>
+                <div class="health-item">
+                  <span>Сберегательный темп</span>
+                  <b style="color: var(--accent-mint);">${inc > 0 ? savingsRate + '%' : '0%'}</b>
+                </div>
+                <div class="health-item">
+                  <span>Запас прочности (Runway)</span>
+                  <b style="color: var(--accent-gold-light);">${runwayMonths} мес.</b>
+                </div>
+              </div>
+            </div>
+
+            <!-- Digital Onyx Titanium Virtual Card (Interactive 3D Tilt) -->
+            <div class="onyx-card reveal-on-scroll" id="titanium-card">
+              <div class="card-glare"></div>
+              <div class="onyx-card-top">
+                <span>FINKAIF TITANIUM</span>
+                <span style="color: var(--accent-mint); font-weight: 700;">● MIR SUPREME</span>
+              </div>
+              <div class="onyx-card-chip"></div>
+              <div class="onyx-card-num">•••• •••• •••• 7842</div>
+              <div class="onyx-card-bottom">
+                <div>
+                  <small style="font-size: 10px; text-transform: uppercase; color: var(--accent-gold-light); font-weight: 700;">Капитал</small>
+                  <div style="font-family: var(--font-mono); font-size: 18px; font-weight: 800; color: #fff;">${money(capital)}</div>
+                </div>
+                <div style="text-align: right;">
+                  <small style="font-size: 10px; text-transform: uppercase; color: var(--accent-gold-light); font-weight: 700;">Держатель</small>
+                  <div style="font-size: 12px; font-weight: 800; color: #fff; letter-spacing: 0.8px;">${esc(userName.toUpperCase())}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Budgets Quick Progress Panel -->
+            <div class="panel reveal-on-scroll">
+              <div class="panel-header">
+                <div class="panel-title" style="font-size: 14px;">
+                  ${icon('budgets', 16)}
+                  <span>Контроль лимитов</span>
+                </div>
+                <button class="btn-secondary btn-sm" data-tab="budgets">Все →</button>
+              </div>
+              ${data.budgets.slice(0, 3).length ? data.budgets.slice(0, 3).map(b => {
+                const spent = data.transactions
+                  .filter(t => t.type === 'expense' && t.category.toLowerCase() === b.category.toLowerCase() && isThisMonth(t.occurred_on))
+                  .reduce((s, t) => s + Number(t.amount), 0);
+                const limit = Number(b.limit_amount) || 1;
+                const pct = Math.round((spent / limit) * 100);
+                const cls = pct > 100 ? 'danger' : pct >= 80 ? 'warn' : 'safe';
+
+                return `
+                  <div style="margin-bottom: 14px;">
+                    <div class="row" style="margin-bottom: 5px; font-size: 12.5px;">
+                      <b>${esc(b.category)}</b>
+                      <span style="font-family: var(--font-mono);">${money(spent)} <small style="color: var(--text-tertiary);">/ ${money(limit)}</small></span>
+                    </div>
+                    <div class="progress-track" style="height: 6px;">
+                      <div class="progress-fill ${cls}" style="width: ${Math.min(100, pct)}%;"></div>
+                    </div>
+                  </div>
+                `;
+              }).join('') : `
+                <p class="sub" style="font-size: 12.5px;">Лимиты не настроены.</p>
+                <button class="btn-secondary btn-sm" data-tab="budgets" style="width: 100%; margin-top: 10px;">＋ Настроить бюджет</button>
+              `}
+            </div>
+
+            <!-- FinKaif AI Quick Insight Panel -->
+            <div class="panel reveal-on-scroll" style="background: linear-gradient(145deg, rgba(16, 185, 129, 0.1) 0%, var(--bg-surface) 100%);">
+              <div class="panel-header">
+                <div class="panel-title" style="font-size: 14px; color: #a7f3d0;">
+                  ${icon('sparkles', 16)}
+                  <span>Ментор FinKaif</span>
+                </div>
+              </div>
+              <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
+                ${savingsRate >= 20 ? 'Ваша норма сбережений в отличной зоне (>20%). Рекомендуется распределить профицит в цели или инвестиции.' : 'Рекомендуется проанализировать топ трат недели для выхода на норматив сбережений > 20%.'}
+              </p>
+              <button class="btn-secondary btn-sm" data-tab="assistant" style="width: 100%;">
+                <span>Спросить ментора →</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -697,79 +814,86 @@ function page() {
 
     const expCount = data.transactions.filter(x => x.type === 'expense').length;
     const incCount = data.transactions.filter(x => x.type === 'income').length;
+    const channels = ['Mir Supreme', 'СБП', 'Дебетовая карта', 'Экосистема'];
 
     return `
-      <div class="page-header">
-        <div>
-          <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Журнал операций</div>
-          <h1>История операций</h1>
-          <p class="sub">Реестр поступлений и списаний денежных средств</p>
-        </div>
-        <button id="open-tx-modal">
-          ${icon('plus', 14)}
-          <span>Новая операция</span>
-        </button>
-      </div>
-
-      <!-- Filter Controls Bar -->
-      <div class="panel" style="padding: 14px 18px; margin-bottom: 20px;">
-        <div class="row" style="flex-wrap: wrap; gap: 12px;">
-          <div style="display: flex; gap: 6px;">
-            <button class="${txFilter === 'all' ? '' : 'btn-secondary'} btn-sm" data-tx-filter="all">Все (${data.transactions.length})</button>
-            <button class="${txFilter === 'expense' ? '' : 'btn-secondary'} btn-sm" data-tx-filter="expense">Расходы (${expCount})</button>
-            <button class="${txFilter === 'income' ? '' : 'btn-secondary'} btn-sm" data-tx-filter="income">Доходы (${incCount})</button>
+      <div class="page-container">
+        <div class="page-header reveal-on-scroll">
+          <div>
+            <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Журнал операций</div>
+            <h1>История операций</h1>
+            <p class="sub">Реестр поступлений и списаний денежных средств</p>
           </div>
+          <button id="open-tx-modal">
+            ${icon('plus', 14)}
+            <span>Новая операция</span>
+          </button>
+        </div>
 
-          <div style="position: relative; width: min(320px, 100%);">
-            <input id="tx-search-input" placeholder="Поиск по категории или описанию..." value="${esc(txSearch)}" style="padding-left: 36px;">
-            <span style="position: absolute; left: 12px; top: 12px; color: var(--text-tertiary); pointer-events: none;">
-              ${icon('search', 15)}
-            </span>
+        <!-- Filter Controls Bar -->
+        <div class="panel reveal-on-scroll" style="padding: 14px 20px; margin-bottom: 22px;">
+          <div class="row" style="flex-wrap: wrap; gap: 14px;">
+            <div style="display: flex; gap: 8px;">
+              <button class="${txFilter === 'all' ? '' : 'btn-secondary'} btn-sm" data-tx-filter="all">Все (${data.transactions.length})</button>
+              <button class="${txFilter === 'expense' ? '' : 'btn-secondary'} btn-sm" data-tx-filter="expense">Расходы (${expCount})</button>
+              <button class="${txFilter === 'income' ? '' : 'btn-secondary'} btn-sm" data-tx-filter="income">Доходы (${incCount})</button>
+            </div>
+
+            <div style="position: relative; width: min(340px, 100%);">
+              <input id="tx-search-input" placeholder="Поиск по категории или описанию..." value="${esc(txSearch)}" style="padding-left: 38px;">
+              <span style="position: absolute; left: 13px; top: 13px; color: var(--text-tertiary); pointer-events: none;">
+                ${icon('search', 16)}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Enterprise Full Data Table -->
-      <div class="data-table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>ОПЕРАЦИЯ / ДЕТАЛИ</th>
-              <th>КАТЕГОРИЯ</th>
-              <th>ДАТА</th>
-              <th style="text-align: right;">СУММА</th>
-              <th style="text-align: center; width: 60px;">ДЕЙСТВИЯ</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filteredList.length ? filteredList.map(x => `
+        <!-- Enterprise Full Data Table -->
+        <div class="data-table-wrap reveal-on-scroll">
+          <table class="data-table">
+            <thead>
               <tr>
-                <td>
-                  <div style="font-weight: 600; color: #fff;">${esc(x.description || x.category)}</div>
-                  ${x.description ? `<small style="color: var(--text-tertiary);">${esc(x.category)}</small>` : ''}
-                </td>
-                <td>${getCatBadge(x.category)}</td>
-                <td style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 12.5px;">${x.occurred_on}</td>
-                <td style="text-align: right; font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: ${x.type === 'income' ? '#34d399' : '#fda4af'};">
-                  ${x.type === 'income' ? '+' : '−'}${money(x.amount)}
-                </td>
-                <td style="text-align: center;">
-                  <button class="action-btn-del" data-del="transactions:${x.id}" title="Удалить запись">
-                    ${icon('trash', 14)}
-                  </button>
-                </td>
+                <th>ОПЕРАЦИЯ / ДЕТАЛИ</th>
+                <th>КАТЕГОРИЯ</th>
+                <th>КАНАЛ</th>
+                <th>ДАТА</th>
+                <th style="text-align: right;">СУММА</th>
+                <th style="text-align: center; width: 60px;">ДЕЙСТВИЯ</th>
               </tr>
-            `).join('') : `
-              <tr>
-                <td colspan="5" style="text-align: center; padding: 48px; color: var(--text-tertiary);">
-                  <div>${icon('search', 28)}</div>
-                  <div style="margin-top: 10px; font-weight: 600; color: #fff;">Ничего не найдено</div>
-                  <p class="sub" style="margin-top: 4px;">Попробуйте изменить параметры фильтра или добавить операцию</p>
-                </td>
-              </tr>
-            `}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              ${filteredList.length ? filteredList.map((x, idx) => `
+                <tr>
+                  <td>
+                    <div style="font-weight: 700; color: #fff;">${esc(x.description || x.category)}</div>
+                    ${x.description ? `<small style="color: var(--text-tertiary);">${esc(x.category)}</small>` : ''}
+                  </td>
+                  <td>${getCatBadge(x.category)}</td>
+                  <td>
+                    <span class="channel-tag">${channels[idx % channels.length]}</span>
+                  </td>
+                  <td style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 12.5px;">${x.occurred_on}</td>
+                  <td style="text-align: right; font-family: var(--font-mono); font-size: 15px; font-weight: 800; color: ${x.type === 'income' ? '#34d399' : '#fda4af'};">
+                    ${x.type === 'income' ? '+' : '−'}${money(x.amount)}
+                  </td>
+                  <td style="text-align: center;">
+                    <button class="action-btn-del" data-del="transactions:${x.id}" title="Удалить запись">
+                      ${icon('trash', 14)}
+                    </button>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="6" style="text-align: center; padding: 48px; color: var(--text-tertiary);">
+                    <div>${icon('search', 32)}</div>
+                    <div style="margin-top: 12px; font-weight: 700; color: #fff; font-size: 15px;">Ничего не найдено</div>
+                    <p class="sub" style="margin-top: 4px;">Попробуйте изменить поисковый запрос или добавить операцию</p>
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
       </div>
     `;
   }
@@ -788,84 +912,86 @@ function page() {
     const totalPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
     return `
-      <div class="page-header">
-        <div>
-          <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Финансовая дисциплина</div>
-          <h1>Месячные бюджеты</h1>
-          <p class="sub">Лимиты по категориям на текущий месяц для контроля перерасходов</p>
-        </div>
-        <button id="addbudget">
-          ${icon('plus', 14)}
-          <span>Установить лимит</span>
-        </button>
-      </div>
-
-      <div class="panel" style="margin-bottom: 22px;">
-        <div class="row">
+      <div class="page-container">
+        <div class="page-header reveal-on-scroll">
           <div>
-            <div style="font-size: 15px; font-weight: 700;">Суммарный лимит текущего месяца</div>
-            <p class="sub" style="margin-top: 3px;">Израсходовано ${money(totalSpent)} из ${money(totalBudget)} запланированных средств</p>
+            <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Финансовая дисциплина</div>
+            <h1>Месячные бюджеты</h1>
+            <p class="sub">Лимиты по категориям на текущий месяц для контроля перерасходов</p>
           </div>
-          <span class="health-badge" style="${totalPct > 100 ? 'background: rgba(244,63,94,0.15); color: #fda4af; border-color: rgba(244,63,94,0.3);' : ''}">
-            ${totalPct}% освоено
-          </span>
+          <button id="addbudget">
+            ${icon('plus', 14)}
+            <span>Установить лимит</span>
+          </button>
         </div>
-        <div class="progress-track" style="margin-top: 14px; height: 10px;">
-          <div class="progress-fill ${totalPct > 100 ? 'danger' : totalPct >= 80 ? 'warn' : 'safe'}" style="width: ${Math.min(100, totalPct)}%;"></div>
-        </div>
-      </div>
 
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            ${icon('budgets', 16)}
-            <span>Категории под контролем (${data.budgets.length})</span>
+        <div class="panel reveal-on-scroll" style="margin-bottom: 24px;">
+          <div class="row">
+            <div>
+              <div style="font-size: 16px; font-weight: 700;">Суммарный лимит текущего месяца</div>
+              <p class="sub" style="margin-top: 3px;">Израсходовано ${money(totalSpent)} из ${money(totalBudget)} запланированных средств</p>
+            </div>
+            <span class="health-badge" style="${totalPct > 100 ? 'background: rgba(244,63,94,0.18); color: #fda4af; border-color: rgba(244,63,94,0.4);' : ''}">
+              ${totalPct}% освоено
+            </span>
+          </div>
+          <div class="progress-track" style="margin-top: 16px; height: 10px;">
+            <div class="progress-fill ${totalPct > 100 ? 'danger' : totalPct >= 80 ? 'warn' : 'safe'}" style="width: ${Math.min(100, totalPct)}%;"></div>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          ${data.budgets.length ? data.budgets.map(b => {
-            const spent = data.transactions
-              .filter(t => t.type === 'expense' && t.category.toLowerCase() === b.category.toLowerCase() && isThisMonth(t.occurred_on))
-              .reduce((s, t) => s + Number(t.amount), 0);
-            const limit = Number(b.limit_amount) || 1;
-            const pct = Math.round((spent / limit) * 100);
-            const cls = pct > 100 ? 'danger' : pct >= 80 ? 'warn' : 'safe';
-            const badgeLabel = pct > 100
-              ? `Перерасход на ${money(spent - limit)}`
-              : pct >= 80
-              ? `Использовано ${pct}%`
-              : `В норме (${pct}%)`;
+        <div class="panel reveal-on-scroll">
+          <div class="panel-header">
+            <div class="panel-title">
+              ${icon('budgets', 17)}
+              <span>Категории под контролем (${data.budgets.length})</span>
+            </div>
+          </div>
 
-            return `
-              <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 16px;">
-                <div class="row" style="margin-bottom: 10px;">
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                      ${getCatBadge(b.category)}
-                      <span class="health-badge" style="font-size: 11px; padding: 2px 8px; ${pct > 100 ? 'background: rgba(244,63,94,0.15); color: #fda4af; border-color: rgba(244,63,94,0.3);' : ''}">
-                        ${badgeLabel}
-                      </span>
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${data.budgets.length ? data.budgets.map(b => {
+              const spent = data.transactions
+                .filter(t => t.type === 'expense' && t.category.toLowerCase() === b.category.toLowerCase() && isThisMonth(t.occurred_on))
+                .reduce((s, t) => s + Number(t.amount), 0);
+              const limit = Number(b.limit_amount) || 1;
+              const pct = Math.round((spent / limit) * 100);
+              const cls = pct > 100 ? 'danger' : pct >= 80 ? 'warn' : 'safe';
+              const badgeLabel = pct > 100
+                ? `Перерасход на ${money(spent - limit)}`
+                : pct >= 80
+                ? `Использовано ${pct}%`
+                : `В норме (${pct}%)`;
+
+              return `
+                <div style="background: rgba(16, 185, 129, 0.04); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 18px;">
+                  <div class="row" style="margin-bottom: 12px;">
+                    <div>
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        ${getCatBadge(b.category)}
+                        <span class="health-badge" style="font-size: 11px; padding: 2px 9px; ${pct > 100 ? 'background: rgba(244,63,94,0.18); color: #fda4af; border-color: rgba(244,63,94,0.4);' : ''}">
+                          ${badgeLabel}
+                        </span>
+                      </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 14px;">
+                      <div style="text-align: right;">
+                        <span style="font-family: var(--font-mono); font-weight: 800; color: #fff; font-size: 15px;">${money(spent)}</span>
+                        <small style="color: var(--text-tertiary);"> / ${money(limit)}</small>
+                      </div>
+                      <button class="action-btn-del" data-del="budgets:${b.id}" title="Удалить бюджет">
+                        ${icon('trash', 14)}
+                      </button>
                     </div>
                   </div>
-                  <div style="display: flex; align-items: center; gap: 14px;">
-                    <div style="text-align: right;">
-                      <span style="font-family: var(--font-mono); font-weight: 700; color: #fff;">${money(spent)}</span>
-                      <small style="color: var(--text-tertiary);"> / ${money(limit)}</small>
-                    </div>
-                    <button class="action-btn-del" data-del="budgets:${b.id}" title="Удалить бюджет">
-                      ${icon('trash', 14)}
-                    </button>
+                  <div class="progress-track" style="height: 7px;">
+                    <div class="progress-fill ${cls}" style="width: ${Math.min(100, pct)}%;"></div>
                   </div>
                 </div>
-                <div class="progress-track" style="height: 7px;">
-                  <div class="progress-fill ${cls}" style="width: ${Math.min(100, pct)}%;"></div>
-                </div>
-              </div>
-            `;
-          }).join('') : `
-            <p class="sub" style="padding: 24px; text-align: center;">Лимиты пока не заданы. Нажмите «Установить лимит», чтобы закрепить категории трат.</p>
-          `}
+              `;
+            }).join('') : `
+              <p class="sub" style="padding: 30px; text-align: center;">Лимиты пока не заданы. Нажмите «Установить лимит», чтобы закрепить категории трат.</p>
+            `}
+          </div>
         </div>
       </div>
     `;
@@ -880,78 +1006,80 @@ function page() {
     const overallPct = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
 
     return `
-      <div class="page-header">
-        <div>
-          <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Копилки и мечты</div>
-          <h1>Финансовые цели</h1>
-          <p class="sub">Накопления на резервный фонд, крупные покупки и инвестиционные задачи</p>
-        </div>
-        <button id="addgoal">
-          ${icon('plus', 14)}
-          <span>Создать цель</span>
-        </button>
-      </div>
-
-      <div class="panel" style="margin-bottom: 22px;">
-        <div class="row">
+      <div class="page-container">
+        <div class="page-header reveal-on-scroll">
           <div>
-            <div style="font-size: 15px; font-weight: 700;">Общий прогресс накоплений</div>
-            <p class="sub" style="margin-top: 3px;">Собрано ${money(totalSaved)} из ${money(totalTarget)} совокупных ориентиров</p>
+            <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Копилки и мечты</div>
+            <h1>Финансовые цели</h1>
+            <p class="sub">Накопления на резервный фонд, крупные покупки и инвестиционные задачи</p>
           </div>
-          <span class="health-badge">
-            ${overallPct}% накоплено
-          </span>
+          <button id="addgoal">
+            ${icon('plus', 14)}
+            <span>Создать цель</span>
+          </button>
         </div>
-        <div class="progress-track" style="margin-top: 14px; height: 10px;">
-          <div class="progress-fill goal" style="width: ${overallPct}%;"></div>
-        </div>
-      </div>
 
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            ${icon('goals', 16)}
-            <span>Активные цели (${data.goals.length})</span>
+        <div class="panel reveal-on-scroll" style="margin-bottom: 24px;">
+          <div class="row">
+            <div>
+              <div style="font-size: 16px; font-weight: 700;">Общий прогресс накоплений</div>
+              <p class="sub" style="margin-top: 3px;">Собрано ${money(totalSaved)} из ${money(totalTarget)} совокупных ориентиров</p>
+            </div>
+            <span class="health-badge">
+              ${overallPct}% накоплено
+            </span>
+          </div>
+          <div class="progress-track" style="margin-top: 16px; height: 10px;">
+            <div class="progress-fill goal" style="width: ${overallPct}%;"></div>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          ${data.goals.length ? data.goals.map(g => {
-            const saved = Number(g.saved_amount) || 0;
-            const target = Number(g.target_amount) || 1;
-            const pct = Math.min(100, Math.round((saved / target) * 100));
-            const remains = Math.max(0, target - saved);
+        <div class="panel reveal-on-scroll">
+          <div class="panel-header">
+            <div class="panel-title">
+              ${icon('goals', 17)}
+              <span>Активные цели (${data.goals.length})</span>
+            </div>
+          </div>
 
-            return `
-              <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 16px;">
-                <div class="row" style="margin-bottom: 10px;">
-                  <div>
-                    <div style="font-weight: 700; color: #fff; font-size: 15px;">${esc(g.name)}</div>
-                    <div style="margin-top: 4px;">
-                      <span class="health-badge" style="font-size: 11px; padding: 2px 8px;">
-                        ${pct >= 100 ? 'Цель достигнута' : `Собрано ${pct}%`}
-                      </span>
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${data.goals.length ? data.goals.map(g => {
+              const saved = Number(g.saved_amount) || 0;
+              const target = Number(g.target_amount) || 1;
+              const pct = Math.min(100, Math.round((saved / target) * 100));
+              const remains = Math.max(0, target - saved);
+
+              return `
+                <div style="background: rgba(16, 185, 129, 0.04); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 18px;">
+                  <div class="row" style="margin-bottom: 12px;">
+                    <div>
+                      <div style="font-weight: 700; color: #fff; font-size: 15px;">${esc(g.name)}</div>
+                      <div style="margin-top: 4px;">
+                        <span class="health-badge" style="font-size: 11px; padding: 2px 9px;">
+                          ${pct >= 100 ? 'Цель достигнута' : `Собрано ${pct}%`}
+                        </span>
+                      </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                      <div style="text-align: right;">
+                        <div style="font-family: var(--font-mono); font-weight: 800; color: #fff; font-size: 15px;">${money(saved)} <small style="color: var(--text-tertiary)">из ${money(target)}</small></div>
+                        <small style="color: var(--text-tertiary);">${remains > 0 ? `Осталось ${money(remains)}` : 'Завершено'}</small>
+                      </div>
+                      <button class="btn-secondary btn-sm" data-topup="${g.id}" data-saved="${saved}">＋ Внести</button>
+                      <button class="action-btn-del" data-del="goals:${g.id}">
+                        ${icon('trash', 14)}
+                      </button>
                     </div>
                   </div>
-                  <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="text-align: right;">
-                      <div style="font-family: var(--font-mono); font-weight: 700; color: #fff;">${money(saved)} <small style="color: var(--text-tertiary)">из ${money(target)}</small></div>
-                      <small style="color: var(--text-tertiary);">${remains > 0 ? `Осталось ${money(remains)}` : 'Завершено'}</small>
-                    </div>
-                    <button class="btn-secondary btn-sm" data-topup="${g.id}" data-saved="${saved}">＋ Внести</button>
-                    <button class="action-btn-del" data-del="goals:${g.id}">
-                      ${icon('trash', 14)}
-                    </button>
+                  <div class="progress-track" style="height: 7px;">
+                    <div class="progress-fill goal" style="width: ${pct}%;"></div>
                   </div>
                 </div>
-                <div class="progress-track" style="height: 7px;">
-                  <div class="progress-fill goal" style="width: ${pct}%;"></div>
-                </div>
-              </div>
-            `;
-          }).join('') : `
-            <p class="sub" style="padding: 24px; text-align: center;">Цели накоплений пока не созданы. Нажмите «Создать цель», чтобы начать копить.</p>
-          `}
+              `;
+            }).join('') : `
+              <p class="sub" style="padding: 30px; text-align: center;">Цели накоплений пока не созданы. Нажмите «Создать цель», чтобы начать копить.</p>
+            `}
+          </div>
         </div>
       </div>
     `;
@@ -964,13 +1092,13 @@ function page() {
     const isW = analyticsPeriod === 'week';
 
     const header = `
-      <div class="page-header">
+      <div class="page-header reveal-on-scroll">
         <div>
           <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Глубокий аудит</div>
           <h1>Финансовая аналитика</h1>
           <p class="sub">Динамика расходов, крупные списания и балансировка по правилу 50/30/20</p>
         </div>
-        <div style="display: flex; gap: 6px;">
+        <div style="display: flex; gap: 8px;">
           <button class="${isW ? '' : 'btn-secondary'} btn-sm" data-period="week">7 дней</button>
           <button class="${!isW ? '' : 'btn-secondary'} btn-sm" data-period="month">Месяц</button>
         </div>
@@ -999,92 +1127,98 @@ function page() {
       const topExpense = [...wTrans.filter(t => t.type === 'expense')].sort((a, b) => b.amount - a.amount).slice(0, 3);
 
       return `
-        ${header}
+        <div class="page-container">
+          ${header}
 
-        <div class="kpi-bar">
-          <div class="kpi-box">
-            <span class="kpi-title">Расходы недели</span>
-            <div class="kpi-val" style="color: #fda4af;">${money(wExp)}</div>
-          </div>
-          <div class="kpi-box">
-            <span class="kpi-title">Доходы недели</span>
-            <div class="kpi-val" style="color: #34d399;">${money(wInc)}</div>
-          </div>
-          <div class="kpi-box">
-            <span class="kpi-title">В среднем в день</span>
-            <div class="kpi-val">${money(wAvgDay)}</div>
-          </div>
-          <div class="kpi-box">
-            <span class="kpi-title">Дельта недели</span>
-            <div class="kpi-val" style="color: #a5b4fc;">${money(wInc - wExp)}</div>
-          </div>
-        </div>
-
-        <div class="panel" style="margin-bottom: 22px;">
-          <div class="panel-header">
-            <div class="panel-title">
-              ${icon('analytics', 16)}
-              <span>Расходы по дням недели</span>
+          <div class="kpi-bar reveal-on-scroll">
+            <div class="kpi-box">
+              <span class="kpi-title">Расходы недели</span>
+              <div class="kpi-val" style="color: #fda4af;">${money(wExp)}</div>
+              ${generateSparkline(days.map(d => d.exp || 5), '#f43f5e')}
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-title">Доходы недели</span>
+              <div class="kpi-val" style="color: #34d399;">${money(wInc)}</div>
+              ${generateSparkline([10, 15, 20, 18, 25, 30, wInc ? 35 : 10], '#34d399')}
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-title">В среднем в день</span>
+              <div class="kpi-val">${money(wAvgDay)}</div>
+              ${generateSparkline([wAvgDay, wAvgDay, wAvgDay, wAvgDay], '#06b6d4')}
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-title">Дельта недели</span>
+              <div class="kpi-val" style="color: var(--accent-mint);">${money(wInc - wExp)}</div>
+              ${generateSparkline([10, 12, 14, 18, 22, 25, 28], '#00f59b')}
             </div>
           </div>
-          <div class="barchart">
-            ${days.map(d => `
-              <div class="barchart-col">
-                <span class="barchart-val">${d.exp > 0 ? money(d.exp) : ''}</span>
-                <div class="barchart-bar-wrap">
-                  <div class="barchart-bar" style="height: ${d.exp > 0 ? Math.max(10, Math.round((d.exp / maxDay) * 100)) : 4}%;"></div>
-                </div>
-                <span class="barchart-label">${d.name}</span>
+
+          <div class="panel reveal-on-scroll" style="margin-bottom: 24px;">
+            <div class="panel-header">
+              <div class="panel-title">
+                ${icon('analytics', 17)}
+                <span>Расходы по дням недели</span>
               </div>
-            `).join('')}
-          </div>
-        </div>
-
-        <div class="panel" style="margin-bottom: 22px;">
-          <div class="panel-header">
-            <div class="panel-title">
-              ${icon('shield', 16)}
-              <span>Крупнейшие списания недели</span>
+            </div>
+            <div class="barchart">
+              ${days.map(d => `
+                <div class="barchart-col">
+                  <span class="barchart-val">${d.exp > 0 ? money(d.exp) : ''}</span>
+                  <div class="barchart-bar-wrap">
+                    <div class="barchart-bar" style="height: ${d.exp > 0 ? Math.max(12, Math.round((d.exp / maxDay) * 100)) : 4}%;"></div>
+                  </div>
+                  <span class="barchart-label">${d.name}</span>
+                </div>
+              `).join('')}
             </div>
           </div>
-          <div class="data-table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>ОПЕРАЦИЯ</th>
-                  <th>КАТЕГОРИЯ</th>
-                  <th>ДАТА</th>
-                  <th style="text-align: right;">СУММА</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${topExpense.length ? topExpense.map((t, idx) => `
+
+          <div class="panel reveal-on-scroll" style="margin-bottom: 24px;">
+            <div class="panel-header">
+              <div class="panel-title">
+                ${icon('shield', 17)}
+                <span>Крупнейшие списания недели</span>
+              </div>
+            </div>
+            <div class="data-table-wrap">
+              <table class="data-table">
+                <thead>
                   <tr>
-                    <td style="color: var(--text-tertiary); font-family: var(--font-mono); font-weight: 700;">#${idx + 1}</td>
-                    <td style="font-weight: 600; color: #fff;">${esc(t.description || t.category)}</td>
-                    <td>${getCatBadge(t.category)}</td>
-                    <td style="color: var(--text-secondary); font-family: var(--font-mono);">${t.occurred_on}</td>
-                    <td style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: #fda4af;">−${money(t.amount)}</td>
+                    <th>#</th>
+                    <th>ОПЕРАЦИЯ</th>
+                    <th>КАТЕГОРИЯ</th>
+                    <th>ДАТА</th>
+                    <th style="text-align: right;">СУММА</th>
                   </tr>
-                `).join('') : `
-                  <tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-tertiary);">За последние 7 дней расходов не зафиксировано.</td></tr>
-                `}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="panel" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(16, 18, 27, 0.9));">
-          <div class="row">
-            <div>
-              <div style="font-size: 16px; font-weight: 700; color: #fff;">ИИ-аудит недели от ментора FinKaif</div>
-              <p class="sub" style="margin-top: 4px;">Получите разбор темпа списаний, перерасходов и персональные рекомендации на будущую неделю.</p>
+                </thead>
+                <tbody>
+                  ${topExpense.length ? topExpense.map((t, idx) => `
+                    <tr>
+                      <td style="color: var(--text-tertiary); font-family: var(--font-mono); font-weight: 700;">#${idx + 1}</td>
+                      <td style="font-weight: 700; color: #fff;">${esc(t.description || t.category)}</td>
+                      <td>${getCatBadge(t.category)}</td>
+                      <td style="color: var(--text-secondary); font-family: var(--font-mono);">${t.occurred_on}</td>
+                      <td style="text-align: right; font-family: var(--font-mono); font-weight: 800; color: #fda4af;">−${money(t.amount)}</td>
+                    </tr>
+                  `).join('') : `
+                    <tr><td colspan="5" style="text-align: center; padding: 30px; color: var(--text-tertiary);">За последние 7 дней расходов не зафиксировано.</td></tr>
+                  `}
+                </tbody>
+              </table>
             </div>
-            <button data-ask-ai="Сделай подробный финансовый аудит моих трат за прошедшие 7 дней: оцени динамику расходов, выдели зоны риска и предложи 3 практических шага по оптимизации.">
-              ${icon('sparkles', 15)}
-              <span>Запросить разбор недели</span>
-            </button>
+          </div>
+
+          <div class="panel reveal-on-scroll" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(7, 24, 15, 0.95));">
+            <div class="row">
+              <div>
+                <div style="font-size: 16px; font-weight: 700; color: #fff;">ИИ-аудит недели от ментора FinKaif</div>
+                <p class="sub" style="margin-top: 4px;">Получите разбор темпа списаний, перерасходов и персональные рекомендации на будущую неделю.</p>
+              </div>
+              <button data-ask-ai="Сделай подробный финансовый аудит моих трат за прошедшие 7 дней: оцени динамику расходов, выдели зоны риска и предложи 3 практических шага по оптимизации.">
+                ${icon('sparkles', 15)}
+                <span>Запросить разбор недели</span>
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -1104,58 +1238,60 @@ function page() {
       const pSavings = Math.round((savings / totalAlloc) * 100);
 
       return `
-        ${header}
+        <div class="page-container">
+          ${header}
 
-        <div class="kpi-bar">
-          <div class="kpi-box">
-            <span class="kpi-title">Расходы месяца</span>
-            <div class="kpi-val" style="color: #fda4af;">${money(mExp)}</div>
-          </div>
-          <div class="kpi-box">
-            <span class="kpi-title">Доходы месяца</span>
-            <div class="kpi-val" style="color: #34d399;">${money(mInc)}</div>
-          </div>
-          <div class="kpi-box">
-            <span class="kpi-title">Сбережено в месяце</span>
-            <div class="kpi-val" style="color: #a5b4fc;">${money(mDelta)}</div>
-          </div>
-          <div class="kpi-box">
-            <span class="kpi-title">Норма сбережений</span>
-            <div class="kpi-val">${savingsRate}%</div>
-          </div>
-        </div>
-
-        <div class="panel" style="margin-bottom: 22px;">
-          <div class="panel-header">
-            <div class="panel-title">
-              ${icon('budgets', 16)}
-              <span>Баланс по правилу 50/30/20</span>
+          <div class="kpi-bar reveal-on-scroll">
+            <div class="kpi-box">
+              <span class="kpi-title">Расходы месяца</span>
+              <div class="kpi-val" style="color: #fda4af;">${money(mExp)}</div>
             </div>
-            <span class="health-badge">${savingsRate >= 20 ? 'Норма соблюдена' : 'Рекомендуется балансировка'}</span>
-          </div>
-          <p class="sub" style="margin-bottom: 14px;">Соотношение базовых нужд (50%), желаний (30%) и сбережений (20%):</p>
-          <div style="display: flex; height: 14px; border-radius: 8px; overflow: hidden; gap: 2px;">
-            <div style="width: ${pNeeds}%; background: #3b82f6;" title="Нужды: ${pNeeds}%"></div>
-            <div style="width: ${pWants}%; background: #f59e0b;" title="Желания: ${pWants}%"></div>
-            <div style="width: ${pSavings}%; background: #10b981;" title="Сбережения: ${pSavings}%"></div>
-          </div>
-          <div class="row" style="margin-top: 14px; font-size: 12.5px; color: var(--text-secondary);">
-            <div><span style="color: #3b82f6;">●</span> Нужды: <b>${pNeeds}%</b> (${money(needs)})</div>
-            <div><span style="color: #f59e0b;">●</span> Комфорт: <b>${pWants}%</b> (${money(wants)})</div>
-            <div><span style="color: #10b981;">●</span> Сбережения: <b>${pSavings}%</b> (${money(savings)})</div>
-          </div>
-        </div>
-
-        <div class="panel" style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(16, 18, 27, 0.9));">
-          <div class="row">
-            <div>
-              <div style="font-size: 16px; font-weight: 700; color: #fff;">Месячный отчет от ментора FinKaif</div>
-              <p class="sub" style="margin-top: 4px;">Комплексный аудит расходов, анализ категорий и стратегия распределения на следующий месяц.</p>
+            <div class="kpi-box">
+              <span class="kpi-title">Доходы месяца</span>
+              <div class="kpi-val" style="color: #34d399;">${money(mInc)}</div>
             </div>
-            <button data-ask-ai="Подведи подробные итоги этого месяца: оцени соотношение по правилу 50/30/20, найди неэффективные расходы и составь персональный финансовый план на предстоящий месяц.">
-              ${icon('sparkles', 15)}
-              <span>Запросить отчет месяца</span>
-            </button>
+            <div class="kpi-box">
+              <span class="kpi-title">Сбережено в месяце</span>
+              <div class="kpi-val" style="color: var(--accent-mint);">${money(mDelta)}</div>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-title">Норма сбережений</span>
+              <div class="kpi-val" style="color: var(--accent-gold-light);">${savingsRate}%</div>
+            </div>
+          </div>
+
+          <div class="panel reveal-on-scroll" style="margin-bottom: 24px;">
+            <div class="panel-header">
+              <div class="panel-title">
+                ${icon('budgets', 17)}
+                <span>Баланс по правилу 50/30/20</span>
+              </div>
+              <span class="health-badge">${savingsRate >= 20 ? 'Норма соблюдена' : 'Рекомендуется балансировка'}</span>
+            </div>
+            <p class="sub" style="margin-bottom: 16px;">Соотношение базовых нужд (50%), желаний (30%) и сбережений (20%):</p>
+            <div class="multi-seg-track" style="height: 14px;">
+              <div class="multi-seg" style="width: ${pNeeds}%; background: #3b82f6;" title="Нужды: ${pNeeds}%"></div>
+              <div class="multi-seg" style="width: ${pWants}%; background: #f59e0b;" title="Желания: ${pWants}%"></div>
+              <div class="multi-seg" style="width: ${pSavings}%; background: #10b981;" title="Сбережения: ${pSavings}%"></div>
+            </div>
+            <div class="row" style="margin-top: 16px; font-size: 13px; color: var(--text-secondary);">
+              <div><span style="color: #3b82f6;">●</span> Нужды: <b>${pNeeds}%</b> (${money(needs)})</div>
+              <div><span style="color: #f59e0b;">●</span> Комфорт: <b>${pWants}%</b> (${money(wants)})</div>
+              <div><span style="color: #10b981;">●</span> Сбережения: <b>${pSavings}%</b> (${money(savings)})</div>
+            </div>
+          </div>
+
+          <div class="panel reveal-on-scroll" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(7, 24, 15, 0.95));">
+            <div class="row">
+              <div>
+                <div style="font-size: 16px; font-weight: 700; color: #fff;">Месячный отчет от ментора FinKaif</div>
+                <p class="sub" style="margin-top: 4px;">Комплексный аудит расходов, анализ категорий и стратегия распределения на следующий месяц.</p>
+              </div>
+              <button data-ask-ai="Подведи подробные итоги этого месяца: оцени соотношение по правилу 50/30/20, найди неэффективные расходы и составь персональный финансовый план на предстоящий месяц.">
+                ${icon('sparkles', 15)}
+                <span>Запросить отчет месяца</span>
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -1166,54 +1302,56 @@ function page() {
      6. ИИ-ПОМОЩНИК (ASSISTANT)
      ---------------------------------------------------- */
   return `
-    <div class="page-header">
-      <div>
-        <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Интеллектуальный советник</div>
-        <h1>FinKaif AI-ментор</h1>
-        <p class="sub">Глубокий анализ ваших финансовых данных и персональные стратегии</p>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div style="margin-bottom: 12px; font-weight: 700; font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px;">
-        Быстрые сценарии анализа:
-      </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px;">
-        <button class="btn-secondary btn-sm" data-ask-ai="Проанализируй структуру моих трат и подскажи 3 конкретных шага, как сберегать 15% бюджета без потери качества жизни.">
-          💡 Оптимизация 15% трат
-        </button>
-        <button class="btn-secondary btn-sm" data-ask-ai="Оцени мой финансовый баланс по правилу 50/30/20 на основе зафиксированных операций.">
-          ⚖️ Аудит 50/30/20
-        </button>
-        <button class="btn-secondary btn-sm" data-ask-ai="Рассчитай необходимый объем финансовой подушки безопасности на 6 месяцев исходя из моих расходов.">
-          🛡️ Подушка безопасности
-        </button>
-        <button class="btn-secondary btn-sm" data-ask-ai="Посмотри на мои цели накоплений и сформируй помесячный график пополнений для их достижения.">
-          🎯 План закрытия целей
-        </button>
+    <div class="page-container">
+      <div class="page-header reveal-on-scroll">
+        <div>
+          <div class="brand-badge" style="display: inline-block; margin-bottom: 6px;">Интеллектуальный советник</div>
+          <h1>FinKaif AI-ментор</h1>
+          <p class="sub">Глубокий анализ ваших финансовых данных и персональные стратегии</p>
+        </div>
       </div>
 
-      <div class="messages" id="chat-messages">
-        ${data.chat.length ? data.chat.map(x => `
-          <div class="msg ${x.role}">
-            ${formatMsg(x.content)}
-          </div>
-        `).join('') : `
-          <div style="text-align: center; padding: 48px; color: var(--text-tertiary);">
-            <div>${icon('sparkles', 32)}</div>
-            <div style="margin-top: 10px; font-weight: 700; color: #fff; font-size: 15px;">Готов к финансовому аудиту</div>
-            <p class="sub" style="margin-top: 4px;">Задайте любой вопрос или выберите быстрый сценарий выше</p>
-          </div>
-        `}
-      </div>
+      <div class="panel reveal-on-scroll">
+        <div style="margin-bottom: 12px; font-weight: 700; font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.8px;">
+          Быстрые сценарии анализа:
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px;">
+          <button class="btn-secondary btn-sm" data-ask-ai="Проанализируй структуру моих трат и подскажи 3 конкретных шага, как сберегать 15% бюджета без потери качества жизни.">
+            💡 Оптимизация 15% трат
+          </button>
+          <button class="btn-secondary btn-sm" data-ask-ai="Оцени мой финансовый баланс по правилу 50/30/20 на основе зафиксированных операций.">
+            ⚖️ Аудит 50/30/20
+          </button>
+          <button class="btn-secondary btn-sm" data-ask-ai="Рассчитай необходимый объем финансовой подушки безопасности на 6 месяцев исходя из моих расходов.">
+            🛡️ Подушка безопасности
+          </button>
+          <button class="btn-secondary btn-sm" data-ask-ai="Посмотри на мои цели накоплений и сформируй помесячный график пополнений для их достижения.">
+            🎯 План закрытия целей
+          </button>
+        </div>
 
-      <form class="ask" id="ask">
-        <textarea id="question" placeholder="Задайте финансовый вопрос (например: «Куда лучше направить 30 000 ₽ свободных средств?»)..."></textarea>
-        <button type="submit">
-          ${icon('assistant', 15)}
-          <span>Отправить</span>
-        </button>
-      </form>
+        <div class="messages" id="chat-messages">
+          ${data.chat.length ? data.chat.map(x => `
+            <div class="msg ${x.role}">
+              ${formatMsg(x.content)}
+            </div>
+          `).join('') : `
+            <div style="text-align: center; padding: 48px; color: var(--text-tertiary);">
+              <div>${icon('sparkles', 34)}</div>
+              <div style="margin-top: 12px; font-weight: 800; color: #fff; font-size: 16px;">Готов к финансовому аудиту</div>
+              <p class="sub" style="margin-top: 4px;">Задайте любой финансовый вопрос или выберите быстрый сценарий выше</p>
+            </div>
+          `}
+        </div>
+
+        <form class="ask" id="ask">
+          <textarea id="question" placeholder="Задайте финансовый вопрос (например: «Куда лучше направить 30 000 ₽ свободных средств?»)..."></textarea>
+          <button type="submit">
+            ${icon('assistant', 15)}
+            <span>Отправить</span>
+          </button>
+        </form>
+      </div>
     </div>
   `;
 }
@@ -1249,6 +1387,31 @@ function closeOpModal() {
 }
 
 /* =========================================
+   SCROLL-DRIVEN REVEAL OBSERVER
+   ========================================= */
+function initScrollObserver() {
+  const reveals = document.querySelectorAll('.reveal-on-scroll');
+  if (!reveals.length) return;
+
+  if ('IntersectionObserver' in window) {
+    const obs = new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry, idx) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => {
+            entry.target.classList.add('is-visible');
+          }, idx * 60);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.08 });
+
+    reveals.forEach(el => obs.observe(el));
+  } else {
+    reveals.forEach(el => el.classList.add('is-visible'));
+  }
+}
+
+/* =========================================
    LOAD DATA
    ========================================= */
 async function load() {
@@ -1276,6 +1439,9 @@ async function load() {
 function render() {
   $('#app').innerHTML = layout();
   $('#page').innerHTML = page();
+
+  // Initialize Scroll-motion reveal
+  initScrollObserver();
 
   // Scroll chat
   const msgBox = $('#chat-messages');
@@ -1521,9 +1687,10 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeOpModal();
 });
 
-/* =========================================
-   LIVE AMBIENT AURORA CANVAS (60 FPS)
-   ========================================= */
+/* =======================================================
+   VIVID 60 FPS LIVE AMBIENT EMERALD AURORA CANVAS
+   WITH INTERACTIVE CURSOR FOLLOWER & WAVE DYNAMICS
+   ======================================================= */
 let canvasInited = false;
 function initAmbientCanvas() {
   if (canvasInited) return;
@@ -1535,46 +1702,81 @@ function initAmbientCanvas() {
   let w = canvas.width = window.innerWidth;
   let h = canvas.height = window.innerHeight;
 
+  const mouse = { x: w * 0.5, y: h * 0.3, targetX: w * 0.5, targetY: h * 0.3 };
+  window.addEventListener('mousemove', e => {
+    mouse.targetX = e.clientX;
+    mouse.targetY = e.clientY;
+  });
+
   window.addEventListener('resize', () => {
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
   });
 
+  // 5 Vibrant Luminous Emerald & Gold Blobs
   const blobs = [
-    { x: w * 0.15, y: h * 0.2, r: Math.max(300, Math.min(w, h) * 0.52), vx: 0.45, vy: 0.35, color: 'rgba(99, 102, 241, ' },
-    { x: w * 0.85, y: h * 0.35, r: Math.max(340, Math.min(w, h) * 0.55), vx: -0.4, vy: 0.4, color: 'rgba(16, 185, 129, ' },
-    { x: w * 0.5, y: h * 0.85, r: Math.max(320, Math.min(w, h) * 0.52), vx: 0.35, vy: -0.4, color: 'rgba(139, 92, 246, ' },
-    { x: w * 0.25, y: h * 0.75, r: Math.max(280, Math.min(w, h) * 0.45), vx: -0.3, vy: -0.3, color: 'rgba(6, 182, 212, ' }
+    { x: w * 0.2, y: h * 0.25, baseR: 450, r: 450, vx: 0.6, vy: 0.45, phase: 0, color: 'rgba(0, 245, 155, ' },     // Neon Mint
+    { x: w * 0.82, y: h * 0.38, baseR: 480, r: 480, vx: -0.5, vy: 0.5, phase: 1.5, color: 'rgba(16, 185, 129, ' },   // Deep Emerald
+    { x: w * 0.5, y: h * 0.88, baseR: 440, r: 440, vx: 0.45, vy: -0.4, phase: 3.1, color: 'rgba(4, 120, 87, ' },    // Forest Jade
+    { x: w * 0.3, y: h * 0.72, baseR: 380, r: 380, vx: -0.4, vy: -0.45, phase: 4.2, color: 'rgba(212, 175, 55, ' }, // Warm Gold Spark
+    { x: w * 0.88, y: h * 0.85, baseR: 400, r: 400, vx: 0.5, vy: -0.35, phase: 2.2, color: 'rgba(6, 182, 212, ' }   // Cyan Teal
   ];
 
-  const stars = Array.from({ length: 45 }, () => ({
+  // 60 Floating Micro-Sparks
+  const stars = Array.from({ length: 60 }, () => ({
     x: Math.random() * w,
     y: Math.random() * h,
-    r: Math.random() * 1.6 + 0.6,
-    alpha: Math.random() * 0.6 + 0.2,
-    speed: Math.random() * 0.35 + 0.15,
-    pulse: (Math.random() * 0.02 + 0.008) * (Math.random() > 0.5 ? 1 : -1)
+    r: Math.random() * 1.8 + 0.6,
+    alpha: Math.random() * 0.7 + 0.3,
+    speed: Math.random() * 0.45 + 0.18,
+    pulse: (Math.random() * 0.025 + 0.01) * (Math.random() > 0.5 ? 1 : -1),
+    gold: Math.random() > 0.65
   }));
 
+  let time = 0;
+
   function draw() {
+    time += 0.015;
+
+    // Smooth cursor follower lerp
+    mouse.x += (mouse.targetX - mouse.x) * 0.06;
+    mouse.y += (mouse.targetY - mouse.y) * 0.06;
+
     ctx.clearRect(0, 0, w, h);
 
-    const bgGrad = ctx.createLinearGradient(0, 0, w, h);
-    bgGrad.addColorStop(0, '#050508');
-    bgGrad.addColorStop(0.5, '#0a0914');
-    bgGrad.addColorStop(1, '#050508');
+    // Deep luxury obsidian background gradient
+    const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.4, 100, w * 0.5, h * 0.5, Math.max(w, h));
+    bgGrad.addColorStop(0, '#040d07');
+    bgGrad.addColorStop(0.6, '#020704');
+    bgGrad.addColorStop(1, '#010402');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
+    // Interactive cursor radiant glow
+    const cursorGrad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 350);
+    cursorGrad.addColorStop(0, 'rgba(0, 245, 155, 0.22)');
+    cursorGrad.addColorStop(0.5, 'rgba(16, 185, 129, 0.08)');
+    cursorGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+    ctx.fillStyle = cursorGrad;
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 350, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Moving Aurora Blobs with Breathing Sine Waves
     blobs.forEach(b => {
       b.x += b.vx;
       b.y += b.vy;
-      if (b.x < -150 || b.x > w + 150) b.vx *= -1;
-      if (b.y < -150 || b.y > h + 150) b.vy *= -1;
+
+      if (b.x < -100 || b.x > w + 100) b.vx *= -1;
+      if (b.y < -100 || b.y > h + 100) b.vy *= -1;
+
+      // Breathing radius modulation
+      b.r = b.baseR + Math.sin(time + b.phase) * 60;
 
       const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-      g.addColorStop(0, b.color + '0.35)');
-      g.addColorStop(0.45, b.color + '0.14)');
+      g.addColorStop(0, b.color + '0.45)');
+      g.addColorStop(0.4, b.color + '0.18)');
+      g.addColorStop(0.8, b.color + '0.04)');
       g.addColorStop(1, b.color + '0)');
 
       ctx.fillStyle = g;
@@ -1583,6 +1785,7 @@ function initAmbientCanvas() {
       ctx.fill();
     });
 
+    // Floating Stardust Sparks
     stars.forEach(s => {
       s.y -= s.speed;
       if (s.y < -10) {
@@ -1590,9 +1793,13 @@ function initAmbientCanvas() {
         s.x = Math.random() * w;
       }
       s.alpha += s.pulse;
-      if (s.alpha > 0.85 || s.alpha < 0.2) s.pulse *= -1;
+      if (s.alpha > 0.9 || s.alpha < 0.25) s.pulse *= -1;
 
-      ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, Math.min(1, s.alpha))})`;
+      const currentAlpha = Math.max(0.1, Math.min(1, s.alpha));
+      ctx.fillStyle = s.gold
+        ? `rgba(251, 191, 36, ${currentAlpha})`
+        : `rgba(0, 245, 155, ${currentAlpha})`;
+
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();
@@ -1616,13 +1823,13 @@ function setupCardTilt() {
     const y = e.clientY - rect.top - rect.height / 2;
     const rotX = -(y / (rect.height / 2)) * 12;
     const rotY = (x / (rect.width / 2)) * 14;
-    card.style.transform = `perspective(1000px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`;
+    card.style.transform = `perspective(1000px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.025, 1.025, 1.025)`;
 
     const glare = card.querySelector('.card-glare');
     if (glare) {
       const px = (((e.clientX - rect.left) / rect.width) * 100).toFixed(1);
       const py = (((e.clientY - rect.top) / rect.height) * 100).toFixed(1);
-      glare.style.background = `radial-gradient(circle at ${px}% ${py}%, rgba(255,255,255,0.25) 0%, transparent 65%)`;
+      glare.style.background = `radial-gradient(circle at ${px}% ${py}%, rgba(255, 255, 255, 0.35) 0%, rgba(212, 175, 55, 0.2) 30%, transparent 65%)`;
     }
   };
 
