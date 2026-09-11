@@ -261,6 +261,39 @@ function generateBuiltinAdvice(question, transactions, budgets, goals) {
   return advice;
 }
 
+async function callGemini(apiKey, systemPrompt, userMessage) {
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const body = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: `${systemPrompt}\n\nПользователь спрашивает: ${userMessage}` }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.45,
+      maxOutputTokens: 1200
+    }
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Ошибка Gemini API");
+  }
+
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Не удалось получить ответ от Gemini.";
+}
+
 app.post("/api/assistant", auth, async (req, res) => {
   try {
     const question = String(req.body.question || "").trim();
@@ -276,32 +309,29 @@ app.post("/api/assistant", auth, async (req, res) => {
     const budgets = bu.rows;
     const goals = go.rows;
 
-    let apiKey = process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY;
+    let apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY;
     let baseURL = process.env.OPENAI_BASE_URL || undefined;
     let model = process.env.OPENAI_MODEL;
 
-    if (process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
-      apiKey = process.env.GROQ_API_KEY;
-      baseURL = "https://api.groq.com/openai/v1";
-      model = model || "llama-3.3-70b-versatile";
-    } else if (process.env.DEEPSEEK_API_KEY && !process.env.OPENAI_API_KEY) {
-      apiKey = process.env.DEEPSEEK_API_KEY;
-      baseURL = "https://api.deepseek.com";
-      model = model || "deepseek-chat";
-    } else if (process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
-      apiKey = process.env.GEMINI_API_KEY;
-      baseURL = "https://generativelanguage.googleapis.com/v1beta/openai/";
-      model = model || "gemini-1.5-flash";
-    } else {
-      model = model || "gpt-4o-mini";
-    }
+    const isGemini = apiKey && (apiKey.startsWith("AQ.") || apiKey.startsWith("AIza") || process.env.GEMINI_API_KEY);
 
     let answer = "";
+    const prompt = `Ты — внимательный русскоязычный помощник Finkaif по личным финансам. Отвечай естественно, понятно, с четкой структурой и без лишней воды. Анализируй вопрос и контекст пользователя. Предлагай конкретные действия, распределение сумм или процентные доли. Финансовый контекст пользователя: ${JSON.stringify({ transactions, budgets, goals })}`;
 
-    if (apiKey) {
+    if (isGemini) {
+      answer = await callGemini(apiKey, prompt, question);
+    } else if (apiKey) {
+      if (process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
+        baseURL = "https://api.groq.com/openai/v1";
+        model = model || "llama-3.3-70b-versatile";
+      } else if (process.env.DEEPSEEK_API_KEY && !process.env.OPENAI_API_KEY) {
+        baseURL = "https://api.deepseek.com";
+        model = model || "deepseek-chat";
+      } else {
+        model = model || "gpt-4o-mini";
+      }
+
       const client = new OpenAI({ apiKey, baseURL });
-      const prompt = `Ты — внимательный русскоязычный помощник Finkaif по личным финансам. Отвечай естественно, понятно, с четкой структурой и без лишней воды. Анализируй вопрос и контекст пользователя. Предлагай конкретные действия, распределение сумм или процентные доли. Финансовый контекст: ${JSON.stringify({ transactions, budgets, goals })}`;
-      
       const r = await client.chat.completions.create({
         model,
         temperature: 0.45,
