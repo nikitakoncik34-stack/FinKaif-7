@@ -490,8 +490,8 @@ html, body {
 /* Smooth SVG Trend Area */
 .hero-chart-container {
   width: 100%;
-  height: 70px;
-  margin-top: 6px;
+  height: 128px;
+  margin-top: 8px;
   position: relative;
 }
 
@@ -2354,7 +2354,7 @@ html, body {
 
 /* Dynamic Interactive Chart Scrubbers */
 .home-scrubber-line, .cf-scrubber-line {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: rgba(45, 212, 191, 0.45);
   stroke-width: 1.5;
   stroke-dasharray: 3 3;
   pointer-events: none;
@@ -2362,13 +2362,40 @@ html, body {
   transition: opacity 0.15s ease;
 }
 
+.home-scrubber-ring {
+  fill: rgba(45, 212, 191, 0.16);
+  stroke: rgba(45, 212, 191, 0.55);
+  stroke-width: 1.5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
 .home-scrubber-dot {
-  fill: #141A23;
+  fill: #FFFFFF;
   stroke: #2DD4BF;
   stroke-width: 2.5;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
+}
+
+.home-chart-pip {
+  pointer-events: none;
+  transition: r 0.15s ease, fill 0.15s ease;
+}
+
+.home-chart-axis-label {
+  user-select: none;
+  pointer-events: none;
+}
+
+.home-grid-line {
+  pointer-events: none;
+}
+
+.home-grid-zero {
+  pointer-events: none;
 }
 
 .cf-scrubber-dot {
