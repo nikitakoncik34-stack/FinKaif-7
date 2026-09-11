@@ -1,7 +1,7 @@
 /* ==========================================================================
-   FINKAIF OS (v8.0)
+   FINKAIF OS (v8.1)
    Velvet Slate, Cashmere Jade & Warm Amber
-   Ergonomic, Human-Friendly & High-End Personal Finance Architecture
+   Full Analytics Engine (Donut, Cashflow Wave, Burn Rate) & Profile Customization
    ========================================================================== */
 
 const $ = s => document.querySelector(s);
@@ -12,9 +12,19 @@ let me = null;
 let tab = 'home';
 let mode = 'login';
 let period = '7d';
+let analyticsPeriod = '30d';
+let activeAnalyticsCat = null;
+let hoveredAnalyticsCat = null;
 let txFilter = 'all';
 let txSearch = '';
 let modalType = 'expense';
+let profileModalOpen = false;
+
+let profile = {
+  display_name: localStorage.getItem('finkaif_name') || '',
+  avatar: localStorage.getItem('finkaif_avatar') || '⚡',
+  currency: localStorage.getItem('finkaif_currency') || 'RUB'
+};
 
 let data = {
   transactions: [],
@@ -50,9 +60,17 @@ const api = async (endpoint, options = {}) => {
 /* ==========================================================================
    HELPERS & FORMATTERS
    ========================================================================== */
+const currencySymbols = {
+  'RUB': '₽',
+  'USD': '$',
+  'EUR': '€',
+  'KZT': '₸'
+};
+
 const money = n => {
   const num = Math.round(Number(n) || 0);
-  return new Intl.NumberFormat('ru-RU').format(num) + ' ₽';
+  const sym = currencySymbols[profile.currency] || '₽';
+  return new Intl.NumberFormat('ru-RU').format(num) + ' ' + sym;
 };
 
 const esc = s =>
@@ -72,6 +90,24 @@ const formatMarkdown = s => {
     .replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px;">$1</code>')
     .replace(/\n/g, '<br>');
 };
+
+// Financial Rank Calculator
+function getFinancialRank(balance, goals) {
+  const totalSaved = (goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
+  const totalTarget = (goals || []).reduce((s, g) => s + Number(g.target_amount || 0), 0);
+  const totalCapital = Math.max(0, balance) + totalSaved;
+
+  if (totalCapital >= 300000 || (totalTarget > 0 && totalSaved >= totalTarget && goals.length >= 2)) {
+    return { title: 'Финансовый стратег', badge: '👑', desc: 'Уверенный капитал и системный контроль над будущим' };
+  }
+  if (totalCapital >= 100000 || totalSaved >= 40000) {
+    return { title: 'Капиталист', badge: '💎', desc: 'Стабильный рост сбережений и надежный инвестиционный резерв' };
+  }
+  if (totalCapital >= 25000 || (goals && goals.length > 0)) {
+    return { title: 'Мастер бюджета', badge: '⚡', desc: 'Осознанные расходы и дисциплина лимитов' };
+  }
+  return { title: 'Первые шаги', badge: '🌱', desc: 'Начало построения финансовой свободы и подушки безопасности' };
+}
 
 // Friendly Category Icons Map
 const categoryIcons = {
@@ -104,6 +140,7 @@ const getCategoryIcon = cat => categoryIcons[cat] || '💳';
 function icon(name, size = 16) {
   const icons = {
     overview: '<rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect>',
+    analytics: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>',
     transactions: '<line x1="7" y1="4" x2="7" y2="20"></line><polyline points="3 8 7 4 11 8"></polyline><line x1="17" y1="20" x2="17" y2="4"></line><polyline points="13 16 17 20 21 16"></polyline>',
     budgets: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><line x1="10" y1="7" x2="16" y2="7"></line><line x1="10" y1="11" x2="14" y2="11"></line>',
     goals: '<circle cx="12" cy="12" r="9"></circle><path d="m12 7 2 5 5 1-4 3 1 5-4-3-4 3 1-5-4-3 5-1z"></path>',
@@ -116,14 +153,18 @@ function icon(name, size = 16) {
     search: '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
     send: '<line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>',
     close: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
-    sparkle: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>'
+    sparkle: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>',
+    settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
+    check: '<polyline points="20 6 9 17 4 12"></polyline>',
+    wallet: '<path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"></path><path d="M16 13a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"></path>',
+    flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
 }
 
 /* ==========================================================================
-   AMBIENT BACKGROUND: SOOTHING FLUID AURORA (NO NOISE, NO CODE PARTICLES)
+   AMBIENT BACKGROUND: SOOTHING FLUID AURORA
    ========================================================================== */
 function initAmbientCanvas() {
   const canvas = document.getElementById('ambient-canvas');
@@ -143,59 +184,33 @@ function initAmbientCanvas() {
   let animId = null;
 
   function draw() {
+    t += 0.003;
     ctx.clearRect(0, 0, w, h);
 
-    // Warm deep slate base
-    ctx.fillStyle = '#0B0F15';
+    const x1 = w * 0.25 + Math.sin(t) * 90;
+    const y1 = h * 0.35 + Math.cos(t * 0.8) * 80;
+    const g1 = ctx.createRadialGradient(x1, y1, 10, x1, y1, Math.max(w, h) * 0.6);
+    g1.addColorStop(0, 'rgba(45, 212, 191, 0.045)');
+    g1.addColorStop(1, 'rgba(10, 14, 20, 0)');
+    ctx.fillStyle = g1;
     ctx.fillRect(0, 0, w, h);
 
-    // Orb 1: Soft Jade Glow (drifting smoothly in upper-right)
-    const x1 = w * 0.7 + Math.sin(t * 0.0008) * (w * 0.15);
-    const y1 = h * 0.25 + Math.cos(t * 0.0006) * (h * 0.1);
-    const r1 = Math.min(w, h) * 0.65;
-    const g1 = ctx.createRadialGradient(x1, y1, 0, x1, y1, r1);
-    g1.addColorStop(0, 'rgba(45, 212, 191, 0.09)');
-    g1.addColorStop(0.5, 'rgba(13, 148, 136, 0.04)');
-    g1.addColorStop(1, 'rgba(11, 15, 21, 0)');
-    ctx.fillStyle = g1;
-    ctx.beginPath();
-    ctx.arc(x1, y1, r1, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Orb 2: Deep Midnight Navy Glow (drifting in lower-left)
-    const x2 = w * 0.25 + Math.cos(t * 0.0007) * (w * 0.1);
-    const y2 = h * 0.7 + Math.sin(t * 0.0009) * (h * 0.12);
-    const r2 = Math.min(w, h) * 0.7;
-    const g2 = ctx.createRadialGradient(x2, y2, 0, x2, y2, r2);
-    g2.addColorStop(0, 'rgba(56, 189, 248, 0.05)');
-    g2.addColorStop(0.6, 'rgba(30, 41, 59, 0.02)');
-    g2.addColorStop(1, 'rgba(11, 15, 21, 0)');
+    const x2 = w * 0.75 + Math.cos(t * 0.7) * 90;
+    const y2 = h * 0.65 + Math.sin(t * 0.9) * 80;
+    const g2 = ctx.createRadialGradient(x2, y2, 10, x2, y2, Math.max(w, h) * 0.55);
+    g2.addColorStop(0, 'rgba(245, 158, 11, 0.035)');
+    g2.addColorStop(1, 'rgba(10, 14, 20, 0)');
     ctx.fillStyle = g2;
-    ctx.beginPath();
-    ctx.arc(x2, y2, r2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(0, 0, w, h);
 
-    // Orb 3: Subtle Warm Amber Tint (center)
-    const x3 = w * 0.5 + Math.sin(t * 0.0005) * 60;
-    const y3 = h * 0.45 + Math.cos(t * 0.0005) * 40;
-    const r3 = Math.min(w, h) * 0.4;
-    const g3 = ctx.createRadialGradient(x3, y3, 0, x3, y3, r3);
-    g3.addColorStop(0, 'rgba(251, 191, 36, 0.03)');
-    g3.addColorStop(1, 'rgba(11, 15, 21, 0)');
-    ctx.fillStyle = g3;
-    ctx.beginPath();
-    ctx.arc(x3, y3, r3, 0, Math.PI * 2);
-    ctx.fill();
-
-    t += 16;
     animId = requestAnimationFrame(draw);
   }
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      if (animId) cancelAnimationFrame(animId);
+      cancelAnimationFrame(animId);
     } else {
-      animId = requestAnimationFrame(draw);
+      draw();
     }
   });
 
@@ -214,7 +229,13 @@ function renderMasthead() {
     .reduce((s, t) => s + Number(t.amount), 0);
   const balance = inc - exp;
 
-  const userName = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const userName = profile.display_name ? profile.display_name : rawUser;
+  const userInitial = rawUser.charAt(0).toUpperCase();
+
+  const avatarDisplay = profile.avatar && profile.avatar !== 'monogram'
+    ? `<span class="emoji-avatar">${profile.avatar}</span>`
+    : `<span class="monogram-avatar">${userInitial}</span>`;
 
   return `
     <header class="masthead">
@@ -224,28 +245,32 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.0</span>
+          <span class="brand-badge">8.1</span>
         </div>
       </div>
 
       <nav class="nav-controller" role="tablist">
-        <button class="nav-item ${tab === 'home' ? 'active' : ''}" data-tab="home">
+        <button class="nav-item ${tab === 'home' ? 'active' : ''}" data-tab="home" title="Главный обзор">
           ${icon('overview', 15)}
           <span>Обзор</span>
         </button>
-        <button class="nav-item ${tab === 'transactions' ? 'active' : ''}" data-tab="transactions">
+        <button class="nav-item ${tab === 'analytics' ? 'active' : ''}" data-tab="analytics" title="Аналитика и графики">
+          ${icon('analytics', 15)}
+          <span>Аналитика</span>
+        </button>
+        <button class="nav-item ${tab === 'transactions' ? 'active' : ''}" data-tab="transactions" title="Журнал операций">
           ${icon('transactions', 15)}
           <span>Операции</span>
         </button>
-        <button class="nav-item ${tab === 'budgets' ? 'active' : ''}" data-tab="budgets">
+        <button class="nav-item ${tab === 'budgets' ? 'active' : ''}" data-tab="budgets" title="Лимиты бюджета">
           ${icon('budgets', 15)}
           <span>Бюджеты</span>
         </button>
-        <button class="nav-item ${tab === 'goals' ? 'active' : ''}" data-tab="goals">
+        <button class="nav-item ${tab === 'goals' ? 'active' : ''}" data-tab="goals" title="Финансовые цели">
           ${icon('goals', 15)}
           <span>Цели</span>
         </button>
-        <button class="nav-item ${tab === 'assistant' ? 'active' : ''}" data-tab="assistant">
+        <button class="nav-item ${tab === 'assistant' ? 'active' : ''}" data-tab="assistant" title="ИИ-ментор">
           ${icon('assistant', 15)}
           <span>Ассистент</span>
         </button>
@@ -262,10 +287,10 @@ function renderMasthead() {
           <span>Записать</span>
         </button>
 
-        <div class="user-btn" id="user-menu-btn" title="Выйти из аккаунта">
-          <div class="user-avatar">${userName.charAt(0).toUpperCase()}</div>
-          <span>${esc(userName)}</span>
-          <span style="color: var(--text-muted); font-size: 11px;">✕</span>
+        <div class="user-btn" id="user-profile-btn" title="Профиль, аватарка и настройки">
+          <div class="user-avatar">${avatarDisplay}</div>
+          <span class="user-name-text">${esc(userName)}</span>
+          <span class="user-settings-icon">${icon('settings', 13)}</span>
         </div>
       </div>
     </header>
@@ -275,11 +300,10 @@ function renderMasthead() {
 /* ==========================================================================
    VIEW 1: OVERVIEW (HOME)
    CRITICAL RULE: "Добрый день" IS STRICTLY ALLOWED ONLY HERE!
-   Clean, ergonomic balance card, income/expense stats, smooth trend chart.
-   ZERO "аудит" and ZERO "срез 50/30/20".
    ========================================================================== */
 function renderHomeView() {
-  const userName = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const userName = profile.display_name ? profile.display_name : rawUser;
 
   const inc = data.transactions
     .filter(t => t.type === 'income')
@@ -337,6 +361,13 @@ function renderHomeView() {
 
   const areaPath = `${curvePath} L ${points[points.length - 1].x},${svgH} L ${points[0].x},${svgH} Z`;
 
+  // Quick categories breakdown for teaser
+  const topCategories = {};
+  data.transactions.filter(t => t.type === 'expense').forEach(t => {
+    topCategories[t.category] = (topCategories[t.category] || 0) + Number(t.amount);
+  });
+  const topCatList = Object.entries(topCategories).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
   const recentTransactions = [...data.transactions].slice(0, 6);
 
   return `
@@ -367,7 +398,7 @@ function renderHomeView() {
         </div>
       </div>
 
-      <!-- Clean Cashflow Curve (No weird pins, gentle gradient) -->
+      <!-- Clean Cashflow Curve -->
       <div class="hero-chart-container">
         <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
           <defs>
@@ -416,6 +447,10 @@ function renderHomeView() {
         ${icon('plus', 14)}
         <span>Внести доход</span>
       </button>
+      <button class="quick-action-btn" data-tab="analytics">
+        ${icon('analytics', 14)}
+        <span>Аналитика трат</span>
+      </button>
       <button class="quick-action-btn" data-tab="goals">
         ${icon('goals', 14)}
         <span>Финансовые цели</span>
@@ -425,6 +460,32 @@ function renderHomeView() {
         <span>Спросить ассистента</span>
       </button>
     </div>
+
+    ${topCatList.length > 0 ? `
+      <!-- Teaser: Structure Pulse -->
+      <div class="section-head" style="margin-top: 10px;">
+        <h2 class="section-title">Главные статьи расходов</h2>
+        <a class="section-link" data-tab="analytics">
+          <span>Полный анализ и графики</span>
+          <span>→</span>
+        </a>
+      </div>
+      <div class="pulse-cats-grid">
+        ${topCatList.map(([cat, amt]) => {
+          const pct = exp > 0 ? Math.round((amt / exp) * 100) : 0;
+          return `
+            <div class="pulse-cat-card" data-tab="analytics" data-cat="${esc(cat)}">
+              <div class="pulse-cat-icon">${getCategoryIcon(cat)}</div>
+              <div class="pulse-cat-info">
+                <div class="pulse-cat-name">${esc(cat)}</div>
+                <div class="pulse-cat-amt num">${money(amt)}</div>
+              </div>
+              <div class="pulse-cat-badge">${pct}%</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : ''}
 
     <!-- Recent Transactions Stream -->
     <div class="section-head">
@@ -440,6 +501,409 @@ function renderHomeView() {
         <div style="text-align: center; padding: 40px 20px; background: var(--bg-surface); border: 1px dashed var(--border-medium); border-radius: var(--r-lg);">
           <p style="color: var(--text-secondary); margin-bottom: 12px;">Пока нет зафиксированных операций.</p>
           <button class="btn-primary" id="btn-first-op">${icon('plus', 13)} Добавить первую операцию</button>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   VIEW: ANALYTICS (DEEP FINANCIAL ANALYSIS & CHARTS)
+   CRITICAL RULE: NO "Добрый день" here!
+   ========================================================================== */
+function renderAnalyticsView() {
+  const now = new Date();
+
+  // Filter transactions for chosen period
+  let periodTxs = [...data.transactions];
+  let daysCount = 30;
+
+  if (analyticsPeriod === '7d') {
+    daysCount = 7;
+    const since = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+    periodTxs = data.transactions.filter(t => t.occurred_on >= since);
+  } else if (analyticsPeriod === '30d') {
+    daysCount = 30;
+    const since = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
+    periodTxs = data.transactions.filter(t => t.occurred_on >= since);
+  } else if (analyticsPeriod === 'month') {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    periodTxs = data.transactions.filter(t => t.occurred_on >= monthStart);
+    daysCount = Math.max(1, now.getDate());
+  } else {
+    // all time
+    daysCount = Math.max(30, data.transactions.length);
+  }
+
+  const pInc = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const pExp = periodTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  const pNet = pInc - pExp;
+  const pSavingsRate = pInc > 0 ? Math.max(0, Math.round((pNet / pInc) * 100)) : 0;
+
+  // Daily Burn Rate (Velocity)
+  const dailyVelocity = Math.round(pExp / (daysCount || 1));
+
+  // Current balance
+  const totalInc = data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const totalExp = data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  const currentBalance = totalInc - totalExp;
+
+  // Runway Calculation
+  const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysRemainingInMonth = Math.max(1, daysInCurMonth - now.getDate());
+  const projectedMonthEnd = currentBalance - (dailyVelocity * daysRemainingInMonth);
+
+  let burnStatus = 'safe';
+  let burnText = 'Комфортный темп';
+  if (dailyVelocity > 0 && currentBalance < dailyVelocity * 7) {
+    burnStatus = 'alert';
+    burnText = 'Высокий темп расходов';
+  } else if (dailyVelocity > 0 && currentBalance < dailyVelocity * 20) {
+    burnStatus = 'warn';
+    burnText = 'Умеренная нагрузка';
+  }
+
+  // Rank
+  const userRank = getFinancialRank(currentBalance, data.goals);
+
+  // Categories Breakdown
+  const catMap = {};
+  periodTxs.filter(t => t.type === 'expense').forEach(t => {
+    const c = t.category || 'Прочее';
+    catMap[c] = (catMap[c] || 0) + Number(t.amount);
+  });
+
+  const sortedCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
+  const donutPalette = [
+    '#2DD4BF', // Cashmere Jade
+    '#F59E0B', // Warm Amber
+    '#818CF8', // Velvet Indigo
+    '#FB7185', // Rose Coral
+    '#34D399', // Emerald
+    '#A78BFA', // Violet
+    '#38BDF8', // Cyan
+    '#FBBF24', // Bronze
+    '#94A3B8'  // Slate Muted
+  ];
+
+  // SVG Donut Slices Math
+  const radius = 64;
+  const circ = 2 * Math.PI * radius; // ~402.12
+  let accumulatedOffset = 0;
+
+  const donutSlices = sortedCats.map(([cat, amt], idx) => {
+    const pct = pExp > 0 ? (amt / pExp) : 0;
+    const sliceLen = Math.max(1, pct * circ);
+    const strokeColor = donutPalette[idx % donutPalette.length];
+    const offset = accumulatedOffset;
+    accumulatedOffset += sliceLen;
+
+    return {
+      cat,
+      amt,
+      pct: Math.round(pct * 100) || 1,
+      sliceLen,
+      offset,
+      color: strokeColor,
+      icon: getCategoryIcon(cat)
+    };
+  });
+
+  // Current active or hovered readout in donut center
+  const targetDonut = hoveredAnalyticsCat
+    ? donutSlices.find(s => s.cat === hoveredAnalyticsCat)
+    : (activeAnalyticsCat ? donutSlices.find(s => s.cat === activeAnalyticsCat) : null);
+
+  // Month-over-Month calculation
+  const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().slice(0, 10);
+
+  const curMonthExp = data.transactions
+    .filter(t => t.type === 'expense' && t.occurred_on >= curMonthStart)
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const prevMonthExp = data.transactions
+    .filter(t => t.type === 'expense' && t.occurred_on >= prevMonthStart && t.occurred_on <= prevMonthSameDay)
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  let momExpDeltaPct = 0;
+  if (prevMonthExp > 0) {
+    momExpDeltaPct = Math.round(((curMonthExp - prevMonthExp) / prevMonthExp) * 100);
+  }
+
+  // Build dual cashflow area timeline
+  const chartDays = analyticsPeriod === '7d' ? 7 : (analyticsPeriod === 'month' ? Math.max(7, now.getDate()) : 14);
+  const cashflowPoints = [];
+  for (let i = chartDays - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 86400000);
+    const iso = d.toISOString().slice(0, 10);
+    const dExp = data.transactions
+      .filter(t => t.type === 'expense' && t.occurred_on === iso)
+      .reduce((s, t) => s + Number(t.amount), 0);
+    const dInc = data.transactions
+      .filter(t => t.type === 'income' && t.occurred_on === iso)
+      .reduce((s, t) => s + Number(t.amount), 0);
+    cashflowPoints.push({
+      date: iso,
+      dayLabel: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+      exp: dExp,
+      inc: dInc
+    });
+  }
+
+  const cfMax = Math.max(2000, ...cashflowPoints.map(p => Math.max(p.exp, p.inc)));
+  const cfW = 760;
+  const cfH = 140;
+
+  const cfCoords = cashflowPoints.map((p, idx) => {
+    const x = Math.round((idx / (cashflowPoints.length - 1 || 1)) * (cfW - 40) + 20);
+    const yInc = Math.round(cfH - 24 - (p.inc / cfMax) * (cfH - 45));
+    const yExp = Math.round(cfH - 24 - (p.exp / cfMax) * (cfH - 45));
+    return { x, yInc, yExp, ...p };
+  });
+
+  const incPath = cfCoords.reduce((acc, pt, idx, arr) => {
+    if (idx === 0) return `M ${pt.x},${pt.yInc}`;
+    const prev = arr[idx - 1];
+    const mx = prev.x + (pt.x - prev.x) / 2;
+    return `${acc} C ${mx},${prev.yInc} ${mx},${pt.yInc} ${pt.x},${pt.yInc}`;
+  }, '');
+  const incArea = `${incPath} L ${cfCoords[cfCoords.length - 1].x},${cfH} L ${cfCoords[0].x},${cfH} Z`;
+
+  const expPath = cfCoords.reduce((acc, pt, idx, arr) => {
+    if (idx === 0) return `M ${pt.x},${pt.yExp}`;
+    const prev = arr[idx - 1];
+    const mx = prev.x + (pt.x - prev.x) / 2;
+    return `${acc} C ${mx},${prev.yExp} ${mx},${pt.yExp} ${pt.x},${pt.yExp}`;
+  }, '');
+  const expArea = `${expPath} L ${cfCoords[cfCoords.length - 1].x},${cfH} L ${cfCoords[0].x},${cfH} Z`;
+
+  // Filtered operations for drilldown
+  const drilldownTxs = activeAnalyticsCat
+    ? periodTxs.filter(t => t.category === activeAnalyticsCat)
+    : periodTxs.filter(t => t.type === 'expense').slice(0, 6);
+
+  return `
+    <div class="view-header">
+      <div>
+        <h1 class="view-title">Аналитический центр</h1>
+        <p class="view-subtitle">Глубокая структура расходов, динамика денежного потока и финансовые проекции.</p>
+      </div>
+
+      <div class="analytics-period-bar">
+        <button class="analytics-period-btn ${analyticsPeriod === '7d' ? 'active' : ''}" data-aperiod="7d">7 дней</button>
+        <button class="analytics-period-btn ${analyticsPeriod === '30d' ? 'active' : ''}" data-aperiod="30d">30 дней</button>
+        <button class="analytics-period-btn ${analyticsPeriod === 'month' ? 'active' : ''}" data-aperiod="month">Этот месяц</button>
+        <button class="analytics-period-btn ${analyticsPeriod === 'all' ? 'active' : ''}" data-aperiod="all">Все время</button>
+      </div>
+    </div>
+
+    <!-- 4 Key Analytics Metrics -->
+    <div class="analytics-metrics-strip">
+      <div class="analytics-metric-card">
+        <div class="metric-topline">
+          <span class="metric-label">Чистый денежный поток</span>
+          <span class="metric-icon ${pNet >= 0 ? 'inc' : 'exp'}">${icon(pNet >= 0 ? 'trendUp' : 'trendDown', 15)}</span>
+        </div>
+        <div class="metric-value num ${pNet >= 0 ? 'inc' : 'exp'}">${pNet >= 0 ? '+' : '−'}${money(Math.abs(pNet))}</div>
+        <div class="metric-footnote">
+          ${pSavingsRate > 0 ? `<span class="badge-tag jade">${pSavingsRate}% сохранено</span>` : 'Баланс периода'}
+        </div>
+      </div>
+
+      <div class="analytics-metric-card">
+        <div class="metric-topline">
+          <span class="metric-label">Темп трат (Burn Rate)</span>
+          <span class="metric-icon exp">${icon('flame', 15)}</span>
+        </div>
+        <div class="metric-value num exp">${money(dailyVelocity)} <span class="metric-unit">/ день</span></div>
+        <div class="metric-footnote">
+          <span class="badge-tag ${burnStatus === 'safe' ? 'jade' : (burnStatus === 'warn' ? 'amber' : 'coral')}">${burnText}</span>
+        </div>
+      </div>
+
+      <div class="analytics-metric-card">
+        <div class="metric-topline">
+          <span class="metric-label">Прогноз на конец месяца</span>
+          <span class="metric-icon inc">${icon('wallet', 15)}</span>
+        </div>
+        <div class="metric-value num ${projectedMonthEnd >= 0 ? 'inc' : 'exp'}">${money(projectedMonthEnd)}</div>
+        <div class="metric-footnote">Остаток на 1-е число при текущей скорости</div>
+      </div>
+
+      <div class="analytics-metric-card">
+        <div class="metric-topline">
+          <span class="metric-label">Финансовый статус</span>
+          <span class="metric-icon inc">${userRank.badge}</span>
+        </div>
+        <div class="metric-value rank-text">${userRank.title}</div>
+        <div class="metric-footnote">${userRank.desc}</div>
+      </div>
+    </div>
+
+    <!-- 2 Main Analytics Blocks: Donut & Dual Cashflow Wave -->
+    <div class="analytics-main-grid">
+      <!-- Donut Chart & Categories Breakdown -->
+      <div class="analytics-card donut-card">
+        <div class="card-title-row">
+          <div>
+            <h3 class="card-title">Структура расходов</h3>
+            <p class="card-desc">Нажмите на категорию или сегмент кольца для фильтрации</p>
+          </div>
+          ${activeAnalyticsCat ? `
+            <button class="btn-ghost-sm" id="btn-reset-donut-filter">Сбросить выбор ✕</button>
+          ` : ''}
+        </div>
+
+        <div class="donut-layout">
+          <!-- SVG Donut Canvas -->
+          <div class="donut-chart-box">
+            <svg class="donut-svg" viewBox="0 0 170 170">
+              <circle cx="85" cy="85" r="${radius}" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="18" />
+              ${donutSlices.map(s => `
+                <circle
+                  class="donut-segment ${(activeAnalyticsCat === s.cat || hoveredAnalyticsCat === s.cat) ? 'focused' : ''}"
+                  data-cat="${esc(s.cat)}"
+                  cx="85" cy="85" r="${radius}"
+                  fill="none"
+                  stroke="${s.color}"
+                  stroke-width="${(activeAnalyticsCat === s.cat || hoveredAnalyticsCat === s.cat) ? 23 : 18}"
+                  stroke-dasharray="${Math.max(1, s.sliceLen - 2)} ${Math.max(1, circ - s.sliceLen + 2)}"
+                  stroke-dashoffset="${-s.offset}"
+                  stroke-linecap="round"
+                  transform="rotate(-90 85 85)"
+                />
+              `).join('')}
+            </svg>
+
+            <!-- Center Readout -->
+            <div class="donut-center-info">
+              ${targetDonut ? `
+                <div class="donut-center-icon">${targetDonut.icon}</div>
+                <div class="donut-center-amt num">${money(targetDonut.amt)}</div>
+                <div class="donut-center-lbl">${esc(targetDonut.cat)} (${targetDonut.pct}%)</div>
+              ` : `
+                <div class="donut-center-lbl">ВСЕГО ТРАТ</div>
+                <div class="donut-center-amt num">${money(pExp)}</div>
+                <div class="donut-center-sub">${sortedCats.length} категорий</div>
+              `}
+            </div>
+          </div>
+
+          <!-- Category Legend & Progress Bars -->
+          <div class="donut-legend-stream">
+            ${sortedCats.length > 0 ? donutSlices.map(s => `
+              <div class="donut-cat-item ${activeAnalyticsCat === s.cat ? 'selected' : ''}" data-cat="${esc(s.cat)}">
+                <div class="donut-cat-head">
+                  <div class="donut-cat-meta">
+                    <span class="donut-cat-dot" style="background: ${s.color};"></span>
+                    <span class="donut-cat-icon">${s.icon}</span>
+                    <span class="donut-cat-name">${esc(s.cat)}</span>
+                  </div>
+                  <div class="donut-cat-vals num">
+                    <span class="donut-cat-amt">${money(s.amt)}</span>
+                    <span class="donut-cat-pct">${s.pct}%</span>
+                  </div>
+                </div>
+                <div class="donut-progress-track">
+                  <div class="donut-progress-fill" style="width: ${s.pct}%; background: ${s.color};"></div>
+                </div>
+              </div>
+            `).join('') : `
+              <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                Нет зафиксированных расходов за выбранный период.
+              </div>
+            `}
+          </div>
+        </div>
+      </div>
+
+      <!-- Cashflow Wave Dual Curve -->
+      <div class="analytics-card cashflow-card">
+        <div class="card-title-row">
+          <div>
+            <h3 class="card-title">Денежный поток (Cashflow)</h3>
+            <p class="card-desc">Сравнение поступлений и списаний по дням</p>
+          </div>
+          <div class="cashflow-legend-pills">
+            <span class="cf-pill inc"><span class="cf-dot" style="background: #2DD4BF;"></span> Доходы</span>
+            <span class="cf-pill exp"><span class="cf-dot" style="background: #F59E0B;"></span> Расходы</span>
+          </div>
+        </div>
+
+        <div class="cashflow-chart-box">
+          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" style="width: 100%; height: 160px; overflow: visible;">
+            <defs>
+              <linearGradient id="cfIncGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.22"/>
+                <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
+              </linearGradient>
+              <linearGradient id="cfExpGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.20"/>
+                <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Guide Lines -->
+            <line x1="20" y1="${cfH - 24}" x2="${cfW - 20}" y2="${cfH - 24}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3 3"/>
+
+            <!-- Income Wave -->
+            <path d="${incArea}" fill="url(#cfIncGrad)" />
+            <path d="${incPath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />
+
+            <!-- Expense Wave -->
+            <path d="${expArea}" fill="url(#cfExpGrad)" />
+            <path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />
+
+            <!-- Interactive Dots -->
+            ${cfCoords.map(pt => `
+              ${pt.inc > 0 ? `<circle cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2"/>` : ''}
+              ${pt.exp > 0 ? `<circle cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2"/>` : ''}
+              <text x="${pt.x}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>
+            `).join('')}
+          </svg>
+        </div>
+
+        <!-- Month-over-Month Bar -->
+        <div class="mom-strip">
+          <div class="mom-col">
+            <div class="mom-lbl">Динамика расходов к прошлому месяцу:</div>
+            <div class="mom-stat">
+              ${prevMonthExp > 0 ? `
+                <span class="badge-tag ${momExpDeltaPct <= 0 ? 'jade' : 'coral'}">
+                  ${momExpDeltaPct <= 0 ? '−' : '+'}${Math.abs(momExpDeltaPct)}%
+                  ${momExpDeltaPct <= 0 ? ' (Экономия)' : ' (Рост трат)'}
+                </span>
+                <span style="color: var(--text-muted); font-size: 12px; margin-left: 8px;">
+                  Текущий месяц: ${money(curMonthExp)} vs прошлый: ${money(prevMonthExp)}
+                </span>
+              ` : `
+                <span style="color: var(--text-muted); font-size: 12px;">Недостаточно данных за предыдущий месяц для сравнения.</span>
+              `}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drilldown Transactions Stream -->
+    <div class="section-head" style="margin-top: 14px;">
+      <h2 class="section-title">
+        ${activeAnalyticsCat ? `Операции: ${getCategoryIcon(activeAnalyticsCat)} ${esc(activeAnalyticsCat)}` : 'Крупнейшие списания периода'}
+      </h2>
+      ${activeAnalyticsCat ? `
+        <button class="btn-ghost-sm" id="btn-reset-drilldown">Показать все списания</button>
+      ` : `
+        <a class="section-link" data-tab="transactions">
+          <span>Все операции (${data.transactions.length}) →</span>
+        </a>
+      `}
+    </div>
+
+    <div class="tx-list">
+      ${drilldownTxs.length > 0 ? drilldownTxs.map(t => renderTxCard(t)).join('') : `
+        <div style="text-align: center; padding: 30px; color: var(--text-muted); background: var(--bg-surface); border-radius: var(--r-md);">
+          В категории нет операций за выбранный период.
         </div>
       `}
     </div>
@@ -481,52 +945,54 @@ function renderTransactionsView() {
       </button>
     </div>
 
+    <!-- Search & Filters -->
     <div class="filter-bar">
       <div class="filter-tabs">
-        <button class="filter-tab ${txFilter === 'all' ? 'active' : ''}" data-tx-filter="all">Все (${data.transactions.length})</button>
-        <button class="filter-tab ${txFilter === 'expense' ? 'active' : ''}" data-tx-filter="expense">Расходы</button>
-        <button class="filter-tab ${txFilter === 'income' ? 'active' : ''}" data-tx-filter="income">Доходы</button>
+        <button class="filter-tab ${txFilter === 'all' ? 'active' : ''}" data-filter="all">Все записи</button>
+        <button class="filter-tab ${txFilter === 'expense' ? 'active' : ''}" data-filter="expense">Расходы</button>
+        <button class="filter-tab ${txFilter === 'income' ? 'active' : ''}" data-filter="income">Доходы</button>
       </div>
 
       <div class="search-box">
         ${icon('search', 14)}
-        <input id="tx-search-input" placeholder="Поиск по названию или статье..." value="${esc(txSearch)}">
+        <input id="tx-search-input" placeholder="Поиск по категории или описанию..." value="${esc(txSearch)}">
+        ${txSearch ? `<button class="btn-icon" id="btn-clear-search" style="padding: 2px;">${icon('close', 12)}</button>` : ''}
       </div>
     </div>
 
-    <div>
-      ${sortedDates.length > 0 ? sortedDates.map(date => {
-        const dayTotal = groups[date].reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
-        return `
-          <div>
-            <div class="date-group-header">
-              <span>${formatFriendlyDate(date)}</span>
-              <span class="num ${dayTotal >= 0 ? 'pos' : 'neg'}" style="color: ${dayTotal >= 0 ? 'var(--accent-emerald)' : 'var(--accent-coral)'}">
-                ${dayTotal >= 0 ? '+' : '−'}${money(Math.abs(dayTotal))}
-              </span>
-            </div>
-            <div class="tx-list">
-              ${groups[date].map(t => renderTxCard(t)).join('')}
-            </div>
+    <!-- Transactions Grouped by Date -->
+    <div class="tx-groups">
+      ${sortedDates.length > 0 ? sortedDates.map(dateStr => `
+        <div class="tx-date-group">
+          <div class="tx-date-label">${formatDateLabel(dateStr)}</div>
+          <div class="tx-list">
+            ${groups[dateStr].map(t => renderTxCard(t)).join('')}
           </div>
-        `;
-      }).join('') : `
-        <div style="text-align: center; padding: 60px 20px; background: var(--bg-surface); border: 1px dashed var(--border-medium); border-radius: var(--r-lg);">
-          <p style="color: var(--text-secondary);">По данному запросу операций не найдено.</p>
+        </div>
+      `).join('') : `
+        <div style="text-align: center; padding: 60px 20px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
+          <div style="color: var(--text-muted); margin-bottom: 8px;">Операции не найдены</div>
+          <p style="color: var(--text-secondary); font-size: 13px;">Попробуйте изменить поисковый запрос или фильтр.</p>
         </div>
       `}
     </div>
   `;
 }
 
-function formatFriendlyDate(dateStr) {
-  if (!dateStr || dateStr === 'Не указана') return 'Без даты';
-  const today = new Date().toISOString().slice(0, 10);
-  const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  if (dateStr === today) return 'Сегодня';
-  if (dateStr === yest) return 'Вчера';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+function formatDateLabel(dStr) {
+  try {
+    const d = new Date(dStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diff = Math.round((today - d) / 86400000);
+    if (diff === 0) return 'Сегодня';
+    if (diff === 1) return 'Вчера';
+
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
+  } catch {
+    return dStr;
+  }
 }
 
 function renderTxCard(t) {
@@ -536,111 +1002,132 @@ function renderTxCard(t) {
   return `
     <div class="tx-card" data-id="${t.id}">
       <div class="tx-left">
-        <div class="category-icon">${catIcon}</div>
-        <div class="tx-info">
-          <div class="tx-title">${esc(t.description || t.category)}</div>
-          <div class="tx-meta">
-            <span>${esc(t.category)}</span>
-            <span>•</span>
-            <span>${t.occurred_on || ''}</span>
-          </div>
+        <div class="tx-icon-box ${isInc ? 'inc' : 'exp'}">
+          ${catIcon}
+        </div>
+        <div class="tx-meta">
+          <div class="tx-category">${esc(t.category)}</div>
+          <div class="tx-desc">${t.description ? esc(t.description) : 'Без описания'}</div>
         </div>
       </div>
 
       <div class="tx-right">
-        <div class="tx-amount ${isInc ? 'pos' : 'neg'} num">
+        <div class="tx-amount num ${isInc ? 'inc' : 'exp'}">
           ${isInc ? '+' : '−'}${money(t.amount)}
         </div>
-        <button class="btn-icon delete-tx-btn" data-id="${t.id}" title="Удалить запись">
-          ${icon('trash', 14)}
-        </button>
+        <div class="tx-actions">
+          <button class="tx-delete-btn" data-id="${t.id}" title="Удалить запись">
+            ${icon('trash', 13)}
+          </button>
+        </div>
       </div>
     </div>
   `;
 }
 
 /* ==========================================================================
-   VIEW 3: BUDGETS & LIMITS
+   VIEW 3: BUDGETS (LIMITS & SAFE DISCIPLINE)
    CRITICAL RULE: NO "Добрый день" here!
    ========================================================================== */
 function renderBudgetsView() {
-  const expenseByCat = {};
-  data.transactions.filter(t => t.type === 'expense').forEach(t => {
-    expenseByCat[t.category] = (expenseByCat[t.category] || 0) + Number(t.amount);
-  });
+  const now = new Date();
+  const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+
+  // Calculate actual spending in current month per category
+  const actualSpending = {};
+  data.transactions
+    .filter(t => t.type === 'expense' && t.occurred_on >= curMonthStart)
+    .forEach(t => {
+      actualSpending[t.category] = (actualSpending[t.category] || 0) + Number(t.amount);
+    });
+
+  const totalLimit = data.budgets.reduce((s, b) => s + Number(b.limit_amount), 0);
+  const totalSpent = data.budgets.reduce((s, b) => s + (actualSpending[b.category] || 0), 0);
+  const overallPct = totalLimit > 0 ? Math.min(100, Math.round((totalSpent / totalLimit) * 100)) : 0;
 
   return `
     <div class="view-header">
       <div>
-        <h1 class="view-title">Лимиты и бюджеты</h1>
-        <p class="view-subtitle">Контроль расходов по статьям и управление финансовой дисциплиной.</p>
+        <h1 class="view-title">Лимиты бюджета</h1>
+        <p class="view-subtitle">Контроль месячных расходов без чувства вины и переплат.</p>
       </div>
-      <button class="btn-primary" id="btn-new-budget">
-        ${icon('plus', 14)}
-        <span>Установить лимит</span>
-      </button>
     </div>
 
+    <!-- Budgets Header Summary -->
+    <div class="budget-summary-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <span style="font-size: 13px; color: var(--text-secondary); font-weight: 500;">Общий прогресс месячных лимитов</span>
+        <span class="num" style="font-size: 13px; font-weight: 700; color: ${overallPct > 90 ? 'var(--accent-coral)' : 'var(--accent-jade)'};">${overallPct}% использовано</span>
+      </div>
+      <div class="progress-bar-track" style="height: 10px; margin-bottom: 12px;">
+        <div class="progress-bar-fill ${overallPct > 90 ? 'danger' : ''}" style="width: ${overallPct}%;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px;">
+        <span style="color: var(--text-muted);">Израсходовано: <strong class="num" style="color: #FFFFFF;">${money(totalSpent)}</strong></span>
+        <span style="color: var(--text-muted);">Общий лимит: <strong class="num" style="color: #FFFFFF;">${money(totalLimit)}</strong></span>
+      </div>
+    </div>
+
+    <!-- Create / Edit Budget Form -->
+    <div class="create-card">
+      <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px;">Установить или обновить лимит</h3>
+      <form id="budget-form" style="display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 12px;">
+        <input class="form-input" id="budget-cat" placeholder="Категория (напр. Продукты)" required>
+        <input class="form-input num" id="budget-limit" type="number" min="1" step="any" placeholder="Сумма лимита (₽)" required>
+        <button type="submit" class="btn-primary" style="height: 42px; justify-content: center;">
+          ${icon('plus', 14)}
+          <span>Сохранить</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Budget Cards Grid -->
     <div class="budget-grid">
       ${data.budgets.length > 0 ? data.budgets.map(b => {
-        const spent = expenseByCat[b.category] || 0;
-        const limit = Number(b.limit_amount) || 1;
-        const pct = Math.min(100, Math.round((spent / limit) * 100));
-        const remain = limit - spent;
-
-        let statusClass = 'normal';
-        let statusText = `В норме · ${pct}%`;
-        let barColor = 'var(--accent-emerald)';
-
-        if (pct >= 90) {
-          statusClass = 'danger';
-          statusText = `Превышение · ${pct}%`;
-          barColor = 'var(--accent-coral)';
-        } else if (pct >= 70) {
-          statusClass = 'warning';
-          statusText = `Внимание · ${pct}%`;
-          barColor = 'var(--accent-amber)';
-        }
+        const spent = actualSpending[b.category] || 0;
+        const lim = Number(b.limit_amount);
+        const pct = Math.min(100, Math.round((spent / lim) * 100));
+        const rem = lim - spent;
+        const isExceeded = rem < 0;
+        const catIcon = getCategoryIcon(b.category);
 
         return `
-          <div class="budget-card" data-id="${b.id}">
+          <div class="budget-card">
             <div class="budget-head">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 20px;">${getCategoryIcon(b.category)}</span>
-                <span class="budget-category">${esc(b.category)}</span>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="budget-cat-icon">${catIcon}</div>
+                <div>
+                  <div class="budget-cat-title">${esc(b.category)}</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">Месячный лимит</div>
+                </div>
               </div>
-              <span class="budget-badge ${statusClass}">${statusText}</span>
+              <button class="budget-delete-btn" data-id="${b.id}" title="Удалить лимит">
+                ${icon('trash', 12)}
+              </button>
             </div>
 
-            <div class="progress-track">
-              <div class="progress-fill" style="width: ${pct}%; background: ${barColor};"></div>
+            <div class="progress-bar-track" style="margin: 14px 0 10px;">
+              <div class="progress-bar-fill ${isExceeded ? 'danger' : (pct > 80 ? 'warning' : '')}" style="width: ${pct}%;"></div>
             </div>
 
-            <div class="budget-meta-row num">
+            <div class="budget-stats-row num">
               <div>
-                <span style="font-size: 11px; color: var(--text-muted); display: block;">ИЗРАСХОДОВАНО</span>
-                <strong style="color: #FFFFFF; font-size: 15px;">${money(spent)}</strong>
+                <div style="color: var(--text-muted); font-size: 11px;">Потрачено</div>
+                <div style="font-weight: 700; color: #FFFFFF; font-size: 14px;">${money(spent)}</div>
               </div>
               <div style="text-align: right;">
-                <span style="font-size: 11px; color: var(--text-muted); display: block;">МЕСЯЧНЫЙ ЛИМИТ</span>
-                <strong style="color: var(--text-secondary); font-size: 15px;">${money(limit)}</strong>
+                <div style="color: var(--text-muted); font-size: 11px;">${isExceeded ? 'Превышение' : 'Осталось'}</div>
+                <div style="font-weight: 700; font-size: 14px; color: ${isExceeded ? 'var(--accent-coral)' : 'var(--accent-jade)'};">
+                  ${isExceeded ? '+' : ''}${money(Math.abs(rem))}
+                </div>
               </div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 6px; border-top: 1px solid var(--border-subtle); font-size: 12px;">
-              <span style="color: var(--text-secondary);">
-                ${remain >= 0 ? `Осталось: <b class="num" style="color: #FFFFFF;">${money(remain)}</b>` : `Перерасход: <b class="num" style="color: var(--accent-coral);">${money(Math.abs(remain))}</b>`}
-              </span>
-              <button class="btn-icon delete-budget-btn" data-id="${b.id}" title="Удалить лимит">
-                ${icon('trash', 13)}
-              </button>
             </div>
           </div>
         `;
       }).join('') : `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: var(--bg-surface); border: 1px dashed var(--border-medium); border-radius: var(--r-lg);">
-          <p style="color: var(--text-secondary); margin-bottom: 12px;">У вас пока нет установленных лимитов.</p>
-          <button class="btn-primary" id="btn-new-budget-empty">${icon('plus', 13)} Создать лимит</button>
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
+          <div style="color: var(--text-muted); margin-bottom: 8px;">Лимиты пока не заданы</div>
+          <p style="color: var(--text-secondary); font-size: 13px;">Установите лимиты на Продукты, Кафе или Транспорт, чтобы контролировать бюджет.</p>
         </div>
       `}
     </div>
@@ -648,72 +1135,99 @@ function renderBudgetsView() {
 }
 
 /* ==========================================================================
-   VIEW 4: GOALS & WEALTH
+   VIEW 4: GOALS (CAPITAL ACCUMULATION)
    CRITICAL RULE: NO "Добрый день" here!
    ========================================================================== */
 function renderGoalsView() {
+  const totalTarget = data.goals.reduce((s, g) => s + Number(g.target_amount), 0);
+  const totalSaved = data.goals.reduce((s, g) => s + Number(g.saved_amount), 0);
+  const overallPct = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
+
   return `
     <div class="view-header">
       <div>
         <h1 class="view-title">Финансовые цели</h1>
-        <p class="view-subtitle">Накопления, резервные фонды и инвестиционные рубежи с быстрым пополнением.</p>
+        <p class="view-subtitle">Накопления на мечты, резервы и крупные приобретения.</p>
       </div>
-      <button class="btn-primary" id="btn-new-goal">
-        ${icon('plus', 14)}
-        <span>Создать цель</span>
-      </button>
     </div>
 
+    <!-- Goals Summary Card -->
+    <div class="budget-summary-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <span style="font-size: 13px; color: var(--text-secondary); font-weight: 500;">Суммарный прогресс по всем целям</span>
+        <span class="num" style="font-size: 13px; font-weight: 700; color: var(--accent-jade);">${overallPct}% накоплено</span>
+      </div>
+      <div class="progress-bar-track" style="height: 10px; margin-bottom: 12px;">
+        <div class="progress-bar-fill" style="width: ${overallPct}%;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px;">
+        <span style="color: var(--text-muted);">Накоплено: <strong class="num" style="color: #FFFFFF;">${money(totalSaved)}</strong></span>
+        <span style="color: var(--text-muted);">Целевой объем: <strong class="num" style="color: #FFFFFF;">${money(totalTarget)}</strong></span>
+      </div>
+    </div>
+
+    <!-- Add Goal Form -->
+    <div class="create-card">
+      <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px;">Создать новую цель</h3>
+      <form id="goal-form" style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1fr; gap: 12px;">
+        <input class="form-input" id="goal-name" placeholder="Название (напр. Подушка безопасности)" required>
+        <input class="form-input num" id="goal-target" type="number" min="1" step="any" placeholder="Целевая сумма (₽)" required>
+        <input class="form-input num" id="goal-saved" type="number" min="0" step="any" placeholder="Уже есть (₽)">
+        <button type="submit" class="btn-primary" style="height: 42px; justify-content: center;">
+          ${icon('plus', 14)}
+          <span>Создать</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Goals Grid -->
     <div class="goals-grid">
       ${data.goals.length > 0 ? data.goals.map(g => {
         const saved = Number(g.saved_amount) || 0;
         const target = Number(g.target_amount) || 1;
         const pct = Math.min(100, Math.round((saved / target) * 100));
-        const remain = Math.max(0, target - saved);
+        const rem = Math.max(0, target - saved);
 
         return `
-          <div class="goal-card" data-id="${g.id}">
+          <div class="goal-card">
             <div class="goal-head">
-              <span class="goal-title">${esc(g.name)}</span>
-              <span class="goal-percent num">${pct}%</span>
-            </div>
-
-            <div class="progress-track" style="height: 7px;">
-              <div class="progress-fill" style="width: ${pct}%; background: linear-gradient(90deg, var(--accent-amber), var(--accent-jade));"></div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
               <div>
-                <span style="font-size: 11px; color: var(--text-muted); display: block;">НАКОПЛЕНО</span>
-                <strong class="num" style="font-size: 18px; color: #FFFFFF;">${money(saved)}</strong>
+                <div class="goal-title">${esc(g.name)}</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${pct}% от цели</div>
+              </div>
+              <button class="goal-delete-btn" data-id="${g.id}" title="Удалить цель">
+                ${icon('trash', 12)}
+              </button>
+            </div>
+
+            <div class="progress-bar-track" style="margin: 16px 0 12px;">
+              <div class="progress-bar-fill" style="width: ${pct}%;"></div>
+            </div>
+
+            <div class="goal-meta-row num">
+              <div>
+                <div style="color: var(--text-muted); font-size: 11px;">Собрано</div>
+                <div style="font-weight: 700; color: #FFFFFF; font-size: 15px;">${money(saved)}</div>
               </div>
               <div style="text-align: right;">
-                <span style="font-size: 11px; color: var(--text-muted); display: block;">ЦЕЛЬ</span>
-                <strong class="num" style="font-size: 15px; color: var(--text-secondary);">${money(target)}</strong>
+                <div style="color: var(--text-muted); font-size: 11px;">Цель</div>
+                <div style="font-weight: 700; color: var(--accent-jade); font-size: 15px;">${money(target)}</div>
               </div>
             </div>
 
-            <div style="border-top: 1px solid var(--border-subtle); padding-top: 12px;">
-              <span style="font-size: 11.5px; color: var(--text-muted); display: block; margin-bottom: 6px;">Быстрое пополнение:</span>
-              <div class="goal-deposit-bar">
-                <button class="deposit-chip" data-goal-id="${g.id}" data-add="5000">+5 000 ₽</button>
-                <button class="deposit-chip" data-goal-id="${g.id}" data-add="15000">+15 000 ₽</button>
-                <button class="deposit-chip" data-goal-id="${g.id}" data-add="50000">+50 000 ₽</button>
-              </div>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary); padding-top: 4px;">
-              <span>Осталось: <b class="num" style="color: #FFFFFF;">${money(remain)}</b></span>
-              <button class="btn-icon delete-goal-btn" data-id="${g.id}" title="Удалить цель">
-                ${icon('trash', 13)}
+            <!-- Quick Add to Goal -->
+            <div class="goal-add-strip">
+              <input class="form-input num goal-topup-input" data-id="${g.id}" type="number" min="1" step="any" placeholder="Сумма пополнения...">
+              <button class="btn-primary goal-topup-btn" data-id="${g.id}" style="padding: 0 14px; height: 36px; font-size: 12px;">
+                + Отложить
               </button>
             </div>
           </div>
         `;
       }).join('') : `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: var(--bg-surface); border: 1px dashed var(--border-medium); border-radius: var(--r-lg);">
-          <p style="color: var(--text-secondary); margin-bottom: 12px;">У вас пока нет активных целей.</p>
-          <button class="btn-primary" id="btn-new-goal-empty">${icon('plus', 13)} Добавить цель</button>
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
+          <div style="color: var(--text-muted); margin-bottom: 8px;">Финансовые цели пока не созданы</div>
+          <p style="color: var(--text-secondary); font-size: 13px;">Создайте цель «Подушка безопасности» или «Отпуск», чтобы формировать капитал.</p>
         </div>
       `}
     </div>
@@ -721,46 +1235,48 @@ function renderGoalsView() {
 }
 
 /* ==========================================================================
-   VIEW 5: AI ASSISTANT (HELPFUL FINANCIAL MENTOR)
+   VIEW 5: ASSISTANT (AI FINANCIAL MENTOR)
    CRITICAL RULE: NO "Добрый день" here!
-   Human-friendly, conversational, zero fake audit jargon.
    ========================================================================== */
 function renderAssistantView() {
   return `
     <div class="view-header">
       <div>
-        <h1 class="view-title">Финансовый ассистент</h1>
-        <p class="view-subtitle">Персональные финансовые советы, аналитика расходов и умные подсказки.</p>
+        <h1 class="view-title">ИИ-ассистент Finkaif</h1>
+        <p class="view-subtitle">Персональный финансовый ментор: советы по распределению доходов, анализу трат и целям.</p>
       </div>
     </div>
 
     <div class="assistant-layout">
-      <!-- Quick Prompts Sidebar -->
+      <!-- Quick Prompt Suggestions -->
       <div class="assistant-sidebar">
         <div class="assistant-sidebar-title">ПОПУЛЯРНЫЕ ВОПРОСЫ</div>
+        <div class="assistant-suggestions">
+          <button class="suggestion-chip" data-prompt="Как распределить доход по правилу 50/30/20?">
+            <span class="chip-sparkle">✦</span>
+            <span>Как распределить доход по 50/30/20?</span>
+          </button>
+          <button class="suggestion-chip" data-prompt="Проанализируй мои расходы и дай совет, где оптимизировать траты">
+            <span class="chip-sparkle">✦</span>
+            <span>Где я трачу больше всего и как оптимизировать?</span>
+          </button>
+          <button class="suggestion-chip" data-prompt="Сколько мне нужно откладывать на подушку безопасности?">
+            <span class="chip-sparkle">✦</span>
+            <span>Размер финансовой подушки для моего бюджета</span>
+          </button>
+          <button class="suggestion-chip" data-prompt="Как быстрее закрыть финансовую цель?">
+            <span class="chip-sparkle">✦</span>
+            <span>Стратегия быстрого накопления на цели</span>
+          </button>
+        </div>
 
-        <button class="suggestion-chip" data-prompt="В каких категориях я трачу больше всего средств и как их сократить?">
-          <span class="suggestion-tag">Анализ трат</span>
-          <span>Где у меня наибольшие расходы?</span>
-        </button>
-
-        <button class="suggestion-chip" data-prompt="Сколько мне нужно откладывать ежемесячно, чтобы быстрее закрыть финансовые цели?">
-          <span class="suggestion-tag">Накопления</span>
-          <span>План достижения целей</span>
-        </button>
-
-        <button class="suggestion-chip" data-prompt="Посчитай мой средний дневной бюджет исходя из текущего свободного остатка">
-          <span class="suggestion-tag">Дисциплина</span>
-          <span>Безопасный расход в день</span>
-        </button>
-
-        <button class="suggestion-chip" data-prompt="Посоветуй, как сформировать надежную подушку безопасности">
-          <span class="suggestion-tag">Безопасность</span>
-          <span>Как создать резервный фонд?</span>
-        </button>
+        <div class="assistant-note-card">
+          <div style="font-weight: 600; color: #FFFFFF; font-size: 12px; margin-bottom: 4px;">Безопасность данных</div>
+          <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">Ассистент оперирует только суммами категорий без персональных банковских реквизитов.</div>
+        </div>
       </div>
 
-      <!-- Dialogue Panel -->
+      <!-- Chat Stream -->
       <div class="assistant-chat-panel">
         <div class="chat-stream" id="chat-stream-box">
           ${data.chat.length > 0 ? data.chat.map(m => `
@@ -768,18 +1284,20 @@ function renderAssistantView() {
               ${m.role === 'assistant' ? `
                 <div class="chat-author">
                   ${icon('assistant', 13)}
-                  <span>FinKaif Помощник</span>
+                  <span>Finkaif Mentor</span>
                 </div>
               ` : ''}
-              <div>${formatMarkdown(m.content)}</div>
+              <div class="chat-body">${formatMarkdown(m.content)}</div>
             </div>
           `).join('') : `
-            <div style="text-align: center; margin: auto; max-width: 400px; color: var(--text-secondary);">
-              <div style="width: 48px; height: 48px; margin: 0 auto 16px; border-radius: 50%; background: var(--accent-jade-glow); display: flex; align-items: center; justify-content: center; color: var(--accent-jade);">
+            <div class="chat-empty-state">
+              <div class="chat-empty-icon">
                 ${icon('assistant', 24)}
               </div>
-              <h3 style="color: #FFFFFF; font-size: 16px; margin-bottom: 6px;">Чем я могу помочь?</h3>
-              <p style="font-size: 13px; line-height: 1.5;">Спросите об анализе ваших трат, оптимизации бюджета или выберите подсказку слева.</p>
+              <h3 style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 6px;">Чем могу помочь сегодня?</h3>
+              <p style="font-size: 13px; color: var(--text-secondary); max-width: 420px; margin: 0 auto;">
+                Спросите, сколько откладывать на отпуск, как распределить зарплату или оценить комфортность текущего темпа расходов.
+              </p>
             </div>
           `}
         </div>
@@ -787,7 +1305,7 @@ function renderAssistantView() {
         <form class="chat-input-bar" id="assistant-form">
           <input id="assistant-input" placeholder="Задайте вопрос о доходах, расходах, целях..." required autocomplete="off">
           <button type="submit" class="chat-send-btn" title="Отправить">
-            ${icon('send', 14)}
+            ${icon('send', 15)}
           </button>
         </form>
       </div>
@@ -796,7 +1314,7 @@ function renderAssistantView() {
 }
 
 /* ==========================================================================
-   MODAL WINDOW (NEW TRANSACTION)
+   MODAL 1: NEW OPERATION
    ========================================================================== */
 function renderModal() {
   return `
@@ -835,7 +1353,7 @@ function renderModal() {
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">Сумма (₽)</label>
+              <label class="form-label">Сумма (${currencySymbols[profile.currency] || '₽'})</label>
               <input class="form-input num" id="form-amount" type="number" min="1" step="any" placeholder="0" required>
             </div>
             <div class="form-group">
@@ -853,6 +1371,102 @@ function renderModal() {
             Сохранить операцию
           </button>
         </form>
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   MODAL 2: USER PROFILE & CUSTOMIZATION
+   ========================================================================== */
+function renderProfileModal() {
+  const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const userName = profile.display_name ? profile.display_name : rawUser;
+  const userInitial = rawUser.charAt(0).toUpperCase();
+
+  const currentBal = data.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  const rank = getFinancialRank(currentBal, data.goals);
+
+  const emojiList = ['🦁', '⚡', '💎', '🦅', '🚀', '👑', '🧘', '💼', '🎯', '🔥', '🐉', '🏆'];
+
+  return `
+    <div id="profile-modal" class="modal-backdrop" style="display: ${profileModalOpen ? 'flex' : 'none'};">
+      <div class="modal-card profile-dialog">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">⚙️</span>
+            <h3 class="modal-title">Профиль и персонализация</h3>
+          </div>
+          <button class="btn-icon" id="btn-close-profile">${icon('close', 16)}</button>
+        </div>
+
+        <!-- Identity Banner -->
+        <div class="profile-identity-banner">
+          <div class="profile-big-avatar" id="profile-avatar-preview">
+            ${profile.avatar && profile.avatar !== 'monogram' ? profile.avatar : userInitial}
+          </div>
+          <div class="profile-identity-info">
+            <div class="profile-name-title">${esc(userName)}</div>
+            <div class="profile-email-sub">${esc(me?.email || 'investor@finkaif.ru')}</div>
+            <div class="profile-rank-badge">
+              <span>${rank.badge}</span>
+              <span>${rank.title}</span>
+            </div>
+          </div>
+        </div>
+
+        <form id="profile-form">
+          <!-- Avatar Choice -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">Выберите аватар</label>
+            <div class="avatar-grid">
+              <button type="button" class="avatar-opt-btn ${(!profile.avatar || profile.avatar === 'monogram') ? 'active' : ''}" data-avatar="monogram" title="Монограмма">
+                ${userInitial}
+              </button>
+              ${emojiList.map(em => `
+                <button type="button" class="avatar-opt-btn ${profile.avatar === em ? 'active' : ''}" data-avatar="${em}">
+                  ${em}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Display Name -->
+          <div class="form-group">
+            <label class="form-label">Имя или псевдоним</label>
+            <input class="form-input" id="profile-input-name" value="${esc(profile.display_name)}" placeholder="Например: Никита">
+          </div>
+
+          <!-- Currency Selector -->
+          <div class="form-group">
+            <label class="form-label">Основная валюта интерфейса</label>
+            <div class="currency-pills-grid">
+              <button type="button" class="currency-pill-btn ${profile.currency === 'RUB' ? 'active' : ''}" data-currency="RUB">
+                ₽ RUB (Рубль)
+              </button>
+              <button type="button" class="currency-pill-btn ${profile.currency === 'USD' ? 'active' : ''}" data-currency="USD">
+                $ USD (Доллар)
+              </button>
+              <button type="button" class="currency-pill-btn ${profile.currency === 'EUR' ? 'active' : ''}" data-currency="EUR">
+                € EUR (Евро)
+              </button>
+              <button type="button" class="currency-pill-btn ${profile.currency === 'KZT' ? 'active' : ''}" data-currency="KZT">
+                ₸ KZT (Тенге)
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-submit" style="margin-top: 14px;">
+            Сохранить настройки
+          </button>
+        </form>
+
+        <!-- Logout Action -->
+        <div class="profile-logout-footer">
+          <button type="button" class="btn-logout" id="btn-profile-logout">
+            Выйти из аккаунта
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -913,6 +1527,7 @@ function renderApp() {
 
   let viewHtml = '';
   if (tab === 'home') viewHtml = renderHomeView();
+  else if (tab === 'analytics') viewHtml = renderAnalyticsView();
   else if (tab === 'transactions') viewHtml = renderTransactionsView();
   else if (tab === 'budgets') viewHtml = renderBudgetsView();
   else if (tab === 'goals') viewHtml = renderGoalsView();
@@ -925,6 +1540,7 @@ function renderApp() {
         ${viewHtml}
       </main>
       ${renderModal()}
+      ${renderProfileModal()}
     </div>
   `;
 
@@ -951,22 +1567,28 @@ function bindAuthEvents() {
 
       try {
         submitBtn.disabled = true;
-        submitBtn.innerText = 'Проверка...';
-
-        const res = await api(`auth/${mode}`, {
+        submitBtn.innerText = 'Секунду...';
+        const res = await api('auth/' + mode, {
           method: 'POST',
           body: JSON.stringify({ email, password })
         });
-
-        if (res.token) {
-          localStorage.setItem('finkaif_token', res.token);
-        }
+        if (res.token) localStorage.setItem('finkaif_token', res.token);
         me = res.user;
+
+        // Fetch profile settings
+        try {
+          const prof = await api('profile');
+          if (prof) {
+            profile.display_name = prof.display_name || '';
+            profile.avatar = prof.avatar || '⚡';
+            if (prof.currency) profile.currency = prof.currency;
+          }
+        } catch { }
+
         await refreshAllData();
         renderApp();
       } catch (err) {
         alert(err.message);
-      } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = mode === 'login' ? 'Войти' : 'Зарегистрироваться';
       }
@@ -975,112 +1597,125 @@ function bindAuthEvents() {
 }
 
 function bindInteractiveEvents() {
-  // Tab navigation
-  $$('[data-tab]').forEach(btn => {
+  // Navigation Tabs
+  $$('.nav-item').forEach(btn => {
     btn.onclick = () => {
       tab = btn.getAttribute('data-tab');
       window.location.hash = tab;
       renderApp();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
   });
 
-  // User menu / logout
-  const userMenuBtn = document.getElementById('user-menu-btn');
-  if (userMenuBtn) {
-    userMenuBtn.onclick = async () => {
-      if (confirm('Выйти из аккаунта?')) {
+  $$('[data-tab]').forEach(el => {
+    if (!el.classList.contains('nav-item')) {
+      el.onclick = () => {
+        tab = el.getAttribute('data-tab');
+        if (el.getAttribute('data-cat')) {
+          activeAnalyticsCat = el.getAttribute('data-cat');
+        }
+        window.location.hash = tab;
+        renderApp();
+      };
+    }
+  });
+
+  // Profile Modal Toggle
+  const userProfileBtn = document.getElementById('user-profile-btn');
+  if (userProfileBtn) {
+    userProfileBtn.onclick = () => {
+      profileModalOpen = true;
+      renderApp();
+    };
+  }
+
+  const btnCloseProfile = document.getElementById('btn-close-profile');
+  if (btnCloseProfile) {
+    btnCloseProfile.onclick = () => {
+      profileModalOpen = false;
+      renderApp();
+    };
+  }
+
+  const profileModalBackdrop = document.getElementById('profile-modal');
+  if (profileModalBackdrop) {
+    profileModalBackdrop.onclick = e => {
+      if (e.target === profileModalBackdrop) {
+        profileModalOpen = false;
+        renderApp();
+      }
+    };
+  }
+
+  // Avatar Selection
+  $$('.avatar-opt-btn').forEach(btn => {
+    btn.onclick = () => {
+      const av = btn.getAttribute('data-avatar');
+      profile.avatar = av;
+      $$('.avatar-opt-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const preview = document.getElementById('profile-avatar-preview');
+      if (preview) {
+        const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+        preview.innerText = av === 'monogram' ? rawUser.charAt(0).toUpperCase() : av;
+      }
+    };
+  });
+
+  // Currency Selection
+  $$('.currency-pill-btn').forEach(btn => {
+    btn.onclick = () => {
+      const cur = btn.getAttribute('data-currency');
+      profile.currency = cur;
+      $$('.currency-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+  });
+
+  // Profile Form Save
+  const profileForm = document.getElementById('profile-form');
+  if (profileForm) {
+    profileForm.onsubmit = async e => {
+      e.preventDefault();
+      const inputName = document.getElementById('profile-input-name');
+      profile.display_name = inputName ? inputName.value.trim() : '';
+
+      localStorage.setItem('finkaif_name', profile.display_name);
+      localStorage.setItem('finkaif_avatar', profile.avatar);
+      localStorage.setItem('finkaif_currency', profile.currency);
+
+      try {
+        await api('profile', {
+          method: 'POST',
+          body: JSON.stringify({
+            display_name: profile.display_name,
+            avatar: profile.avatar,
+            currency: profile.currency
+          })
+        });
+      } catch (err) {
+        console.warn('Profile sync warning:', err.message);
+      }
+
+      profileModalOpen = false;
+      renderApp();
+    };
+  }
+
+  // Profile Logout
+  const btnProfileLogout = document.getElementById('btn-profile-logout');
+  if (btnProfileLogout) {
+    btnProfileLogout.onclick = async () => {
+      if (confirm('Вы действительно хотите выйти из аккаунта?')) {
         await api('auth/logout', { method: 'POST' }).catch(() => {});
         localStorage.removeItem('finkaif_token');
         me = null;
+        profileModalOpen = false;
         renderApp();
       }
     };
   }
 
-  // Modal Open/Close
-  const modal = document.getElementById('tx-modal');
-  const openModal = (defaultType = 'expense') => {
-    modalType = defaultType;
-    if (modal) modal.style.display = 'flex';
-    if ($('#form-type')) $('#form-type').value = defaultType;
-  };
-  const closeModal = () => {
-    if (modal) modal.style.display = 'none';
-  };
-
-  const btnQuickNew = document.getElementById('btn-quick-new');
-  const btnFirstOp = document.getElementById('btn-first-op');
-  const btnAddTxView = document.getElementById('btn-add-tx-view');
-  const quickAddExp = document.getElementById('quick-add-expense');
-  const quickAddInc = document.getElementById('quick-add-income');
-  const btnCloseModal = document.getElementById('btn-close-modal');
-
-  if (btnQuickNew) btnQuickNew.onclick = () => openModal('expense');
-  if (btnFirstOp) btnFirstOp.onclick = () => openModal('expense');
-  if (btnAddTxView) btnAddTxView.onclick = () => openModal('expense');
-  if (quickAddExp) quickAddExp.onclick = () => openModal('expense');
-  if (quickAddInc) quickAddInc.onclick = () => openModal('income');
-  if (btnCloseModal) btnCloseModal.onclick = closeModal;
-
-  if (modal) {
-    modal.onclick = e => {
-      if (e.target === modal) closeModal();
-    };
-  }
-
-  // Quick category chips in modal
-  $$('.cat-chip').forEach(chip => {
-    chip.onclick = () => {
-      $$('.cat-chip').forEach(c => c.classList.remove('selected'));
-      chip.classList.add('selected');
-      const cat = chip.getAttribute('data-cat');
-      const type = chip.getAttribute('data-type');
-      if ($('#form-category')) $('#form-category').value = cat;
-      if ($('#form-type')) $('#form-type').value = type;
-    };
-  });
-
-  // Transaction form submit
-  const txForm = document.getElementById('tx-modal-form');
-  if (txForm) {
-    txForm.onsubmit = async e => {
-      e.preventDefault();
-      try {
-        const type = $('#form-type').value;
-        const category = $('#form-category').value.trim();
-        const amount = Number($('#form-amount').value);
-        const occurred_on = $('#form-date').value;
-        const description = $('#form-desc').value.trim();
-
-        const created = await api('transactions', {
-          method: 'POST',
-          body: JSON.stringify({ type, category, amount, occurred_on, description })
-        });
-
-        data.transactions.unshift(created);
-        closeModal();
-        renderApp();
-      } catch (err) {
-        alert(err.message);
-      }
-    };
-  }
-
-  // Delete transaction
-  $$('.delete-tx-btn').forEach(btn => {
-    btn.onclick = async e => {
-      e.stopPropagation();
-      const id = btn.getAttribute('data-id');
-      if (confirm('Удалить эту операцию?')) {
-        await api(`transactions/${id}`, { method: 'DELETE' });
-        data.transactions = data.transactions.filter(t => t.id !== id);
-        renderApp();
-      }
-    };
-  });
-
-  // Period switcher on Overview
+  // Period Tabs on Home View
   $$('.period-tab').forEach(btn => {
     btn.onclick = () => {
       period = btn.getAttribute('data-period');
@@ -1088,118 +1723,282 @@ function bindInteractiveEvents() {
     };
   });
 
-  // Filter tabs on Transactions
-  $$('.filter-tab').forEach(btn => {
+  // Analytics Period Buttons
+  $$('.analytics-period-btn').forEach(btn => {
     btn.onclick = () => {
-      txFilter = btn.getAttribute('data-tx-filter');
+      analyticsPeriod = btn.getAttribute('data-aperiod');
       renderApp();
     };
   });
 
-  // Instant Search
+  // Analytics Donut Segment Interactions
+  $$('.donut-segment').forEach(seg => {
+    seg.onmouseenter = () => {
+      hoveredAnalyticsCat = seg.getAttribute('data-cat');
+      renderApp();
+    };
+    seg.onmouseleave = () => {
+      hoveredAnalyticsCat = null;
+      renderApp();
+    };
+    seg.onclick = () => {
+      const c = seg.getAttribute('data-cat');
+      activeAnalyticsCat = activeAnalyticsCat === c ? null : c;
+      renderApp();
+    };
+  });
+
+  $$('.donut-cat-item').forEach(item => {
+    item.onmouseenter = () => {
+      hoveredAnalyticsCat = item.getAttribute('data-cat');
+      renderApp();
+    };
+    item.onmouseleave = () => {
+      hoveredAnalyticsCat = null;
+      renderApp();
+    };
+    item.onclick = () => {
+      const c = item.getAttribute('data-cat');
+      activeAnalyticsCat = activeAnalyticsCat === c ? null : c;
+      renderApp();
+    };
+  });
+
+  const btnResetDonut = document.getElementById('btn-reset-donut-filter');
+  if (btnResetDonut) {
+    btnResetDonut.onclick = () => {
+      activeAnalyticsCat = null;
+      renderApp();
+    };
+  }
+
+  const btnResetDrilldown = document.getElementById('btn-reset-drilldown');
+  if (btnResetDrilldown) {
+    btnResetDrilldown.onclick = () => {
+      activeAnalyticsCat = null;
+      renderApp();
+    };
+  }
+
+  // Quick Action Buttons
+  const btnQuickNew = document.getElementById('btn-quick-new');
+  const btnFirstOp = document.getElementById('btn-first-op');
+  const btnAddTxView = document.getElementById('btn-add-tx-view');
+  const qAddExp = document.getElementById('quick-add-expense');
+  const qAddInc = document.getElementById('quick-add-income');
+
+  const openTxModal = (type = 'expense') => {
+    const modal = document.getElementById('tx-modal');
+    if (modal) {
+      modal.style.display = 'flex';
+      const typeSelect = document.getElementById('form-type');
+      if (typeSelect) typeSelect.value = type;
+    }
+  };
+
+  if (btnQuickNew) btnQuickNew.onclick = () => openTxModal('expense');
+  if (btnFirstOp) btnFirstOp.onclick = () => openTxModal('expense');
+  if (btnAddTxView) btnAddTxView.onclick = () => openTxModal('expense');
+  if (qAddExp) qAddExp.onclick = () => openTxModal('expense');
+  if (qAddInc) qAddInc.onclick = () => openTxModal('income');
+
+  const btnCloseModal = document.getElementById('btn-close-modal');
+  if (btnCloseModal) {
+    btnCloseModal.onclick = () => {
+      const modal = document.getElementById('tx-modal');
+      if (modal) modal.style.display = 'none';
+    };
+  }
+
+  // Category Chips inside Modal
+  $$('.cat-chip').forEach(chip => {
+    chip.onclick = () => {
+      $$('.cat-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      const cat = chip.getAttribute('data-cat');
+      const catType = chip.getAttribute('data-type');
+      const catInput = document.getElementById('form-category');
+      const typeSelect = document.getElementById('form-type');
+      if (catInput) catInput.value = cat;
+      if (typeSelect) typeSelect.value = catType;
+    };
+  });
+
+  // Modal Form Submit (Create Transaction)
+  const txModalForm = document.getElementById('tx-modal-form');
+  if (txModalForm) {
+    txModalForm.onsubmit = async e => {
+      e.preventDefault();
+      const type = document.getElementById('form-type').value;
+      const category = document.getElementById('form-category').value.trim();
+      const amount = Number(document.getElementById('form-amount').value);
+      const occurred_on = document.getElementById('form-date').value;
+      const description = document.getElementById('form-desc').value.trim();
+
+      if (!category || amount <= 0) {
+        alert('Заполните категорию и сумму операции');
+        return;
+      }
+
+      try {
+        await api('transactions', {
+          method: 'POST',
+          body: JSON.stringify({ type, category, amount, occurred_on, description })
+        });
+        const modal = document.getElementById('tx-modal');
+        if (modal) modal.style.display = 'none';
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка добавления операции: ' + err.message);
+      }
+    };
+  }
+
+  // Transaction Filters & Search
+  $$('.filter-tab').forEach(btn => {
+    btn.onclick = () => {
+      txFilter = btn.getAttribute('data-filter');
+      renderApp();
+    };
+  });
+
   const searchInput = document.getElementById('tx-search-input');
   if (searchInput) {
     searchInput.oninput = e => {
       txSearch = e.target.value;
       renderApp();
-      const input = document.getElementById('tx-search-input');
-      if (input) {
-        input.focus();
-        input.setSelectionRange(txSearch.length, txSearch.length);
+      const newInp = document.getElementById('tx-search-input');
+      if (newInp) {
+        newInp.focus();
+        newInp.setSelectionRange(newInp.value.length, newInp.value.length);
       }
     };
   }
 
-  // Budgets: Create & Delete
-  const btnNewBudget = document.getElementById('btn-new-budget');
-  const btnNewBudgetEmpty = document.getElementById('btn-new-budget-empty');
-  const promptNewBudget = async () => {
-    const category = prompt('Статья расходов (например: Продукты, Кафе, Транспорт):');
-    if (!category) return;
-    const limit_amount = prompt(`Месячный лимит для «${category}» (₽):`);
-    if (!limit_amount || isNaN(Number(limit_amount))) return;
-
-    try {
-      const created = await api('budgets', {
-        method: 'POST',
-        body: JSON.stringify({ category, limit_amount: Number(limit_amount) })
-      });
-      data.budgets = data.budgets.filter(b => b.category !== category);
-      data.budgets.push(created);
+  const btnClearSearch = document.getElementById('btn-clear-search');
+  if (btnClearSearch) {
+    btnClearSearch.onclick = () => {
+      txSearch = '';
       renderApp();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+    };
+  }
 
-  if (btnNewBudget) btnNewBudget.onclick = promptNewBudget;
-  if (btnNewBudgetEmpty) btnNewBudgetEmpty.onclick = promptNewBudget;
-
-  $$('.delete-budget-btn').forEach(btn => {
+  // Delete Transaction
+  $$('.tx-delete-btn').forEach(btn => {
     btn.onclick = async e => {
       e.stopPropagation();
       const id = btn.getAttribute('data-id');
-      if (confirm('Удалить этот лимит?')) {
-        await api(`budgets/${id}`, { method: 'DELETE' });
-        data.budgets = data.budgets.filter(b => b.id !== id);
-        renderApp();
+      if (confirm('Удалить эту операцию?')) {
+        try {
+          await api('transactions/' + id, { method: 'DELETE' });
+          await refreshAllData();
+          renderApp();
+        } catch (err) {
+          alert('Ошибка удаления: ' + err.message);
+        }
       }
     };
   });
 
-  // Goals: Create, Deposit, Delete
-  const btnNewGoal = document.getElementById('btn-new-goal');
-  const btnNewGoalEmpty = document.getElementById('btn-new-goal-empty');
-  const promptNewGoal = async () => {
-    const name = prompt('Название финансовой цели (напр. Резервный фонд, Отпуск):');
-    if (!name) return;
-    const target_amount = prompt(`Сумма для достижения «${name}» (₽):`);
-    if (!target_amount || isNaN(Number(target_amount))) return;
+  // Budgets: Create / Update
+  const budgetForm = document.getElementById('budget-form');
+  if (budgetForm) {
+    budgetForm.onsubmit = async e => {
+      e.preventDefault();
+      const category = document.getElementById('budget-cat').value.trim();
+      const limit_amount = Number(document.getElementById('budget-limit').value);
+      if (!category || limit_amount <= 0) return;
 
-    try {
-      const created = await api('goals', {
-        method: 'POST',
-        body: JSON.stringify({ name, target_amount: Number(target_amount), saved_amount: 0 })
-      });
-      data.goals.push(created);
-      renderApp();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  if (btnNewGoal) btnNewGoal.onclick = promptNewGoal;
-  if (btnNewGoalEmpty) btnNewGoalEmpty.onclick = promptNewGoal;
-
-  $$('.deposit-chip').forEach(chip => {
-    chip.onclick = async () => {
-      const goalId = chip.getAttribute('data-goal-id');
-      const addAmount = Number(chip.getAttribute('data-add'));
-      const goal = data.goals.find(g => g.id === goalId);
-      if (!goal) return;
-
-      const newSaved = Number(goal.saved_amount) + addAmount;
       try {
-        const updated = await api(`goals/${goalId}`, {
+        await api('budgets', {
+          method: 'POST',
+          body: JSON.stringify({ category, limit_amount })
+        });
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка сохранения бюджета: ' + err.message);
+      }
+    };
+  }
+
+  // Budgets: Delete
+  $$('.budget-delete-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-id');
+      if (confirm('Удалить этот лимит?')) {
+        try {
+          await api('budgets/' + id, { method: 'DELETE' });
+          await refreshAllData();
+          renderApp();
+        } catch (err) {
+          alert('Ошибка удаления: ' + err.message);
+        }
+      }
+    };
+  });
+
+  // Goals: Create
+  const goalForm = document.getElementById('goal-form');
+  if (goalForm) {
+    goalForm.onsubmit = async e => {
+      e.preventDefault();
+      const name = document.getElementById('goal-name').value.trim();
+      const target_amount = Number(document.getElementById('goal-target').value);
+      const saved_amount = Number(document.getElementById('goal-saved').value) || 0;
+      if (!name || target_amount <= 0) return;
+
+      try {
+        await api('goals', {
+          method: 'POST',
+          body: JSON.stringify({ name, target_amount, saved_amount })
+        });
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка создания цели: ' + err.message);
+      }
+    };
+  }
+
+  // Goals: Delete
+  $$('.goal-delete-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-id');
+      if (confirm('Удалить эту цель?')) {
+        try {
+          await api('goals/' + id, { method: 'DELETE' });
+          await refreshAllData();
+          renderApp();
+        } catch (err) {
+          alert('Ошибка удаления: ' + err.message);
+        }
+      }
+    };
+  });
+
+  // Goals: Top-up / Add saved amount
+  $$('.goal-topup-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-id');
+      const input = document.querySelector(`.goal-topup-input[data-id="${id}"]`);
+      const addVal = Number(input?.value);
+      if (!addVal || addVal <= 0) return;
+
+      const targetGoal = data.goals.find(g => g.id === id);
+      if (!targetGoal) return;
+
+      const newSaved = Number(targetGoal.saved_amount) + addVal;
+      try {
+        await api('goals/' + id, {
           method: 'PUT',
           body: JSON.stringify({ saved_amount: newSaved })
         });
-        goal.saved_amount = updated.saved_amount;
+        await refreshAllData();
         renderApp();
       } catch (err) {
-        alert(err.message);
-      }
-    };
-  });
-
-  $$('.delete-goal-btn').forEach(btn => {
-    btn.onclick = async e => {
-      e.stopPropagation();
-      const id = btn.getAttribute('data-id');
-      if (confirm('Удалить эту цель?')) {
-        await api(`goals/${id}`, { method: 'DELETE' });
-        data.goals = data.goals.filter(g => g.id !== id);
-        renderApp();
+        alert('Ошибка пополнения: ' + err.message);
       }
     };
   });
@@ -1238,7 +2037,6 @@ function bindInteractiveEvents() {
           });
         }
 
-        // Remove temporary typing message
         data.chat = data.chat.filter(m => m.id !== tempId);
         const answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
         data.chat.push({ role: 'assistant', content: answer, created_at: new Date().toISOString() });
@@ -1267,7 +2065,7 @@ function bindInteractiveEvents() {
 }
 
 /* ==========================================================================
-   INITIALIZATION & ROUTING
+   INITIALIZATION & DATA REFRESH
    ========================================================================== */
 async function refreshAllData() {
   try {
@@ -1289,7 +2087,7 @@ async function refreshAllData() {
 
 function syncHash() {
   const h = window.location.hash.replace('#', '');
-  if (['home', 'transactions', 'budgets', 'goals', 'assistant'].includes(h)) {
+  if (['home', 'analytics', 'transactions', 'budgets', 'goals', 'assistant'].includes(h)) {
     tab = h;
     renderApp();
   }
@@ -1299,13 +2097,27 @@ async function boot() {
   initAmbientCanvas();
 
   const initHash = window.location.hash.replace('#', '');
-  if (['home', 'transactions', 'budgets', 'goals', 'assistant'].includes(initHash)) {
+  if (['home', 'analytics', 'transactions', 'budgets', 'goals', 'assistant'].includes(initHash)) {
     tab = initHash;
   }
 
   try {
     const userRes = await api('me');
     me = userRes.user;
+
+    // Load profile
+    try {
+      const prof = await api('profile');
+      if (prof) {
+        profile.display_name = prof.display_name || localStorage.getItem('finkaif_name') || '';
+        profile.avatar = prof.avatar || localStorage.getItem('finkaif_avatar') || '⚡';
+        if (prof.currency) {
+          profile.currency = prof.currency;
+          localStorage.setItem('finkaif_currency', prof.currency);
+        }
+      }
+    } catch { }
+
     await refreshAllData();
   } catch {
     me = null;
