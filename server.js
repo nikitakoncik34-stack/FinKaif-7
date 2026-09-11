@@ -187,6 +187,20 @@ app.post("/api/goals", auth, async (req, res) => {
   }
 });
 
+app.put("/api/goals/:id", auth, async (req, res) => {
+  try {
+    const x = req.body;
+    const r = await db.query(
+      "update goals set saved_amount=coalesce($1, saved_amount), target_amount=coalesce($2, target_amount), name=coalesce($3, name) where id=$4 and user_id=$5 returning *",
+      [x.saved_amount !== undefined ? Math.max(0, Number(x.saved_amount)) : null, x.target_amount ? Number(x.target_amount) : null, x.name ? String(x.name).trim() : null, req.params.id, req.user.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: "Цель не найдена." });
+    res.json(r.rows[0]);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 app.delete("/api/:resource/:id", auth, async (req, res) => {
   try {
     const table = tables[req.params.resource];
