@@ -111,6 +111,31 @@ const getTxIso = t => {
   return s.slice(0, 10);
 };
 
+// Intraday transaction minute parser (0..1439) with timezone awareness
+const getTxMinutes = t => {
+  if (!t) return 12 * 60;
+  const raw = t.created_at || t.occurred_at || t.time || '';
+  if (raw) {
+    const s = String(raw).trim();
+    if (/^\d{1,2}:\d{2}/.test(s)) {
+      const p = s.split(':');
+      return Math.min(1439, Math.max(0, Number(p[0]) * 60 + Number(p[1])));
+    }
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return d.getHours() * 60 + d.getMinutes();
+    }
+  }
+  return 12 * 60;
+};
+
+const formatTxTime = t => {
+  const mins = getTxMinutes(t);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
 const defaultCategories = [
   'Продукты', 'Рестораны', 'Кафе', 'Транспорт', 'Такси',
   'Подписки', 'Здоровье', 'Спорт', 'Покупки', 'Жилье',
@@ -365,7 +390,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.9</span>
+          <span class="brand-badge">8.10</span>
         </div>
       </div>
 
@@ -435,9 +460,17 @@ function renderHomeView() {
 
   const savingsRate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
 
-  // Build daily timeline points for smooth capital balance chart
+  // Build continuous intraday capital timeline
   const now = new Date();
-  const dayPoints = [];
+  const svgW = 760;
+  const svgH = 120;
+  const padX = 28;
+  const padTop = 18;
+  const padBottom = 16;
+  const plotW = svgW - 2 * padX;
+  const plotH = svgH - padTop - padBottom;
+
+  const dayBuckets = [];
 
   if (period === 'year') {
     // 12 calendar month buckets
@@ -447,20 +480,20 @@ function renderHomeView() {
       const monthNum = String(target.getMonth() + 1).padStart(2, '0');
       const prefix = `${year}-${monthNum}`;
 
-      const mExp = data.transactions
-        .filter(t => t.type === 'expense' && getTxIso(t).startsWith(prefix))
-        .reduce((s, t) => s + Number(t.amount), 0);
-      const mInc = data.transactions
-        .filter(t => t.type === 'income' && getTxIso(t).startsWith(prefix))
-        .reduce((s, t) => s + Number(t.amount), 0);
+      const mTxs = (data.transactions || []).filter(t => getTxIso(t).startsWith(prefix));
+      const mExp = mTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+      const mInc = mTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
 
-      dayPoints.push({
+      dayBuckets.push({
         date: prefix,
+        dayDate: target,
+        dayNum: target.getMonth() + 1,
         dayLabel: target.toLocaleDateString('ru-RU', { month: 'short' }),
         dayDisplay: target.toLocaleDateString('ru-RU', { month: 'short' }),
         fullDate: target.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
         exp: mExp,
-        inc: mInc
+        inc: mInc,
+        txs: mTxs
       });
     }
   } else {
@@ -469,86 +502,147 @@ function renderHomeView() {
     for (let i = numDays - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
       const iso = toDateIso(d);
-      const dayExp = data.transactions
-        .filter(t => t.type === 'expense' && getTxIso(t) === iso)
-        .reduce((s, t) => s + Number(t.amount), 0);
-      const dayInc = data.transactions
-        .filter(t => t.type === 'income' && getTxIso(t) === iso)
-        .reduce((s, t) => s + Number(t.amount), 0);
+      const dayTxs = (data.transactions || [])
+        .filter(t => getTxIso(t) === iso)
+        .sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
+      const dayExp = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+      const dayInc = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
 
       const wkShort = d.toLocaleDateString('ru-RU', { weekday: 'short' });
       const capWk = wkShort.charAt(0).toUpperCase() + wkShort.slice(1);
 
-      dayPoints.push({
+      dayBuckets.push({
         date: iso,
+        dayDate: d,
         dayNum: d.getDate(),
         wkShort: capWk,
         dayLabel: period === '7d' ? capWk : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
         dayDisplay: period === '7d' ? `${capWk} ${d.getDate()}` : `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
         fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
         exp: dayExp,
-        inc: dayInc
+        inc: dayInc,
+        txs: dayTxs
       });
     }
   }
 
-  // True Cumulative Capital Trajectory
-  const windowNet = dayPoints.reduce((s, p) => s + (p.inc - p.exp), 0);
+  // True Cumulative Capital Trajectory:
+  // Start from opening balance prior to current window
+  const windowNet = dayBuckets.reduce((s, p) => s + (p.inc - p.exp), 0);
   let runningBal = balance - windowNet;
-  const pointsWithBal = dayPoints.map(p => {
-    runningBal += (p.inc - p.exp);
-    return {
-      ...p,
-      balance: runningBal
-    };
-  });
 
-  const periodInc = dayPoints.reduce((s, p) => s + p.inc, 0);
-  const periodExp = dayPoints.reduce((s, p) => s + p.exp, 0);
+  const timelineNodes = [];
+  const N = dayBuckets.length;
+  const dayWidth = plotW / (N || 1);
+
+  for (let i = 0; i < N; i++) {
+    const bucket = dayBuckets[i];
+    const xStart = padX + i * dayWidth;
+    const xEnd = padX + (i + 1) * dayWidth;
+    const dayOpenBal = runningBal;
+
+    bucket.xStart = xStart;
+    bucket.xEnd = xEnd;
+    bucket.xMid = (xStart + xEnd) / 2;
+    bucket.openBalance = dayOpenBal;
+
+    // Node at start of day
+    timelineNodes.push({
+      x: xStart,
+      balance: dayOpenBal,
+      dayIdx: i,
+      bucket,
+      isDayStart: true
+    });
+
+    // Intraday transaction transitions
+    if (bucket.txs && bucket.txs.length > 0) {
+      for (const tx of bucket.txs) {
+        const mins = getTxMinutes(tx);
+        const frac = Math.max(0.04, Math.min(0.96, mins / 1440));
+        const txX = xStart + frac * dayWidth;
+        const transW = Math.min(3.5, Math.max(1.5, dayWidth * 0.035));
+
+        timelineNodes.push({
+          x: Math.max(xStart + 0.5, txX - transW),
+          balance: runningBal,
+          dayIdx: i,
+          bucket
+        });
+
+        runningBal += (tx.type === 'income' ? Number(tx.amount) : -Number(tx.amount));
+
+        timelineNodes.push({
+          x: Math.min(xEnd - 0.5, txX + transW),
+          balance: runningBal,
+          dayIdx: i,
+          bucket,
+          tx
+        });
+      }
+    }
+
+    // Node at end of day
+    timelineNodes.push({
+      x: xEnd,
+      balance: runningBal,
+      dayIdx: i,
+      bucket,
+      isDayEnd: true
+    });
+  }
+
+  // De-duplicate adjacent nodes with nearly identical X
+  const cleanNodes = [];
+  for (let i = 0; i < timelineNodes.length; i++) {
+    const pt = timelineNodes[i];
+    if (cleanNodes.length > 0 && Math.abs(cleanNodes[cleanNodes.length - 1].x - pt.x) < 0.25) {
+      cleanNodes[cleanNodes.length - 1].balance = pt.balance;
+      if (pt.tx) cleanNodes[cleanNodes.length - 1].tx = pt.tx;
+    } else {
+      cleanNodes.push({ ...pt });
+    }
+  }
+
+  const periodInc = dayBuckets.reduce((s, p) => s + p.inc, 0);
+  const periodExp = dayBuckets.reduce((s, p) => s + p.exp, 0);
   const periodFootnote = period === '7d' ? 'За последние 7 дней' : (period === '30d' ? 'За последние 30 дней' : 'За последние 12 месяцев');
 
-  const minVal = Math.min(...pointsWithBal.map(p => p.balance));
-  const maxVal = Math.max(...pointsWithBal.map(p => p.balance));
+  const minVal = Math.min(...cleanNodes.map(p => p.balance));
+  const maxVal = Math.max(...cleanNodes.map(p => p.balance));
   const balDiff = maxVal - minVal;
-  const netDelta = pointsWithBal[pointsWithBal.length - 1].balance - pointsWithBal[0].balance;
+  const netDelta = balance - (balance - windowNet);
 
   const isDeficit = balance < 0;
   const accentColor = isDeficit ? '#FB7185' : '#2DD4BF';
   const glowColor = isDeficit ? 'rgba(251, 113, 133, 0.45)' : 'rgba(45, 212, 191, 0.45)';
 
-  const svgW = 760;
-  const svgH = 120;
-  const padX = 28;
-  const padTop = 18;
-  const padBottom = 16;
-  const plotW = svgW - 2 * padX;
-  const plotH = svgH - padTop - padBottom;
-
-  const points = pointsWithBal.map((p, idx) => {
-    const x = Math.round(padX + (idx / (pointsWithBal.length - 1 || 1)) * plotW);
-    let y;
+  cleanNodes.forEach(p => {
     if (balDiff === 0) {
-      y = Math.round(padTop + plotH * 0.5);
+      p.y = Math.round(padTop + plotH * 0.5);
     } else {
       const margin = Math.max(balDiff * 0.20, 100);
       const yMin = minVal - margin;
       const yMax = maxVal + margin;
-      y = Math.round(svgH - padBottom - ((p.balance - yMin) / (yMax - yMin)) * plotH);
+      p.y = Math.round(svgH - padBottom - ((p.balance - yMin) / (yMax - yMin)) * plotH);
     }
-    return { x, y, idx, ...p };
   });
 
-  window.__homePoints = points;
+  const firstPt = cleanNodes[0];
+  const lastPt = cleanNodes[cleanNodes.length - 1];
+  const curvePath = pointsToSmoothPath(cleanNodes);
+  const areaPath = `${curvePath} L ${lastPt.x},${svgH - padBottom} L ${firstPt.x},${svgH - padBottom} Z`;
+
+  window.__homeTimelineNodes = cleanNodes;
+  window.__homeDayBuckets = dayBuckets;
   window.__homeCurrentBalance = balance;
   window.__homeSvgH = svgH;
+  window.__homeSvgW = svgW;
+  window.__homePadX = padX;
+  window.__homePlotW = plotW;
   window.__homeAccentColor = accentColor;
   window.__homeIsDeficit = isDeficit;
   window.__homePeriod = period;
-
-  const firstPt = points[0];
-  const lastPt = points[points.length - 1];
-  const curvePath = pointsToSmoothPath(points);
-  const areaPath = `${curvePath} L ${lastPt.x},${svgH - padBottom} L ${firstPt.x},${svgH - padBottom} Z`;
 
   // Dynamic reference grid lines
   const gridLevels = [
@@ -575,24 +669,24 @@ function renderHomeView() {
   }
 
   // HTML Executive Date Axis Items (Never distorted by SVG!)
-  const axisItemsHtml = points.map((pt, idx) => {
+  const axisItemsHtml = dayBuckets.map((bucket, idx) => {
     let show = false;
     if (period === '7d') show = true;
-    else if (period === '30d') show = (idx % 5 === 0 || idx === points.length - 1);
-    else show = (idx % 2 === 0 || idx === points.length - 1);
+    else if (period === '30d') show = (idx % 5 === 0 || idx === dayBuckets.length - 1);
+    else show = (idx % 2 === 0 || idx === dayBuckets.length - 1);
 
     if (!show) return '';
-    const isLatest = (idx === points.length - 1);
-    const leftPct = ((pt.x / svgW) * 100).toFixed(2);
+    const isLatest = (idx === dayBuckets.length - 1);
+    const leftPct = ((bucket.xMid / svgW) * 100).toFixed(2);
 
     let badgeContent = '';
     if (period === '7d') {
       badgeContent = `
-        <span class="axis-dow">${esc(pt.wkShort || '')}</span>
-        <span class="axis-num">${esc(String(pt.dayNum || ''))}</span>
+        <span class="axis-dow">${esc(bucket.wkShort || '')}</span>
+        <span class="axis-num">${esc(String(bucket.dayNum || ''))}</span>
       `;
     } else {
-      badgeContent = `<span class="axis-num">${esc(pt.dayDisplay || pt.dayLabel)}</span>`;
+      badgeContent = `<span class="axis-num">${esc(bucket.dayDisplay || bucket.dayLabel)}</span>`;
     }
 
     return `
@@ -613,12 +707,13 @@ function renderHomeView() {
     </div>
   `;
 
-  // HTML-based activity micro-pips (100% round circles, zero aspect distortion)
-  const activityPipsHtml = points.slice(0, -1).filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
-    let pipColor = pt.inc > 0 && pt.exp === 0 ? '#34D399' : (pt.exp > 0 && pt.inc === 0 ? '#FB7185' : accentColor);
-    const leftPct = ((pt.x / svgW) * 100).toFixed(2);
-    const topPct = ((pt.y / svgH) * 100).toFixed(2);
-    return `<div class="home-activity-pip" style="left: ${leftPct}%; top: ${topPct}%; background: ${pipColor};"></div>`;
+  // HTML-based activity micro-pips (100% round circles, placed at exact transaction moments)
+  const activityPipsHtml = cleanNodes.filter(n => n.tx).map(n => {
+    const isInc = n.tx.type === 'income';
+    const pipColor = isInc ? '#34D399' : '#FB7185';
+    const leftPct = ((n.x / svgW) * 100).toFixed(2);
+    const topPct = ((n.y / svgH) * 100).toFixed(2);
+    return `<div class="home-activity-pip" style="left: ${leftPct}%; top: ${topPct}%; background: ${pipColor};" title="${isInc ? '+' : '−'}${money(n.tx.amount)} (${esc(n.tx.category)})"></div>`;
   }).join('');
 
   // Quick categories breakdown for teaser
@@ -678,7 +773,7 @@ function renderHomeView() {
         </div>
         <div class="hero-meta-chip muted">
           <span class="hero-meta-lbl">Старт:</span>
-          <span class="hero-meta-val num">${money(pointsWithBal[0].balance)}</span>
+          <span class="hero-meta-val num">${money(cleanNodes[0].balance)}</span>
         </div>
         <div class="hero-meta-chip muted">
           <span class="hero-meta-lbl">Текущий:</span>
@@ -870,19 +965,68 @@ function renderAnalyticsView() {
   const totalExp = data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
   const currentBalance = totalInc - totalExp;
 
-  // Runway Calculation
+  // Runway & Month-End Projection Calculation
   const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysRemainingInMonth = Math.max(1, daysInCurMonth - now.getDate());
-  const projectedMonthEnd = currentBalance - (dailyVelocity * daysRemainingInMonth);
+  const daysRemainingInMonth = Math.max(0, daysInCurMonth - now.getDate());
+  const dailyIncomeRate = Math.round(pInc / (daysCount || 1));
+  const netDailyFlow = (pInc > 0 ? dailyIncomeRate : 0) - dailyVelocity;
+  const projectedMonthEnd = currentBalance + (netDailyFlow * daysRemainingInMonth);
+
+  // Benchmarking Spending Pace
+  const totalBudgetLimit = (data.budgets || []).reduce((s, b) => s + Number(b.limit_amount), 0);
+  const plannedDailyBudget = totalBudgetLimit > 0 ? Math.round(totalBudgetLimit / daysInCurMonth) : 0;
 
   let burnStatus = 'safe';
   let burnText = 'Комфортный темп';
-  if (dailyVelocity > 0 && currentBalance < dailyVelocity * 7) {
+
+  if (dailyVelocity === 0) {
+    burnStatus = 'safe';
+    burnText = 'Расходов нет (0 ₽/день)';
+  } else if (plannedDailyBudget > 0) {
+    // Compare actual pace against monthly budget pace
+    const paceRatio = dailyVelocity / plannedDailyBudget;
+    if (paceRatio <= 0.9) {
+      burnStatus = 'safe';
+      burnText = `Экономный темп (−${Math.round((1 - paceRatio) * 100)}% от лимита)`;
+    } else if (paceRatio <= 1.1) {
+      burnStatus = 'safe';
+      burnText = 'В графике бюджета';
+    } else if (paceRatio <= 1.35) {
+      burnStatus = 'warn';
+      burnText = `Умеренное опережение (+${Math.round((paceRatio - 1) * 100)}%)`;
+    } else {
+      burnStatus = 'alert';
+      burnText = `Высокий темп (+${Math.round((paceRatio - 1) * 100)}% от лимита)`;
+    }
+  } else if (dailyIncomeRate > 0) {
+    // Compare actual spend against daily income
+    const incRatio = dailyVelocity / dailyIncomeRate;
+    if (incRatio <= 0.7) {
+      burnStatus = 'safe';
+      burnText = `Комфортный (${Math.round(incRatio * 100)}% дохода)`;
+    } else if (incRatio <= 1.0) {
+      burnStatus = 'warn';
+      burnText = `Умеренный (${Math.round(incRatio * 100)}% дохода)`;
+    } else {
+      burnStatus = 'alert';
+      burnText = `Превышает доход (+${Math.round((incRatio - 1) * 100)}%)`;
+    }
+  } else if (currentBalance > 0) {
+    // Compare against capital reserve
+    const runwayDays = Math.round(currentBalance / (dailyVelocity || 1));
+    if (runwayDays >= 90) {
+      burnStatus = 'safe';
+      burnText = `Запас на ${Math.round(runwayDays / 30)} мес.`;
+    } else if (runwayDays >= 30) {
+      burnStatus = 'warn';
+      burnText = `Запас на ${runwayDays} дн.`;
+    } else {
+      burnStatus = 'alert';
+      burnText = `Запас всего ${runwayDays} дн.`;
+    }
+  } else {
     burnStatus = 'alert';
-    burnText = 'Высокий темп расходов';
-  } else if (dailyVelocity > 0 && currentBalance < dailyVelocity * 20) {
-    burnStatus = 'warn';
-    burnText = 'Умеренная нагрузка';
+    burnText = 'Дефицит средств';
   }
 
   // Rank
@@ -1081,7 +1225,7 @@ function renderAnalyticsView() {
           <span class="metric-icon inc">${icon('wallet', 15)}</span>
         </div>
         <div class="metric-value num ${projectedMonthEnd >= 0 ? 'inc' : 'exp'}">${money(projectedMonthEnd)}</div>
-        <div class="metric-footnote">Остаток на 1-е число при текущей скорости</div>
+        <div class="metric-footnote">${daysRemainingInMonth} дн. до конца месяца • расход ${money(dailyVelocity)}/день${dailyIncomeRate > 0 ? `, доход ${money(dailyIncomeRate)}/день` : ''}</div>
       </div>
 
       <div class="analytics-metric-card">
@@ -1535,6 +1679,11 @@ function renderBudgetsView() {
         const isExceeded = rem < 0;
         const catIcon = getCategoryIcon(b.category);
         const dailyAllowance = Math.max(0, Math.round(rem / daysLeft));
+        const elapsedDays = Math.max(1, now.getDate());
+        const plannedDaily = Math.round(lim / daysInMonth);
+        const actualDaily = Math.round(spent / elapsedDays);
+        const expectedSpendSoFar = Math.round(lim * (elapsedDays / daysInMonth));
+        const paceDelta = spent - expectedSpendSoFar;
 
         return `
           <div class="budget-card ${isExceeded ? 'budget-card-exceeded' : ''}">
@@ -1574,9 +1723,17 @@ function renderBudgetsView() {
                   ⚠️ Превышение лимита на ${money(Math.abs(rem))}!
                 </span>
               ` : `
-                <span class="budget-pace-text">
-                  Доступно: <strong class="num" style="color: var(--accent-jade);">${money(dailyAllowance)}</strong> в день (${daysLeft} дн. до конца месяца)
-                </span>
+                <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
+                    <span class="badge-tag ${actualDaily <= plannedDaily ? 'jade' : 'amber'}">
+                      ${actualDaily <= plannedDaily ? `🟢 Темп в норме (−${money(Math.abs(paceDelta))} от графика)` : `🟡 Опережение темпа (+${money(paceDelta)} от графика)`}
+                    </span>
+                    <span style="color: var(--text-muted); font-size: 11px;">план: ${money(plannedDaily)}/дн.</span>
+                  </div>
+                  <span class="budget-pace-text" style="margin-top: 2px;">
+                    Доступно: <strong class="num" style="color: var(--accent-jade);">${money(dailyAllowance)}</strong> в день (${daysLeft} дн. до конца месяца)
+                  </span>
+                </div>
               `}
             </div>
           </div>
@@ -1814,7 +1971,7 @@ function renderModal() {
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label class="form-label">Сумма (${currencySymbols[profile.currency] || '₽'})</label>
               <input class="form-input num" id="form-amount" type="number" min="1" step="any" placeholder="0" required>
@@ -1822,6 +1979,10 @@ function renderModal() {
             <div class="form-group">
               <label class="form-label">Дата</label>
               <input class="form-input" id="form-date" type="date" value="${toDateIso(new Date())}" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Время</label>
+              <input class="form-input" id="form-time" type="time" value="${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}" required>
             </div>
           </div>
 
@@ -2329,21 +2490,19 @@ function bindInteractiveEvents() {
   const heroBalVal = document.getElementById('hero-balance-val');
   const heroBalLbl = document.getElementById('hero-balance-lbl');
 
-  if (homeWrap && homeTooltip && window.__homePoints && window.__homePoints.length > 0) {
-    const pts = window.__homePoints;
-    const svgW = 760;
+  if (homeWrap && homeTooltip && window.__homeTimelineNodes && window.__homeTimelineNodes.length > 0) {
+    const nodes = window.__homeTimelineNodes;
+    const dayBuckets = window.__homeDayBuckets || [];
+    const svgW = window.__homeSvgW || 760;
     const svgH = window.__homeSvgH || 120;
+    const padX = window.__homePadX || 28;
+    const plotW = window.__homePlotW || (svgW - 2 * padX);
     const plotCanvasH = 122;
     const baseBalText = heroBalVal ? heroBalVal.getAttribute('data-base') : '';
-    const segments = pts.__splineSegments || [];
-    const N = pts.length;
+    const segments = nodes.__splineSegments || [];
+    const numBuckets = dayBuckets.length;
+    const dayWidth = plotW / (numBuckets || 1);
     const currentPeriod = window.__homePeriod || '7d';
-
-    // Midpoints between adjacent dates for continuous time zones
-    const mids = [];
-    for (let i = 0; i < N - 1; i++) {
-      mids.push((pts[i].x + pts[i + 1].x) / 2);
-    }
 
     homeWrap.onmousemove = e => {
       const rect = homeWrap.getBoundingClientRect();
@@ -2351,66 +2510,52 @@ function bindInteractiveEvents() {
 
       const mousePxX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
       const targetSvgX = (mousePxX / rect.width) * svgW;
-
-      const minX = pts[0].x;
-      const maxX = pts[pts.length - 1].x;
+      const minX = padX;
+      const maxX = padX + plotW;
       const clampedX = Math.max(minX, Math.min(targetSvgX, maxX));
 
-      // Continuous Bezier Spline evaluation for Y and balance
+      // Continuous Bezier Spline evaluation for visual Y along curve
       let seg = segments.find(s => clampedX >= s.x0 && clampedX <= s.x1);
       if (!seg) {
         if (clampedX <= minX) seg = segments[0];
         else seg = segments[segments.length - 1];
       }
 
-      let curBal = pts[0].balance;
-      let svgY = pts[0].y;
-
+      let svgY = seg ? seg.y0 : 60;
       if (seg) {
         const segSpan = seg.x1 - seg.x0 || 1;
         const t = Math.max(0, Math.min(1, (clampedX - seg.x0) / segSpan));
         svgY = evaluateBezierY(seg.y0, seg.cp1y, seg.cp2y, seg.y1, t);
-        curBal = Math.round(seg.bal0 + (seg.bal1 - seg.bal0) * t);
       }
 
-      // Calculate Day and Time progression
-      let dayIdx = 0;
-      let dayT = 0;
+      // Map clampedX to day bucket & exact time
+      const relX = clampedX - padX;
+      const rawBucketIdx = Math.floor(relX / dayWidth);
+      const dayIdx = Math.min(numBuckets - 1, Math.max(0, rawBucketIdx));
+      const bucket = dayBuckets[dayIdx] || dayBuckets[0];
+      const dayFrac = Math.max(0, Math.min(1, (relX - dayIdx * dayWidth) / dayWidth));
 
-      if (clampedX <= mids[0]) {
-        dayIdx = 0;
-        dayT = (clampedX - minX) / (mids[0] - minX || 1);
-      } else if (clampedX >= mids[N - 2]) {
-        dayIdx = N - 1;
-        dayT = (clampedX - mids[N - 2]) / (maxX - mids[N - 2] || 1);
-      } else {
-        for (let i = 0; i < mids.length - 1; i++) {
-          if (clampedX >= mids[i] && clampedX <= mids[i + 1]) {
-            dayIdx = i + 1;
-            dayT = (clampedX - mids[i]) / (mids[i + 1] - mids[i] || 1);
-            break;
-          }
-        }
-      }
-
-      const activePt = pts[dayIdx] || pts[0];
-
-      // Time progression string
       let timeStr = '12:00';
+      let minuteOfDay = 12 * 60;
+
       if (currentPeriod === 'year') {
-        const dayOfMonth = Math.max(1, Math.min(30, Math.floor(dayT * 30) + 1));
+        const dayOfMonth = Math.max(1, Math.min(30, Math.floor(dayFrac * 30) + 1));
         timeStr = `${dayOfMonth} число`;
       } else {
-        let maxDayMinutes = 24 * 60;
-        const isToday = (dayIdx === N - 1 && currentPeriod === '7d');
-        if (isToday) {
-          const nowDate = new Date();
-          maxDayMinutes = Math.max(60, nowDate.getHours() * 60 + nowDate.getMinutes());
-        }
-        const totalMins = Math.min(maxDayMinutes, Math.floor(dayT * maxDayMinutes));
+        const totalMins = Math.min(1439, Math.floor(dayFrac * 1440));
+        minuteOfDay = totalMins;
         const hours = Math.min(23, Math.floor(totalMins / 60));
-        const mins = Math.min(50, Math.floor((totalMins % 60) / 10) * 10);
+        const mins = Math.min(59, totalMins % 60);
         timeStr = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      }
+
+      // Exact Capital Balance at this specific physical minute:
+      // Start with opening balance of this bucket, plus all transactions up to minuteOfDay!
+      let curBal = bucket.openBalance;
+      const sortedDayTxs = (bucket.txs || []).slice().sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
+      const txsUpToNow = sortedDayTxs.filter(t => getTxMinutes(t) <= minuteOfDay);
+      for (const t of txsUpToNow) {
+        curBal += (t.type === 'income' ? Number(t.amount) : -Number(t.amount));
       }
 
       // Exact pixel coordinates in plot container
@@ -2444,28 +2589,40 @@ function bindInteractiveEvents() {
         heroBalVal.innerText = money(curBal);
       }
       if (heroBalLbl) {
-        heroBalLbl.innerHTML = `Остаток на ${esc(activePt.dayDisplay || activePt.dayLabel)} • <span class="num" style="color: #FFFFFF; font-weight: 700;">${timeStr}</span>`;
+        heroBalLbl.innerHTML = `Остаток на ${esc(bucket.dayDisplay || bucket.dayLabel)} • <span class="num" style="color: #FFFFFF; font-weight: 700;">${timeStr}</span>`;
       }
 
+      // Dynamic contextual tooltip delta breakdown
       let deltaHtml = '';
-      if (activePt.inc > 0 && activePt.exp > 0) {
-        deltaHtml = `
-          <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <span class="chart-tooltip-badge" style="color: var(--accent-jade); background: rgba(45,212,191,0.12); padding: 2px 6px; border-radius: 4px;">+${money(activePt.inc)}</span>
-            <span class="chart-tooltip-badge" style="color: var(--accent-coral); background: rgba(251,113,133,0.12); padding: 2px 6px; border-radius: 4px;">−${money(activePt.exp)}</span>
-          </div>
-        `;
-      } else if (activePt.inc > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade); margin-top: 4px;">+${money(activePt.inc)} доход</div>`;
-      } else if (activePt.exp > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-coral); margin-top: 4px;">−${money(activePt.exp)} расход</div>`;
+      if (txsUpToNow.length > 0) {
+        const upInc = txsUpToNow.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+        const upExp = txsUpToNow.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+        const lastTx = txsUpToNow[txsUpToNow.length - 1];
+
+        if (upInc > 0 && upExp > 0) {
+          deltaHtml = `
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <span class="chart-tooltip-badge" style="color: var(--accent-jade); background: rgba(45,212,191,0.12); padding: 2px 6px; border-radius: 4px;">+${money(upInc)}</span>
+              <span class="chart-tooltip-badge" style="color: var(--accent-coral); background: rgba(251,113,133,0.12); padding: 2px 6px; border-radius: 4px;">−${money(upExp)}</span>
+            </div>
+          `;
+        } else if (upExp > 0) {
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-coral); margin-top: 4px;">−${money(upExp)} (${esc(lastTx.category || 'Расход')})</div>`;
+        } else if (upInc > 0) {
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade); margin-top: 4px;">+${money(upInc)} (${esc(lastTx.category || 'Доход')})</div>`;
+        }
       } else {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">Операций в этот день не было</div>`;
+        if (sortedDayTxs.length > 0) {
+          const firstTx = sortedDayTxs[0];
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">До ${timeStr} операций не было (первая в ${formatTxTime(firstTx)})</div>`;
+        } else {
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">В этот день операций не было</div>`;
+        }
       }
 
       homeTooltip.innerHTML = `
         <div class="chart-tooltip-header">
-          <span class="chart-tooltip-title">${esc(activePt.fullDate || activePt.dayDisplay || activePt.dayLabel)}</span>
+          <span class="chart-tooltip-title">${esc(bucket.fullDate || bucket.dayDisplay || bucket.dayLabel)}</span>
           <span class="chart-tooltip-clock">
             <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             ${timeStr}
@@ -2476,7 +2633,7 @@ function bindInteractiveEvents() {
       `;
 
       // Center tooltip on cursor, constrained within chart bounds
-      const tooltipW = 175;
+      const tooltipW = 185;
       let leftPos = pxX;
       if (leftPos + tooltipW / 2 > rect.width) {
         leftPos = rect.width - tooltipW / 2 - 8;
@@ -2667,6 +2824,13 @@ function bindInteractiveEvents() {
       modal.style.display = 'flex';
       const typeSelect = document.getElementById('form-type');
       if (typeSelect) typeSelect.value = type;
+      const dateInput = document.getElementById('form-date');
+      if (dateInput) dateInput.value = toDateIso(new Date());
+      const timeInput = document.getElementById('form-time');
+      if (timeInput) {
+        const d = new Date();
+        timeInput.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }
       updateModalBudgetAlert();
     }
   };
@@ -2717,6 +2881,8 @@ function bindInteractiveEvents() {
       const category = document.getElementById('form-category').value.trim();
       const amount = Number(document.getElementById('form-amount').value);
       const occurred_on = document.getElementById('form-date').value;
+      const timeVal = document.getElementById('form-time') ? document.getElementById('form-time').value : '';
+      const created_at = timeVal ? `${occurred_on}T${timeVal}:00` : new Date().toISOString();
       const description = document.getElementById('form-desc').value.trim();
 
       if (!category || amount <= 0) {
@@ -2747,7 +2913,7 @@ function bindInteractiveEvents() {
       try {
         await api('transactions', {
           method: 'POST',
-          body: JSON.stringify({ type, category, amount, occurred_on, description })
+          body: JSON.stringify({ type, category, amount, occurred_on, time: timeVal, created_at, description })
         });
         const modal = document.getElementById('tx-modal');
         if (modal) modal.style.display = 'none';
