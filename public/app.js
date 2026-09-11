@@ -4,6 +4,7 @@ let me = null;
 let tab = 'home';
 let mode = 'login';
 let analyticsPeriod = 'week';
+let txFilter = 'all';
 
 let data = {
   transactions: [],
@@ -254,57 +255,21 @@ function nav() {
 ========================= */
 
 function layout() {
-
   return `
     <div class="app">
-
       <aside>
-
         <div class="brand">
+          <div class="brand-dot"></div>
           <span>Fin</span><b>kaif</b>
         </div>
-
         ${nav()}
-
-        <button
-          class="logout"
-          id="logout"
-        >
+        <button class="logout" id="logout">
           Выйти
         </button>
-
       </aside>
-
       <main>
-
-        <header>
-
-          <div>
-
-            <small>
-              FINKAIF · ОБЛАЧНЫЕ ФИНАНСЫ
-            </small>
-
-            <h1>
-              Добрый день 👋
-            </h1>
-
-            <p class="sub">
-              ${esc(me.email)}
-            </p>
-
-          </div>
-
-          <button id="quick">
-            ＋ Операция
-          </button>
-
-        </header>
-
         <div id="page"></div>
-
       </main>
-
     </div>
   `;
 }
@@ -344,18 +309,17 @@ function list(rows, view, res) {
 ========================= */
 
 function page() {
+  const inc = data.transactions
+    .filter(x => x.type === 'income')
+    .reduce((s, x) => s + Number(x.amount), 0);
 
-  const inc =
-    data.transactions
-      .filter(x => x.type === 'income')
-      .reduce((s, x) => s + Number(x.amount), 0);
+  const exp = data.transactions
+    .filter(x => x.type === 'expense')
+    .reduce((s, x) => s + Number(x.amount), 0);
 
-  const exp =
-    data.transactions
-      .filter(x => x.type === 'expense')
-      .reduce((s, x) => s + Number(x.amount), 0);
-
-
+  /* -----------------------------------------
+     1. ГЛАВНАЯ (HOME) - ТОЛЬКО ЗДЕСЬ ДОБРЫЙ ДЕНЬ
+     ----------------------------------------- */
   if (tab === 'home') {
     const days = [];
     const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -378,40 +342,53 @@ function page() {
         expByCat[t.category] = (expByCat[t.category] || 0) + Number(t.amount);
       });
     const catEntries = Object.entries(expByCat).sort((a, b) => b[1] - a[1]);
+    const userName = me && me.email ? me.email.split('@')[0] : 'Инвестор';
 
     return `
-      <!-- Apple Card Style Virtual Card -->
+      <div class="page-header">
+        <div>
+          <div class="page-tag">Обзор экосистемы</div>
+          <h1>Добрый день, ${esc(userName)} 👋</h1>
+          <p class="sub">Ваш капитал, аналитика трат и персональный ментор</p>
+        </div>
+        <button id="quick" data-tab="transactions">＋ Новая операция</button>
+      </div>
+
+      <!-- Obsidian Titanium Luxury Virtual Card -->
       <div class="virtual-card">
         <div class="card-top">
-          <span class="card-logo">FINKAIF PLATINUM</span>
-          <span style="font-size: 11px; font-weight: 700; background: rgba(0,0,0,0.22); backdrop-filter: blur(8px); padding: 4px 11px; border-radius: 20px; text-transform: uppercase;">● Активен</span>
+          <div class="card-logo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            FINKAIF TITANIUM
+          </div>
+          <span class="card-status">● Активен</span>
         </div>
         <div class="card-chip"></div>
         <div class="card-number">•••• •••• •••• 7842</div>
         <div class="card-bottom">
           <div>
-            <div class="card-balance-lbl">Доступный капитал</div>
+            <div class="card-balance-lbl">Чистый капитал</div>
             <div class="card-balance-val">${money(inc - exp)}</div>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 10px; text-transform: uppercase; color: rgba(255,255,255,0.8); margin-bottom: 2px;">Держатель</div>
-            <div class="card-holder">${esc(me && me.email ? me.email.split('@')[0] : 'FinKaif User')}</div>
+            <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px;">Держатель</div>
+            <div class="card-holder">${esc(userName.toUpperCase())}</div>
           </div>
         </div>
       </div>
 
-      <div class="grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="card">
-          <small>ДОХОДЫ</small>
+      <div class="grid">
+        <div class="kpi-card">
+          <div class="kpi-lbl">ДОХОДЫ</div>
           <span class="value" style="color: #34d399;">+${money(inc)}</span>
         </div>
-        <div class="card">
-          <small>РАСХОДЫ</small>
-          <span class="value" style="color: #f87171;">−${money(exp)}</span>
+        <div class="kpi-card">
+          <div class="kpi-lbl">РАСХОДЫ</div>
+          <span class="value" style="color: #fda4af;">−${money(exp)}</span>
         </div>
-        <div class="card">
-          <small>СБЕРЕЖЕНИЯ</small>
-          <span class="value" style="color: #fbbf24;">${inc ? Math.round(((inc - exp) / inc) * 100) + '%' : '—'}</span>
+        <div class="kpi-card">
+          <div class="kpi-lbl">НОРМА СБЕРЕЖЕНИЙ</div>
+          <span class="value" style="color: #a5b4fc;">${inc ? Math.round(((inc - exp) / inc) * 100) + '%' : '—'}</span>
         </div>
       </div>
 
@@ -445,7 +422,7 @@ function page() {
               <div style="margin: 14px 0;">
                 <div class="row" style="margin-bottom: 6px;">
                   <span><b>${getCatIcon(cat)} ${esc(cat)}</b></span>
-                  <span><b>${money(amt)}</b> <small style="color: #9ca3af">(${pct}%)</small></span>
+                  <span><b>${money(amt)}</b> <small style="color: var(--text-muted)">(${pct}%)</small></span>
                 </div>
                 <div class="progress-track">
                   <div class="progress-fill safe" style="width: ${pct}%;"></div>
@@ -460,7 +437,7 @@ function page() {
         <div class="row">
           <div>
             <h2>✦ Финансовый ментор Finkaif</h2>
-            <p class="sub">Персональные советы, оптимизация бюджета и поддержка ваших целей в кайф.</p>
+            <p class="sub">Персональные советы, оптимизация бюджета и аудит ваших трат в кайф.</p>
           </div>
           <div style="display: flex; gap: 8px;">
             <button data-tab="analytics" class="secondary">📊 Аналитика</button>
@@ -471,11 +448,40 @@ function page() {
     `;
   }
 
+  /* -----------------------------------------
+     2. ОПЕРАЦИИ (TRANSACTIONS)
+     ----------------------------------------- */
   if (tab === 'transactions') {
+    let filteredList = data.transactions;
+    if (txFilter === 'expense') filteredList = data.transactions.filter(x => x.type === 'expense');
+    if (txFilter === 'income') filteredList = data.transactions.filter(x => x.type === 'income');
+
     return `
+      <div class="page-header">
+        <div>
+          <div class="page-tag">Журнал операций</div>
+          <h1>История операций</h1>
+          <p class="sub">Фиксация доходов, расходов и быстрое распределение по категориям</p>
+        </div>
+        <div class="filter-tabs">
+          <button class="filter-btn ${txFilter === 'all' ? 'active' : ''}" data-tx-filter="all">Все (${data.transactions.length})</button>
+          <button class="filter-btn ${txFilter === 'expense' ? 'active' : ''}" data-tx-filter="expense">Расходы</button>
+          <button class="filter-btn ${txFilter === 'income' ? 'active' : ''}" data-tx-filter="income">Доходы</button>
+        </div>
+      </div>
+
       <div class="card">
-        <h2>↕ Операции</h2>
-        <p class="sub" style="margin-bottom: 16px;">Добавляйте доходы и расходы для точного учета</p>
+        <h2>＋ Новая операция</h2>
+        <div class="chips-row">
+          <span class="chip" data-cat="Продукты" data-type="expense">🍔 Продукты</span>
+          <span class="chip" data-cat="Кафе" data-type="expense">☕ Кафе</span>
+          <span class="chip" data-cat="Такси" data-type="expense">🚕 Такси</span>
+          <span class="chip" data-cat="ЖКХ" data-type="expense">🏠 ЖКХ</span>
+          <span class="chip" data-cat="Покупки" data-type="expense">🛍️ Покупки</span>
+          <span class="chip" data-cat="Здоровье" data-type="expense">💊 Здоровье</span>
+          <span class="chip" data-cat="Зарплата" data-type="income">💰 Зарплата</span>
+          <span class="chip" data-cat="Инвестиции" data-type="income">📈 Инвестиции</span>
+        </div>
         <form class="form" id="opform">
           <select id="type">
             <option value="expense">Расход</option>
@@ -487,24 +493,61 @@ function page() {
           <input id="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
           <button>Сохранить</button>
         </form>
+      </div>
+
+      <div class="card">
+        <h2>Лента операций</h2>
         ${list(
-          data.transactions,
-          x => `${getCatIcon(x.category)} <b>${esc(x.category)}</b> · <span style="color: ${x.type === 'income' ? '#34d399' : '#f87171'}; font-weight: 700;">${x.type === 'income' ? '+' : '−'}${money(x.amount)}</span><small>${esc(x.description || 'Без описания')} · ${x.occurred_on}</small>`,
+          filteredList,
+          x => `${getCatIcon(x.category)} <b>${esc(x.category)}</b> · <span style="color: ${x.type === 'income' ? '#34d399' : '#fda4af'}; font-weight: 700;">${x.type === 'income' ? '+' : '−'}${money(x.amount)}</span><small>${esc(x.description || 'Без описания')} · ${x.occurred_on}</small>`,
           'transactions'
         )}
       </div>
     `;
   }
 
+  /* -----------------------------------------
+     3. БЮДЖЕТЫ (BUDGETS)
+     ----------------------------------------- */
   if (tab === 'budgets') {
+    const totalBudget = data.budgets.reduce((s, b) => s + (Number(b.limit_amount) || 0), 0);
+    const totalSpent = data.budgets.reduce((s, b) => {
+      const spent = data.transactions
+        .filter(t => t.type === 'expense' && t.category.toLowerCase() === b.category.toLowerCase() && isThisMonth(t.occurred_on))
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      return s + spent;
+    }, 0);
+    const totalPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+
     return `
+      <div class="page-header">
+        <div>
+          <div class="page-tag">Финансовая дисциплина</div>
+          <h1>Месячные бюджеты</h1>
+          <p class="sub">Лимиты по категориям на текущий месяц для защиты от перерасходов</p>
+        </div>
+        <button id="addbudget">＋ Установить лимит</button>
+      </div>
+
       <div class="card">
         <div class="row">
           <div>
-            <h2>▦ Месячные бюджеты</h2>
-            <small>Контроль расходов в текущем месяце</small>
+            <h2>Суммарный баланс бюджетов месяца</h2>
+            <p class="sub" style="margin-top: 4px;">Израсходовано ${money(totalSpent)} из ${money(totalBudget)} запланированных</p>
           </div>
-          <button id="addbudget">＋ Лимит</button>
+          <span class="badge ${totalPct > 100 ? 'danger' : totalPct >= 80 ? 'warn' : 'safe'}">
+            ${totalPct}% освоено
+          </span>
+        </div>
+        <div class="progress-track" style="margin-top: 14px; height: 11px;">
+          <div class="progress-fill ${totalPct > 100 ? 'danger' : totalPct >= 80 ? 'warn' : 'safe'}" style="width: ${Math.min(100, totalPct)}%;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="margin-bottom: 12px;">
+          <h2>Категории под контролем</h2>
+          <small>${data.budgets.length} лимитов</small>
         </div>
         ${data.budgets.length ? data.budgets.map(b => {
           const spent = data.transactions
@@ -527,8 +570,8 @@ function page() {
                   <div style="margin-top: 4px;">${badgeText}</div>
                 </div>
                 <div style="text-align: right;">
-                  <div><b>${money(spent)}</b> <small style="color: #9ca3af">/ ${money(limit)}</small></div>
-                  <small style="color: #9ca3af">${pct <= 100 ? 'Осталось ' + money(limit - spent) : 'Лимит превышен'}</small>
+                  <div><b>${money(spent)}</b> <small style="color: var(--text-muted)">/ ${money(limit)}</small></div>
+                  <small style="color: var(--text-muted)">${pct <= 100 ? 'Осталось ' + money(limit - spent) : 'Лимит превышен'}</small>
                 </div>
                 <button class="delete" data-del="budgets:${b.id}">×</button>
               </div>
@@ -537,20 +580,48 @@ function page() {
               </div>
             </div>
           `;
-        }).join('') : '<p class="sub">Бюджеты пока не добавлены. Нажмите «＋ Лимит», чтобы контролировать категории расходов.</p>'}
+        }).join('') : '<p class="sub">Бюджеты пока не добавлены. Нажмите «＋ Установить лимит», чтобы отслеживать категории расходов.</p>'}
       </div>
     `;
   }
 
+  /* -----------------------------------------
+     4. ЦЕЛИ (GOALS)
+     ----------------------------------------- */
   if (tab === 'goals') {
+    const totalSaved = data.goals.reduce((s, g) => s + (Number(g.saved_amount) || 0), 0);
+    const totalTarget = data.goals.reduce((s, g) => s + (Number(g.target_amount) || 0), 0);
+    const overallPct = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
+
     return `
+      <div class="page-header">
+        <div>
+          <div class="page-tag">Копилки и мечты</div>
+          <h1>Финансовые цели</h1>
+          <p class="sub">Накопления на резервный фонд, крупные покупки и инвестиции</p>
+        </div>
+        <button id="addgoal">＋ Создать цель</button>
+      </div>
+
       <div class="card">
         <div class="row">
           <div>
-            <h2>☆ Финансовые цели</h2>
-            <small>Накопления на мечты и спокойствие</small>
+            <h2>Общий прогресс накоплений</h2>
+            <p class="sub" style="margin-top: 4px;">Собрано ${money(totalSaved)} из ${money(totalTarget)} совокупных целей</p>
           </div>
-          <button id="addgoal">＋ Цель</button>
+          <span class="badge ${overallPct >= 100 ? 'safe' : 'warn'}">
+            ${overallPct}% накоплено
+          </span>
+        </div>
+        <div class="progress-track" style="margin-top: 14px; height: 11px;">
+          <div class="progress-fill goal" style="width: ${overallPct}%;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="margin-bottom: 12px;">
+          <h2>Активные цели</h2>
+          <small>${data.goals.length} целей</small>
         </div>
         ${data.goals.length ? data.goals.map(g => {
           const saved = Number(g.saved_amount) || 0;
@@ -570,8 +641,8 @@ function page() {
                   </div>
                 </div>
                 <div style="text-align: right;">
-                  <div><b>${money(saved)}</b> <small style="color: #9ca3af">из ${money(target)}</small></div>
-                  <small style="color: #9ca3af">${remains > 0 ? 'Осталось ' + money(remains) : 'Цель закрыта'}</small>
+                  <div><b>${money(saved)}</b> <small style="color: var(--text-muted)">из ${money(target)}</small></div>
+                  <small style="color: var(--text-muted)">${remains > 0 ? 'Осталось ' + money(remains) : 'Цель закрыта'}</small>
                 </div>
                 <div style="display: flex; gap: 6px; align-items: center;">
                   <button class="mini-btn" data-topup="${g.id}" data-saved="${saved}">＋ Внести</button>
@@ -583,13 +654,30 @@ function page() {
               </div>
             </div>
           `;
-        }).join('') : '<p class="sub">Цели пока не созданы. Нажмите «＋ Цель», чтобы копить на важное.</p>'}
+        }).join('') : '<p class="sub">Цели пока не созданы. Нажмите «＋ Создать цель», чтобы копить на важное.</p>'}
       </div>
     `;
   }
 
+  /* -----------------------------------------
+     5. АНАЛИТИКА (ANALYTICS)
+     ----------------------------------------- */
   if (tab === 'analytics') {
     const isW = analyticsPeriod === 'week';
+
+    const header = `
+      <div class="page-header">
+        <div>
+          <div class="page-tag">Глубокий аудит</div>
+          <h1>Финансовая аналитика</h1>
+          <p class="sub">Динамика расходов, крупные покупки и баланс по правилу 50/30/20</p>
+        </div>
+        <div class="switch-tabs">
+          <button class="${isW ? 'active' : ''}" data-period="week">7 дней</button>
+          <button class="${!isW ? 'active' : ''}" data-period="month">Месяц</button>
+        </div>
+      </div>
+    `;
 
     if (isW) {
       const wTrans = data.transactions.filter(t => isLastNDays(t.occurred_on, 7));
@@ -613,27 +701,24 @@ function page() {
       const topExpense = [...wTrans.filter(t => t.type === 'expense')].sort((a, b) => b.amount - a.amount).slice(0, 3);
 
       return `
-        <div class="switch-tabs">
-          <button class="active" data-period="week">📅 За неделю</button>
-          <button data-period="month">🗓️ За месяц</button>
-        </div>
+        ${header}
 
-        <div class="grid">
-          <div class="card">
-            <small>РАСХОДЫ НЕДЕЛИ</small>
-            <span class="value" style="color: #feb2b2;">${money(wExp)}</span>
+        <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="kpi-card">
+            <div class="kpi-lbl">РАСХОДЫ НЕДЕЛИ</div>
+            <span class="value" style="color: #fda4af;">${money(wExp)}</span>
           </div>
-          <div class="card">
-            <small>ДОХОДЫ НЕДЕЛИ</small>
-            <span class="value" style="color: #9ae6b4;">${money(wInc)}</span>
+          <div class="kpi-card">
+            <div class="kpi-lbl">ДОХОДЫ НЕДЕЛИ</div>
+            <span class="value" style="color: #34d399;">${money(wInc)}</span>
           </div>
-          <div class="card">
-            <small>В ДЕНЬ В СРЕДНЕМ</small>
+          <div class="kpi-card">
+            <div class="kpi-lbl">В СРЕДНЕМ В ДЕНЬ</div>
             <span class="value">${money(wAvgDay)}</span>
           </div>
-          <div class="card">
-            <small>ДЕЛЬТА НЕДЕЛИ</small>
-            <span class="value">${money(wInc - wExp)}</span>
+          <div class="kpi-card">
+            <div class="kpi-lbl">ДЕЛЬТА НЕДЕЛИ</div>
+            <span class="value" style="color: #a5b4fc;">${money(wInc - wExp)}</span>
           </div>
         </div>
 
@@ -657,10 +742,10 @@ function page() {
           ${topExpense.length ? topExpense.map((t, idx) => `
             <div class="item">
               <div>
-                <b>#${idx + 1} ${esc(t.category)}</b>
+                <b>#${idx + 1} ${getCatIcon(t.category)} ${esc(t.category)}</b>
                 <small>${esc(t.description || 'Без описания')} · ${t.occurred_on}</small>
               </div>
-              <b style="font-size: 16px; color: #feb2b2;">−${money(t.amount)}</b>
+              <b style="font-size: 16px; color: #fda4af;">−${money(t.amount)}</b>
             </div>
           `).join('') : '<p class="sub">За последние 7 дней расходов нет.</p>'}
         </div>
@@ -697,26 +782,23 @@ function page() {
         : '<span class="badge danger">Зона внимания (< 10%)</span>';
 
       return `
-        <div class="switch-tabs">
-          <button data-period="week">📅 За неделю</button>
-          <button class="active" data-period="month">🗓️ За месяц</button>
-        </div>
+        ${header}
 
-        <div class="grid">
-          <div class="card">
-            <small>РАСХОДЫ МЕСЯЦА</small>
-            <span class="value" style="color: #feb2b2;">${money(mExp)}</span>
+        <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="kpi-card">
+            <div class="kpi-lbl">РАСХОДЫ МЕСЯЦА</div>
+            <span class="value" style="color: #fda4af;">${money(mExp)}</span>
           </div>
-          <div class="card">
-            <small>ДОХОДЫ МЕСЯЦА</small>
-            <span class="value" style="color: #9ae6b4;">${money(mInc)}</span>
+          <div class="kpi-card">
+            <div class="kpi-lbl">ДОХОДЫ МЕСЯЦА</div>
+            <span class="value" style="color: #34d399;">${money(mInc)}</span>
           </div>
-          <div class="card">
-            <small>СБЕРЕЖЕНО В МЕСЯЦЕ</small>
-            <span class="value">${money(mDelta)}</span>
+          <div class="kpi-card">
+            <div class="kpi-lbl">СБЕРЕЖЕНО В МЕСЯЦЕ</div>
+            <span class="value" style="color: #a5b4fc;">${money(mDelta)}</span>
           </div>
-          <div class="card">
-            <small>НОРМА СБЕРЕЖЕНИЙ</small>
+          <div class="kpi-card">
+            <div class="kpi-lbl">НОРМА СБЕРЕЖЕНИЙ</div>
             <span class="value">${savingsRate}%</span>
           </div>
         </div>
@@ -734,15 +816,15 @@ function page() {
           </div>
           <div class="ratio-legend">
             <div class="ratio-legend-item">
-              <span class="ratio-dot" style="background: #4299e1;"></span>
+              <span class="ratio-dot" style="background: #3b82f6;"></span>
               <span>Базовые нужды: <b>${pNeeds}%</b> (${money(needs)}) [Норма 50%]</span>
             </div>
             <div class="ratio-legend-item">
-              <span class="ratio-dot" style="background: #ed8936;"></span>
+              <span class="ratio-dot" style="background: #f97316;"></span>
               <span>Желания и комфорт: <b>${pWants}%</b> (${money(wants)}) [Норма 30%]</span>
             </div>
             <div class="ratio-legend-item">
-              <span class="ratio-dot" style="background: #48bb78;"></span>
+              <span class="ratio-dot" style="background: #10b981;"></span>
               <span>Сбережения и цели: <b>${pSavings}%</b> (${money(savings)}) [Норма 20%]</span>
             </div>
           </div>
@@ -761,21 +843,28 @@ function page() {
     }
   }
 
-
+  /* -----------------------------------------
+     6. ИИ-ПОМОЩНИК (ASSISTANT)
+     ----------------------------------------- */
   return `
+    <div class="page-header">
+      <div>
+        <div class="page-tag">Интеллектуальный советник</div>
+        <h1>FinKaif AI-ментор</h1>
+        <p class="sub">Персональный ментор с анализом ваших реальных транзакций, бюджетов и целей</p>
+      </div>
+    </div>
+
     <div class="card">
-
-      <h2>
-        ✦ Финансовый ИИ-помощник
-      </h2>
-
-      <p class="sub">
-        Пример: «У меня доход 60 000,
-        сколько откладывать на отпуск и резерв?»
-      </p>
+      <h2>Быстрые сценарии анализа</h2>
+      <div class="prompt-chips-wrap">
+        <span class="prompt-chip" data-ask-ai="Проанализируй мои расходы и подскажи 3 конкретных шага, как сэкономить 15% бюджета без ущерба комфорту.">💡 Как снизить траты на 15%?</span>
+        <span class="prompt-chip" data-ask-ai="Оцени мой финансовый баланс по правилу 50/30/20. Соблюдаются ли пропорции?">⚖️ Аудит правила 50/30/20</span>
+        <span class="prompt-chip" data-ask-ai="Рассчитай оптимальный размер финансовой подушки безопасности на основе моих расходов.">🛡️ Подушка безопасности</span>
+        <span class="prompt-chip" data-ask-ai="Посмотри на мои цели накоплений и подскажи оптимальный помесячный план для их закрытия.">🎯 Стратегия закрытия целей</span>
+      </div>
 
       <div class="messages">
-
         ${data.chat
           .map(x => `
             <div class="msg ${x.role}">
@@ -783,25 +872,12 @@ function page() {
             </div>
           `)
           .join('')}
-
       </div>
 
-      <form
-        class="ask"
-        id="ask"
-      >
-
-        <textarea
-          id="question"
-          placeholder="Опишите финансовую ситуацию…"
-        ></textarea>
-
-        <button>
-          Отправить
-        </button>
-
+      <form class="ask" id="ask">
+        <textarea id="question" placeholder="Задайте финансовый вопрос (например: «Куда лучше направить 30 000 ₽ свободных средств?»)..."></textarea>
+        <button>Отправить</button>
       </form>
-
     </div>
   `;
 }
@@ -853,13 +929,33 @@ function render() {
     });
 
 
-  $('#quick').onclick = () => {
+  const quickBtn = $('#quick');
+  if (quickBtn) {
+    quickBtn.onclick = () => {
+      tab = 'transactions';
+      render();
+    };
+  }
 
-    tab = 'transactions';
+  document.querySelectorAll('.chip[data-cat]').forEach(chip => {
+    chip.onclick = () => {
+      const cat = chip.dataset.cat;
+      const t = chip.dataset.type || 'expense';
+      const catInput = $('#category');
+      const typeInput = $('#type');
+      if (catInput) catInput.value = cat;
+      if (typeInput) typeInput.value = t;
+      const amtInput = $('#amount');
+      if (amtInput) amtInput.focus();
+    };
+  });
 
-    render();
-
-  };
+  document.querySelectorAll('[data-tx-filter]').forEach(btn => {
+    btn.onclick = () => {
+      txFilter = btn.dataset.txFilter;
+      render();
+    };
+  });
 
 
   $('#logout').onclick = async () => {
