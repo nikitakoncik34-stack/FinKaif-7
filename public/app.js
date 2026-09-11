@@ -311,7 +311,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.5</span>
+          <span class="brand-badge">8.6</span>
         </div>
       </div>
 
@@ -403,6 +403,7 @@ function renderHomeView() {
       dayPoints.push({
         date: prefix,
         dayLabel: target.toLocaleDateString('ru-RU', { month: 'short' }),
+        dayDisplay: target.toLocaleDateString('ru-RU', { month: 'short' }),
         fullDate: target.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
         exp: mExp,
         inc: mInc
@@ -421,12 +422,14 @@ function renderHomeView() {
         .filter(t => t.type === 'income' && getTxIso(t) === iso)
         .reduce((s, t) => s + Number(t.amount), 0);
 
+      const wkShort = d.toLocaleDateString('ru-RU', { weekday: 'short' });
+      const capWk = wkShort.charAt(0).toUpperCase() + wkShort.slice(1);
+
       dayPoints.push({
         date: iso,
         dayNum: d.getDate(),
-        dayLabel: period === '7d'
-          ? d.toLocaleDateString('ru-RU', { weekday: 'short' })
-          : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+        dayLabel: period === '7d' ? wkShort : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+        dayDisplay: period === '7d' ? `${capWk} ${d.getDate()}` : `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
         fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
         exp: dayExp,
         inc: dayInc
@@ -454,31 +457,101 @@ function renderHomeView() {
   const balDiff = maxVal - minVal;
 
   const svgW = 760;
-  const svgH = 80;
-  const padX = 20;
-  const padY = 16;
+  const svgH = 130;
+  const padX = 26;
+  const padTop = 18;
+  const padBottom = 26;
   const plotW = svgW - 2 * padX;
-  const plotH = svgH - 2 * padY;
+  const plotH = svgH - padTop - padBottom;
 
   const points = pointsWithBal.map((p, idx) => {
     const x = Math.round(padX + (idx / (pointsWithBal.length - 1 || 1)) * plotW);
     let y;
     if (balDiff === 0) {
-      y = maxVal === 0 ? Math.round(svgH * 0.65) : Math.round(svgH * 0.5);
+      y = Math.round(padTop + plotH * 0.5);
     } else {
       const margin = Math.max(balDiff * 0.15, 100);
       const yMin = minVal - margin;
       const yMax = maxVal + margin;
-      y = Math.round(svgH - padY - ((p.balance - yMin) / (yMax - yMin)) * plotH);
+      y = Math.round(svgH - padBottom - ((p.balance - yMin) / (yMax - yMin)) * plotH);
     }
     return { x, y, idx, ...p };
   });
 
   window.__homePoints = points;
   window.__homeCurrentBalance = balance;
+  window.__homeSvgH = svgH;
 
   const curvePath = pointsToSmoothPath(points);
-  const areaPath = `${curvePath} L ${points[points.length - 1].x},${svgH} L ${points[0].x},${svgH} Z`;
+  const areaPath = `${curvePath} L ${points[points.length - 1].x},${svgH - padBottom} L ${points[0].x},${svgH - padBottom} Z`;
+
+  // Dynamic reference grid lines
+  const gridLevels = [
+    { y: Math.round(padTop + plotH * 0.15) },
+    { y: Math.round(padTop + plotH * 0.55) },
+    { y: Math.round(padTop + plotH * 0.95) }
+  ];
+
+  // Zero-line indicator if range crosses zero
+  let zeroLineHtml = '';
+  if (balDiff > 0) {
+    const margin = Math.max(balDiff * 0.15, 100);
+    const yMin = minVal - margin;
+    const yMax = maxVal + margin;
+    if (yMin <= 0 && yMax >= 0) {
+      const yZero = Math.round(svgH - padBottom - ((0 - yMin) / (yMax - yMin)) * plotH);
+      zeroLineHtml = `
+        <line class="home-grid-zero" x1="${padX}" y1="${yZero}" x2="${svgW - padX}" y2="${yZero}" stroke="rgba(251, 113, 133, 0.35)" stroke-dasharray="3 3" stroke-width="1.2" />
+        <text x="${svgW - padX}" y="${yZero - 4}" fill="rgba(251, 113, 133, 0.75)" font-size="9" text-anchor="end" font-family="var(--font-sans)" font-weight="600">0 ₽</text>
+      `;
+    }
+  }
+
+  // Generate Date Axis Labels along the bottom
+  const dateLabelsHtml = points.map((pt, idx) => {
+    let show = false;
+    if (period === '7d') show = true;
+    else if (period === '30d') show = (idx % 6 === 0 || idx === points.length - 1);
+    else show = (idx % 2 === 0 || idx === points.length - 1);
+
+    if (!show) return '';
+    const labelText = pt.dayDisplay || pt.dayLabel;
+    return `
+      <text
+        class="home-chart-axis-label"
+        x="${pt.x}"
+        y="${svgH - 8}"
+        text-anchor="middle"
+        fill="#64748B"
+        font-size="10"
+        font-weight="500"
+        font-family="var(--font-sans)"
+      >${esc(labelText)}</text>
+    `;
+  }).join('');
+
+  // Activity Pips (Refined micro-dots ONLY on days with actual financial operations)
+  const activityPipsHtml = points.filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
+    let pipColor = '#2DD4BF';
+    if (pt.inc > 0 && pt.exp === 0) pipColor = '#34D399';
+    else if (pt.exp > 0 && pt.inc === 0) pipColor = '#FB7185';
+
+    return `
+      <circle
+        class="home-chart-pip"
+        cx="${pt.x}" cy="${pt.y}"
+        r="3.5"
+        fill="${pipColor}"
+        stroke="#0F141C"
+        stroke-width="1.8"
+        data-idx="${pt.idx}"
+        data-date="${esc(pt.fullDate || pt.dayLabel)}"
+        data-bal="${pt.balance}"
+        data-inc="${pt.inc}"
+        data-exp="${pt.exp}"
+      />
+    `;
+  }).join('');
 
   // Quick categories breakdown for teaser
   const topCategories = {};
@@ -522,33 +595,38 @@ function renderHomeView() {
         <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" id="home-chart-svg">
           <defs>
             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.28"/>
+              <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.26"/>
+              <stop offset="65%" stop-color="#2DD4BF" stop-opacity="0.05"/>
               <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
             </linearGradient>
+            <filter id="homeGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#2DD4BF" flood-opacity="0.45"/>
+            </filter>
           </defs>
-          <path d="${areaPath}" fill="url(#chartGrad)" />
-          <path d="${curvePath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />
 
-          <!-- Dynamic Scrubber Guide Elements -->
-          <line id="home-scrubber-line" class="home-scrubber-line" x1="0" y1="0" x2="0" y2="${svgH}" />
-          <circle id="home-scrubber-dot" class="home-scrubber-dot" cx="0" cy="0" r="5" />
-
-          ${points.map(pt => `
-            <circle
-              class="home-chart-pt"
-              cx="${pt.x}" cy="${pt.y}"
-              r="${points.length > 15 ? 3 : 4}"
-              fill="#141A23"
-              stroke="#2DD4BF"
-              stroke-width="2"
-              data-idx="${pt.idx}"
-              data-date="${esc(pt.fullDate || pt.dayLabel)}"
-              data-bal="${pt.balance}"
-              data-inc="${pt.inc}"
-              data-exp="${pt.exp}"
-            />
+          <!-- Horizontal Reference Grid Lines -->
+          ${gridLevels.map(g => `
+            <line class="home-grid-line" x1="${padX}" y1="${g.y}" x2="${svgW - padX}" y2="${g.y}" stroke="rgba(255, 255, 255, 0.05)" stroke-dasharray="4 4" stroke-width="1" />
           `).join('')}
 
+          ${zeroLineHtml}
+
+          <!-- Area & Smooth Trajectory -->
+          <path d="${areaPath}" fill="url(#chartGrad)" />
+          <path d="${curvePath}" fill="none" stroke="#2DD4BF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#homeGlow)" />
+
+          <!-- Dynamic Scrubber Guide Elements (Revealed on hover) -->
+          <line id="home-scrubber-line" class="home-scrubber-line" x1="0" y1="${padTop}" x2="0" y2="${svgH - padBottom}" />
+          <circle id="home-scrubber-ring" class="home-scrubber-ring" cx="0" cy="0" r="10" />
+          <circle id="home-scrubber-dot" class="home-scrubber-dot" cx="0" cy="0" r="4.5" />
+
+          <!-- Micro-Pips (Only on days with real operations) -->
+          ${activityPipsHtml}
+
+          <!-- Date Ticks Axis -->
+          ${dateLabelsHtml}
+
+          <!-- Full Width Interactive Hover Overlay -->
           <rect id="home-chart-overlay" class="home-chart-overlay" x="0" y="0" width="${svgW}" height="${svgH}" fill="transparent" />
         </svg>
         <div id="home-chart-tooltip" class="chart-tooltip"></div>
@@ -2145,16 +2223,18 @@ function bindInteractiveEvents() {
   const homeTooltip = document.getElementById('home-chart-tooltip');
   const homeScrubberLine = document.getElementById('home-scrubber-line');
   const homeScrubberDot = document.getElementById('home-scrubber-dot');
+  const homeScrubberRing = document.getElementById('home-scrubber-ring');
   const heroBalVal = document.getElementById('hero-balance-val');
   const heroBalLbl = document.getElementById('hero-balance-lbl');
 
   if (homeWrap && homeTooltip && window.__homePoints && window.__homePoints.length > 0) {
     const pts = window.__homePoints;
+    const svgH = window.__homeSvgH || 130;
     const baseBalText = heroBalVal ? heroBalVal.getAttribute('data-base') : '';
 
     homeWrap.onmousemove = e => {
       const rect = homeWrap.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
+      const mouseX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
       const svgW = 760;
       const scaleX = svgW / rect.width;
       const targetSvgX = mouseX * scaleX;
@@ -2174,6 +2254,11 @@ function bindInteractiveEvents() {
         homeScrubberLine.setAttribute('x2', closestPt.x);
         homeScrubberLine.style.opacity = '1';
       }
+      if (homeScrubberRing) {
+        homeScrubberRing.setAttribute('cx', closestPt.x);
+        homeScrubberRing.setAttribute('cy', closestPt.y);
+        homeScrubberRing.style.opacity = '1';
+      }
       if (homeScrubberDot) {
         homeScrubberDot.setAttribute('cx', closestPt.x);
         homeScrubberDot.setAttribute('cy', closestPt.y);
@@ -2184,34 +2269,51 @@ function bindInteractiveEvents() {
         heroBalVal.innerText = money(closestPt.balance);
       }
       if (heroBalLbl) {
-        heroBalLbl.innerText = `Баланс на ${closestPt.dayLabel}`;
+        heroBalLbl.innerText = `Остаток на ${closestPt.dayDisplay || closestPt.dayLabel}`;
       }
 
       let deltaHtml = '';
       if (closestPt.inc > 0 && closestPt.exp > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(closestPt.inc)}</div><div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(closestPt.exp)}</div>`;
+        deltaHtml = `
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <span class="chart-tooltip-badge" style="color: var(--accent-jade); background: rgba(45,212,191,0.12); padding: 2px 6px; border-radius: 4px;">+${money(closestPt.inc)}</span>
+            <span class="chart-tooltip-badge" style="color: var(--accent-coral); background: rgba(251,113,133,0.12); padding: 2px 6px; border-radius: 4px;">−${money(closestPt.exp)}</span>
+          </div>
+        `;
       } else if (closestPt.inc > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(closestPt.inc)} доход</div>`;
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade); margin-top: 4px;">+${money(closestPt.inc)} доход</div>`;
       } else if (closestPt.exp > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(closestPt.exp)} расход</div>`;
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-coral); margin-top: 4px;">−${money(closestPt.exp)} расход</div>`;
+      } else {
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">Операций в этот день не было</div>`;
       }
 
       homeTooltip.innerHTML = `
-        <div class="chart-tooltip-title">${esc(closestPt.fullDate || closestPt.dayLabel)}</div>
-        <div class="chart-tooltip-value">${money(closestPt.balance)}</div>
+        <div class="chart-tooltip-title">${esc(closestPt.fullDate || closestPt.dayDisplay || closestPt.dayLabel)}</div>
+        <div class="chart-tooltip-value num">${money(closestPt.balance)}</div>
         ${deltaHtml}
       `;
 
       const pxX = (closestPt.x / svgW) * rect.width;
-      const pxY = (closestPt.y / 80) * rect.height;
+      const pxY = (closestPt.y / svgH) * rect.height;
 
-      homeTooltip.style.left = `${pxX}px`;
-      homeTooltip.style.top = `${pxY}px`;
+      // Keep tooltip centered on point and inside chart area
+      const tooltipW = 160;
+      let leftPos = pxX;
+      if (leftPos + tooltipW / 2 > rect.width) {
+        leftPos = rect.width - tooltipW / 2 - 8;
+      } else if (leftPos - tooltipW / 2 < 0) {
+        leftPos = tooltipW / 2 + 8;
+      }
+
+      homeTooltip.style.left = `${leftPos}px`;
+      homeTooltip.style.top = `${Math.max(10, pxY - 10)}px`;
       homeTooltip.classList.add('visible');
     };
 
     homeWrap.onmouseleave = () => {
       if (homeScrubberLine) homeScrubberLine.style.opacity = '0';
+      if (homeScrubberRing) homeScrubberRing.style.opacity = '0';
       if (homeScrubberDot) homeScrubberDot.style.opacity = '0';
       homeTooltip.classList.remove('visible');
 
