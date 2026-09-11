@@ -807,5 +807,8 @@ async function boot() {
   }
 
 }
+window.addEventListener('error', function(e) {
+  alert('Ошибка JavaScript: ' + e.message);
+});
 
 boot();
