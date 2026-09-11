@@ -44,6 +44,11 @@ const esc = s =>
     '>': '&gt;'
   }[x]));
 
+const formatMsg = s =>
+  esc(s)
+    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+    .replace(/\*(.*?)\*/g, '<i>$1</i>');
+
 
 /* =========================
    ВХОД / РЕГИСТРАЦИЯ
@@ -533,7 +538,7 @@ function page() {
         ${data.chat
           .map(x => `
             <div class="msg ${x.role}">
-              ${esc(x.content)}
+              ${formatMsg(x.content)}
             </div>
           `)
           .join('')}
@@ -585,6 +590,11 @@ function render() {
   $('#app').innerHTML = layout();
 
   $('#page').innerHTML = page();
+
+  const msgBox = $('.messages');
+  if (msgBox) {
+    msgBox.scrollTop = msgBox.scrollHeight;
+  }
 
 
   document
@@ -757,12 +767,21 @@ function render() {
 
   if (ask) {
 
+    const textarea = $('#question');
+    if (textarea) {
+      textarea.onkeydown = e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          ask.requestSubmit();
+        }
+      };
+    }
+
     ask.onsubmit = async e => {
 
       e.preventDefault();
 
-      const q =
-        $('#question').value.trim();
+      const q = $('#question').value.trim();
 
       if (!q) {
         return;
@@ -780,6 +799,9 @@ function render() {
       );
 
       render();
+
+      const btn = ask.querySelector('button');
+      if (btn) btn.disabled = true;
 
       try {
 
@@ -809,6 +831,10 @@ function render() {
         };
 
         render();
+
+      } finally {
+
+        if (btn) btn.disabled = false;
 
       }
 
