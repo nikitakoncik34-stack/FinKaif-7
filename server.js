@@ -344,34 +344,38 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  const contents = [
-    {
-      role: "user",
-      parts: [
-        { text: `[СИСТЕМНАЯ УСТАНОВКА И ОБУЧЕНИЕ МЕНТОРА FINKAIF]\n${systemPrompt}` }
-      ]
-    },
-    {
-      role: "model",
-      parts: [
-        { text: "Принято! Я персональный финансовый ментор Finkaif («Финансы в кайф»). Готов анализировать данные аккаунта, рассчитывать бюджеты и помогать достигать целей легко и с удовольствием." }
-      ]
-    }
-  ];
+  const contents = [];
+  let lastRole = null;
 
   for (const msg of history) {
+    const role = msg.role === "assistant" ? "model" : "user";
+    const text = String(msg.content || "").trim();
+    if (!text) continue;
+    if (role === lastRole && contents.length > 0) {
+      contents[contents.length - 1].parts[0].text += "\n" + text;
+    } else {
+      contents.push({ role, parts: [{ text }] });
+      lastRole = role;
+    }
+  }
+
+  const trimmedUserMessage = String(userMessage).trim();
+  if (lastRole === "user") {
     contents.push({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }]
+      role: "model",
+      parts: [{ text: "Понял, продолжаю анализ ваших финансов." }]
     });
   }
 
   contents.push({
     role: "user",
-    parts: [{ text: userMessage }]
+    parts: [{ text: trimmedUserMessage }]
   });
 
   const body = {
+    system_instruction: {
+      parts: [{ text: systemPrompt }]
+    },
     contents,
     generationConfig: {
       temperature: 0.5,
