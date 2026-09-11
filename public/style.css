@@ -2426,37 +2426,119 @@ html, body {
   margin-top: 2px;
 }
 
-/* Dynamic Interactive Chart Scrubbers */
-.home-scrubber-line, .cf-scrubber-line {
+/* HTML-based Fluid Scrubber & Perfectly Round Beacon Elements (Zero SVG stretching distortion!) */
+.home-scrubber-laser {
+  position: absolute;
+  top: 10px;
+  bottom: 28px;
+  width: 1.5px;
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.5) 20%, rgba(255, 255, 255, 0.5) 80%, transparent 100%);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 10;
+  transform: translateX(-50%);
+  transition: opacity 0.12s ease;
+}
+
+.home-scrubber-beacon {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -12px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.12s ease;
+}
+
+.scrubber-pulse-ring {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid #2DD4BF;
+  background: rgba(45, 212, 191, 0.18);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.5);
+  animation: beaconPulseAnim 1.8s infinite ease-in-out;
+}
+
+.scrubber-core-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  border: 1.5px solid #0F141C;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.9);
+  z-index: 2;
+}
+
+/* HTML-based Live Terminal Beacon on latest point */
+.home-terminal-beacon {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  margin-top: -10px;
+  pointer-events: none;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease;
+}
+
+.terminal-pulse-ring {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #2DD4BF;
+  background: rgba(45, 212, 191, 0.15);
+  animation: beaconPulseAnim 2.2s infinite ease-out;
+}
+
+.terminal-core-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2DD4BF;
+  border: 1.5px solid #0F141C;
+  box-shadow: 0 0 6px #2DD4BF;
+}
+
+@keyframes beaconPulseAnim {
+  0% { transform: scale(0.65); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 0.35; }
+  100% { transform: scale(0.65); opacity: 0.9; }
+}
+
+.home-activity-pip {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9;
+  border: 1.5px solid #0F141C;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+}
+
+/* Dynamic Interactive Chart Scrubbers (Legacy & CF) */
+.cf-scrubber-line {
   stroke: rgba(45, 212, 191, 0.45);
   stroke-width: 1.5;
   stroke-dasharray: 3 3;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
-}
-
-.home-scrubber-ring {
-  fill: rgba(45, 212, 191, 0.16);
-  stroke: rgba(45, 212, 191, 0.55);
-  stroke-width: 1.5;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.home-scrubber-dot {
-  fill: #FFFFFF;
-  stroke: #2DD4BF;
-  stroke-width: 2.5;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.home-chart-pip {
-  pointer-events: none;
-  transition: r 0.15s ease, fill 0.15s ease;
 }
 
 .home-chart-axis-label {
