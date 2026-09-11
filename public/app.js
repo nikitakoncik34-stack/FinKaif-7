@@ -65,6 +65,23 @@ const isLastNDays = (dStr, n) => {
   return diff >= 0 && diff <= n * 24 * 60 * 60 * 1000;
 };
 
+const getCatIcon = cat => {
+  const c = String(cat || '').toLowerCase().trim();
+  if (c.includes('ед') || c.includes('продукт') || c.includes('супермаркет') || c.includes('магаз')) return '🍔';
+  if (c.includes('кафе') || c.includes('ресторан') || c.includes('бар') || c.includes('кофе')) return '☕';
+  if (c.includes('такси') || c.includes('транспорт') || c.includes('метро') || c.includes('бензин') || c.includes('авто')) return '🚕';
+  if (c.includes('дом') || c.includes('жиль') || c.includes('аренд') || c.includes('жкх') || c.includes('коммунал')) return '🏠';
+  if (c.includes('покупк') || c.includes('одежд') || c.includes('шоппинг') || c.includes('вещи')) return '🛍️';
+  if (c.includes('связь') || c.includes('интернет') || c.includes('телефон') || c.includes('подписк')) return '📱';
+  if (c.includes('развлеч') || c.includes('кино') || c.includes('игр') || c.includes('клуб')) return '🎬';
+  if (c.includes('здоров') || c.includes('аптек') || c.includes('врач') || c.includes('спорт')) return '💊';
+  if (c.includes('отпуск') || c.includes('путешеств') || c.includes('билет') || c.includes('отель')) return '🏖️';
+  if (c.includes('зарплат') || c.includes('доход') || c.includes('аванс') || c.includes('преми')) return '💰';
+  if (c.includes('подар') || c.includes('праздник')) return '🎁';
+  if (c.includes('инвест') || c.includes('вклад') || c.includes('акци')) return '📈';
+  return '💳';
+};
+
 
 /* =========================
    ВХОД / РЕГИСТРАЦИЯ
@@ -77,7 +94,7 @@ function auth() {
     <div class="auth">
       <div class="authbox">
 
-        <div class="brand">Fin<b>kaif</b></div>
+        <div class="brand"><span>Fin</span><b>kaif</b></div>
 
         <h1 id="title">
           ${isLogin ? 'Вход' : 'Регистрация'}
@@ -244,7 +261,7 @@ function layout() {
       <aside>
 
         <div class="brand">
-          Fin<b>kaif</b>
+          <span>Fin</span><b>kaif</b>
         </div>
 
         ${nav()}
@@ -363,20 +380,39 @@ function page() {
     const catEntries = Object.entries(expByCat).sort((a, b) => b[1] - a[1]);
 
     return `
-      <div class="grid">
-        ${[
-          ['Баланс', inc - exp],
-          ['Доходы', inc],
-          ['Расходы', exp],
-          ['Сбережения', inc ? Math.round(((inc - exp) / inc) * 100) + '%' : '—']
-        ]
-          .map(x => `
-            <div class="card">
-              <small>${x[0]}</small>
-              <span class="value">${typeof x[1] === 'number' ? money(x[1]) : x[1]}</span>
-            </div>
-          `)
-          .join('')}
+      <!-- Apple Card Style Virtual Card -->
+      <div class="virtual-card">
+        <div class="card-top">
+          <span class="card-logo">FINKAIF PLATINUM</span>
+          <span style="font-size: 11px; font-weight: 700; background: rgba(0,0,0,0.22); backdrop-filter: blur(8px); padding: 4px 11px; border-radius: 20px; text-transform: uppercase;">● Активен</span>
+        </div>
+        <div class="card-chip"></div>
+        <div class="card-number">•••• •••• •••• 7842</div>
+        <div class="card-bottom">
+          <div>
+            <div class="card-balance-lbl">Доступный капитал</div>
+            <div class="card-balance-val">${money(inc - exp)}</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10px; text-transform: uppercase; color: rgba(255,255,255,0.8); margin-bottom: 2px;">Держатель</div>
+            <div class="card-holder">${esc(me && me.email ? me.email.split('@')[0] : 'FinKaif User')}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="card">
+          <small>ДОХОДЫ</small>
+          <span class="value" style="color: #34d399;">+${money(inc)}</span>
+        </div>
+        <div class="card">
+          <small>РАСХОДЫ</small>
+          <span class="value" style="color: #f87171;">−${money(exp)}</span>
+        </div>
+        <div class="card">
+          <small>СБЕРЕЖЕНИЯ</small>
+          <span class="value" style="color: #fbbf24;">${inc ? Math.round(((inc - exp) / inc) * 100) + '%' : '—'}</span>
+        </div>
       </div>
 
       <div class="card">
@@ -406,10 +442,10 @@ function page() {
           ${catEntries.slice(0, 5).map(([cat, amt]) => {
             const pct = exp > 0 ? Math.round((amt / exp) * 100) : 0;
             return `
-              <div style="margin: 12px 0;">
-                <div class="row" style="margin-bottom: 5px;">
-                  <span><b>${esc(cat)}</b></span>
-                  <span><b>${money(amt)}</b> <small style="color: #8c9890">(${pct}%)</small></span>
+              <div style="margin: 14px 0;">
+                <div class="row" style="margin-bottom: 6px;">
+                  <span><b>${getCatIcon(cat)} ${esc(cat)}</b></span>
+                  <span><b>${money(amt)}</b> <small style="color: #9ca3af">(${pct}%)</small></span>
                 </div>
                 <div class="progress-track">
                   <div class="progress-fill safe" style="width: ${pct}%;"></div>
@@ -424,7 +460,7 @@ function page() {
         <div class="row">
           <div>
             <h2>✦ Финансовый ментор Finkaif</h2>
-            <p class="sub">Персональные советы, оптимизация бюджета и поддержка ваших целей.</p>
+            <p class="sub">Персональные советы, оптимизация бюджета и поддержка ваших целей в кайф.</p>
           </div>
           <div style="display: flex; gap: 8px;">
             <button data-tab="analytics" class="secondary">📊 Аналитика</button>
@@ -438,21 +474,22 @@ function page() {
   if (tab === 'transactions') {
     return `
       <div class="card">
-        <h2>Операции</h2>
+        <h2>↕ Операции</h2>
+        <p class="sub" style="margin-bottom: 16px;">Добавляйте доходы и расходы для точного учета</p>
         <form class="form" id="opform">
           <select id="type">
             <option value="expense">Расход</option>
             <option value="income">Доход</option>
           </select>
-          <input id="category" placeholder="Категория" required>
-          <input id="description" placeholder="Описание">
-          <input id="amount" type="number" min="1" placeholder="Сумма" required>
+          <input id="category" placeholder="Категория (еда, такси...)" required>
+          <input id="description" placeholder="Описание (необязательно)">
+          <input id="amount" type="number" min="1" placeholder="Сумма (₽)" required>
           <input id="date" type="date" value="${new Date().toISOString().slice(0, 10)}">
           <button>Сохранить</button>
         </form>
         ${list(
           data.transactions,
-          x => `${esc(x.category)} · ${x.type === 'income' ? '+' : '−'}${money(x.amount)}<small>${esc(x.description || 'Без описания')} · ${x.occurred_on}</small>`,
+          x => `${getCatIcon(x.category)} <b>${esc(x.category)}</b> · <span style="color: ${x.type === 'income' ? '#34d399' : '#f87171'}; font-weight: 700;">${x.type === 'income' ? '+' : '−'}${money(x.amount)}</span><small>${esc(x.description || 'Без описания')} · ${x.occurred_on}</small>`,
           'transactions'
         )}
       </div>
@@ -486,12 +523,12 @@ function page() {
             <div class="item" style="flex-direction: column; align-items: stretch; gap: 8px;">
               <div class="row">
                 <div>
-                  <b style="font-size: 16px;">${esc(b.category)}</b>
+                  <b style="font-size: 16px;">${getCatIcon(b.category)} ${esc(b.category)}</b>
                   <div style="margin-top: 4px;">${badgeText}</div>
                 </div>
                 <div style="text-align: right;">
-                  <div><b>${money(spent)}</b> <small style="color: #8c9890">/ ${money(limit)}</small></div>
-                  <small style="color: #8c9890">${pct <= 100 ? 'Осталось ' + money(limit - spent) : 'Лимит превышен'}</small>
+                  <div><b>${money(spent)}</b> <small style="color: #9ca3af">/ ${money(limit)}</small></div>
+                  <small style="color: #9ca3af">${pct <= 100 ? 'Осталось ' + money(limit - spent) : 'Лимит превышен'}</small>
                 </div>
                 <button class="delete" data-del="budgets:${b.id}">×</button>
               </div>
@@ -511,7 +548,7 @@ function page() {
         <div class="row">
           <div>
             <h2>☆ Финансовые цели</h2>
-            <small>Накопления без стресса</small>
+            <small>Накопления на мечты и спокойствие</small>
           </div>
           <button id="addgoal">＋ Цель</button>
         </div>
@@ -525,7 +562,7 @@ function page() {
             <div class="item" style="flex-direction: column; align-items: stretch; gap: 8px;">
               <div class="row">
                 <div>
-                  <b style="font-size: 16px;">${esc(g.name)}</b>
+                  <b style="font-size: 16px;">🎯 ${esc(g.name)}</b>
                   <div style="margin-top: 4px;">
                     <span class="badge ${pct >= 100 ? 'safe' : 'warn'}">
                       ${pct >= 100 ? '🎉 Цель достигнута!' : 'Собрано ' + pct + '%'}
@@ -533,8 +570,8 @@ function page() {
                   </div>
                 </div>
                 <div style="text-align: right;">
-                  <div><b>${money(saved)}</b> <small style="color: #8c9890">из ${money(target)}</small></div>
-                  <small style="color: #8c9890">${remains > 0 ? 'Осталось ' + money(remains) : 'Цель закрыта'}</small>
+                  <div><b>${money(saved)}</b> <small style="color: #9ca3af">из ${money(target)}</small></div>
+                  <small style="color: #9ca3af">${remains > 0 ? 'Осталось ' + money(remains) : 'Цель закрыта'}</small>
                 </div>
                 <div style="display: flex; gap: 6px; align-items: center;">
                   <button class="mini-btn" data-topup="${g.id}" data-saved="${saved}">＋ Внести</button>
