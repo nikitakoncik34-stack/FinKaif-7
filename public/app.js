@@ -280,26 +280,19 @@ function layout() {
 ========================= */
 
 function list(rows, view, res) {
-
   return rows.length
-
     ? rows.map(x => `
         <div class="item">
-
-          <div>
-            <b>${view(x)}</b>
-          </div>
-
+          ${view(x)}
           <button
             class="delete"
             data-del="${res}:${x.id}"
+            title="Удалить"
           >
             ×
           </button>
-
         </div>
       `).join('')
-
     : '<p class="sub">Пока нет данных.</p>';
 }
 
@@ -354,25 +347,28 @@ function page() {
         <button id="quick" data-tab="transactions">＋ Новая операция</button>
       </div>
 
-      <!-- Obsidian Titanium Luxury Virtual Card -->
-      <div class="virtual-card">
-        <div class="card-top">
-          <div class="card-logo">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            FINKAIF TITANIUM
+      <!-- 3D Onyx Titanium Luxury Virtual Card -->
+      <div class="virtual-card-wrap">
+        <div class="virtual-card" id="titanium-card">
+          <div class="card-glare"></div>
+          <div class="card-top">
+            <div class="card-logo">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              FINKAIF ONYX TITANIUM
+            </div>
+            <span class="card-status">● Активен</span>
           </div>
-          <span class="card-status">● Активен</span>
-        </div>
-        <div class="card-chip"></div>
-        <div class="card-number">•••• •••• •••• 7842</div>
-        <div class="card-bottom">
-          <div>
-            <div class="card-balance-lbl">Чистый капитал</div>
-            <div class="card-balance-val">${money(inc - exp)}</div>
-          </div>
-          <div style="text-align: right;">
-            <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px;">Держатель</div>
-            <div class="card-holder">${esc(userName.toUpperCase())}</div>
+          <div class="card-chip"></div>
+          <div class="card-number">•••• •••• •••• 7842</div>
+          <div class="card-bottom">
+            <div>
+              <div class="card-balance-lbl">Доступный капитал</div>
+              <div class="card-balance-val">${money(inc - exp)}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px;">Держатель</div>
+              <div class="card-holder">${esc(userName.toUpperCase())}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -416,20 +412,28 @@ function page() {
             <h2>🏷️ Расходы по категориям</h2>
             <small>${catEntries.length} категорий</small>
           </div>
-          ${catEntries.slice(0, 5).map(([cat, amt]) => {
-            const pct = exp > 0 ? Math.round((amt / exp) * 100) : 0;
-            return `
-              <div style="margin: 14px 0;">
-                <div class="row" style="margin-bottom: 6px;">
-                  <span><b>${getCatIcon(cat)} ${esc(cat)}</b></span>
-                  <span><b>${money(amt)}</b> <small style="color: var(--text-muted)">(${pct}%)</small></span>
+          <div style="margin-top: 14px;">
+            ${catEntries.slice(0, 5).map(([cat, amt]) => {
+              const pct = exp > 0 ? Math.round((amt / exp) * 100) : 0;
+              return `
+                <div style="margin: 16px 0;">
+                  <div class="row" style="margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 18px;">${getCatIcon(cat)}</span>
+                      <b>${esc(cat)}</b>
+                    </div>
+                    <span>
+                      <b style="font-family: var(--font-mono);">${money(amt)}</b>
+                      <small style="color: var(--text-muted); margin-left: 4px;">(${pct}%)</small>
+                    </span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill safe" style="width: ${pct}%;"></div>
+                  </div>
                 </div>
-                <div class="progress-track">
-                  <div class="progress-fill safe" style="width: ${pct}%;"></div>
-                </div>
-              </div>
-            `;
-          }).join('')}
+              `;
+            }).join('')}
+          </div>
         </div>
       ` : ''}
 
@@ -497,11 +501,26 @@ function page() {
 
       <div class="card">
         <h2>Лента операций</h2>
-        ${list(
-          filteredList,
-          x => `${getCatIcon(x.category)} <b>${esc(x.category)}</b> · <span style="color: ${x.type === 'income' ? '#34d399' : '#fda4af'}; font-weight: 700;">${x.type === 'income' ? '+' : '−'}${money(x.amount)}</span><small>${esc(x.description || 'Без описания')} · ${x.occurred_on}</small>`,
-          'transactions'
-        )}
+        <div style="margin-top: 14px;">
+          ${list(
+            filteredList,
+            x => `
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <div class="cat-icon-badge">${getCatIcon(x.category)}</div>
+                <div>
+                  <b style="font-size: 15px; letter-spacing: -0.2px;">${esc(x.category)}</b>
+                  <small style="color: var(--text-muted);">${esc(x.description || 'Без описания')} · ${x.occurred_on}</small>
+                </div>
+              </div>
+              <div style="margin-left: auto; margin-right: 14px; text-align: right;">
+                <b style="font-family: var(--font-mono); font-size: 16px; color: ${x.type === 'income' ? '#34d399' : '#fda4af'}; font-weight: 700;">
+                  ${x.type === 'income' ? '+' : '−'}${money(x.amount)}
+                </b>
+              </div>
+            `,
+            'transactions'
+          )}
+        </div>
       </div>
     `;
   }
@@ -1219,6 +1238,124 @@ function render() {
     };
 
   }
+
+  setupCardTilt();
+}
+
+
+/* =========================================
+   LIVE AMBIENT AURORA CANVAS (60 FPS)
+   ========================================= */
+let canvasInited = false;
+function initAmbientCanvas() {
+  if (canvasInited) return;
+  const canvas = document.getElementById('ambient-canvas');
+  if (!canvas) return;
+  canvasInited = true;
+
+  const ctx = canvas.getContext('2d');
+  let w = canvas.width = window.innerWidth;
+  let h = canvas.height = window.innerHeight;
+
+  window.addEventListener('resize', () => {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  });
+
+  const blobs = [
+    { x: w * 0.15, y: h * 0.2, r: Math.max(300, Math.min(w, h) * 0.52), vx: 0.45, vy: 0.35, color: 'rgba(99, 102, 241, ' },  // Electric Indigo
+    { x: w * 0.85, y: h * 0.35, r: Math.max(340, Math.min(w, h) * 0.55), vx: -0.4, vy: 0.4, color: 'rgba(16, 185, 129, ' }, // Emerald Neon
+    { x: w * 0.5, y: h * 0.85, r: Math.max(320, Math.min(w, h) * 0.52), vx: 0.35, vy: -0.4, color: 'rgba(139, 92, 246, ' }, // Cyber Violet
+    { x: w * 0.25, y: h * 0.75, r: Math.max(280, Math.min(w, h) * 0.45), vx: -0.3, vy: -0.3, color: 'rgba(6, 182, 212, ' }   // Cyan
+  ];
+
+  const stars = Array.from({ length: 45 }, () => ({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    r: Math.random() * 1.6 + 0.6,
+    alpha: Math.random() * 0.6 + 0.2,
+    speed: Math.random() * 0.35 + 0.15,
+    pulse: (Math.random() * 0.02 + 0.008) * (Math.random() > 0.5 ? 1 : -1)
+  }));
+
+  function draw() {
+    ctx.clearRect(0, 0, w, h);
+
+    // Deep space gradient
+    const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+    bgGrad.addColorStop(0, '#050508');
+    bgGrad.addColorStop(0.5, '#0a0914');
+    bgGrad.addColorStop(1, '#050508');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Dynamic glowing aurora blobs
+    blobs.forEach(b => {
+      b.x += b.vx;
+      b.y += b.vy;
+      if (b.x < -150 || b.x > w + 150) b.vx *= -1;
+      if (b.y < -150 || b.y > h + 150) b.vy *= -1;
+
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      g.addColorStop(0, b.color + '0.35)');
+      g.addColorStop(0.45, b.color + '0.14)');
+      g.addColorStop(1, b.color + '0)');
+
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Floating stardust particles
+    stars.forEach(s => {
+      s.y -= s.speed;
+      if (s.y < -10) {
+        s.y = h + 10;
+        s.x = Math.random() * w;
+      }
+      s.alpha += s.pulse;
+      if (s.alpha > 0.85 || s.alpha < 0.2) s.pulse *= -1;
+
+      ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, Math.min(1, s.alpha))})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+}
+
+/* =========================================
+   3D CARD TILT & SPECULAR GLARE
+   ========================================= */
+function setupCardTilt() {
+  const card = document.getElementById('titanium-card');
+  if (!card) return;
+
+  card.onmousemove = e => {
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    const rotX = -(y / (rect.height / 2)) * 12;
+    const rotY = (x / (rect.width / 2)) * 14;
+    card.style.transform = `perspective(1000px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`;
+
+    const glare = card.querySelector('.card-glare');
+    if (glare) {
+      const px = (((e.clientX - rect.left) / rect.width) * 100).toFixed(1);
+      const py = (((e.clientY - rect.top) / rect.height) * 100).toFixed(1);
+      glare.style.background = `radial-gradient(circle at ${px}% ${py}%, rgba(255,255,255,0.25) 0%, transparent 65%)`;
+    }
+  };
+
+  card.onmouseleave = () => {
+    card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
+    const glare = card.querySelector('.card-glare');
+    if (glare) glare.style.background = 'none';
+  };
 }
 
 
@@ -1227,32 +1364,24 @@ function render() {
 ========================= */
 
 async function boot() {
+  initAmbientCanvas();
 
   try {
-
     me = (await api('me')).user;
-
   } catch {
-
     localStorage.removeItem('finkaif_token');
     $('#app').innerHTML = auth();
     setupAuth();
     return;
-
   }
 
   render();
 
   try {
-
     await load();
-
   } catch (err) {
-
     console.error('Ошибка загрузки данных:', err);
-
   }
-
 }
 
 boot();
