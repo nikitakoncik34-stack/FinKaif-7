@@ -186,9 +186,10 @@ app.post("/api/transactions", auth, async (req, res) => {
     if (!["income", "expense"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
       return res.status(400).json({ error: "Проверьте тип, категорию и сумму операции." });
     }
+    const createdAt = x.created_at ? new Date(x.created_at) : new Date();
     const r = await db.query(
-      "insert into transactions(user_id,type,category,description,amount,occurred_on) values($1,$2,$3,$4,$5,$6) returning *",
-      [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Number(x.amount), x.occurred_on || new Date().toISOString().slice(0, 10)]
+      "insert into transactions(user_id,type,category,description,amount,occurred_on,created_at) values($1,$2,$3,$4,$5,$6,$7) returning *",
+      [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Number(x.amount), x.occurred_on || new Date().toISOString().slice(0, 10), isNaN(createdAt.getTime()) ? new Date() : createdAt]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -333,6 +334,32 @@ function generateBuiltinAdvice(question, transactions, budgets, goals) {
       `   • **Финансовая подушка (10%):** ${reserve.toLocaleString("ru-RU")} ₽ (цель — накопить на 3–6 месяцев базовых расходов, около ${(needs * 3).toLocaleString("ru-RU")} ₽).\n` +
       `   • **На отпуск / крупные цели (10%):** ${vacation.toLocaleString("ru-RU")} ₽.\n\n` +
       `📌 *Ваша статистика в приложении:* учтено доходов: ${inc.toLocaleString("ru-RU")} ₽, расходов: ${exp.toLocaleString("ru-RU")} ₽, остаток: ${balance.toLocaleString("ru-RU")} ₽.`;
+  } else if (q.includes("темп") || q.includes("скорост")) {
+    const now = new Date();
+    const curDay = Math.max(1, now.getDate());
+    const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const curMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const curMonthExp = transactions.filter(x => x.type === "expense" && (x.occurred_on || '').slice(0, 10) >= curMonthStart).reduce((s, x) => s + Number(x.amount), 0);
+    const dailyVelocity = Math.round(curMonthExp / curDay);
+    const totalBudget = budgets.reduce((s, b) => s + Number(b.limit_amount), 0);
+    const plannedDaily = totalBudget > 0 ? Math.round(totalBudget / daysInCurMonth) : 0;
+
+    let paceVerdict = "Темп комфортный, нагрузка в норме.";
+    if (plannedDaily > 0) {
+      if (dailyVelocity > plannedDaily * 1.25) {
+        paceVerdict = `⚠️ Текущий темп (${dailyVelocity.toLocaleString("ru-RU")} ₽/день) опережает плановый бюджет (${plannedDaily.toLocaleString("ru-RU")} ₽/день) на ${Math.round((dailyVelocity / plannedDaily - 1) * 100)}%. Рекомендуется снизить необязательные траты.`;
+      } else if (dailyVelocity <= plannedDaily) {
+        paceVerdict = `✅ Темп в рамках нормы: среднесуточный расход (${dailyVelocity.toLocaleString("ru-RU")} ₽/день) укладывается в запланированный лимит (${plannedDaily.toLocaleString("ru-RU")} ₽/день).`;
+      }
+    }
+
+    advice = `🔥 **Оценка темпа расходов (Burn Rate):**\n\n` +
+      `• Прошло дней месяца: **${curDay} из ${daysInCurMonth}**\n` +
+      `• Расходы за текущий месяц: **${curMonthExp.toLocaleString("ru-RU")} ₽**\n` +
+      `• Среднесуточная скорость трат: **${dailyVelocity.toLocaleString("ru-RU")} ₽ в день**\n` +
+      (totalBudget > 0 ? `• Запланированный темп по бюджетам: **${plannedDaily.toLocaleString("ru-RU")} ₽ в день**\n\n` : `\n`) +
+      `${paceVerdict}\n\n` +
+      `💡 Прогноз до конца месяца: при текущей скорости ожидаемые расходы до 1-го числа составят **${(dailyVelocity * Math.max(0, daysInCurMonth - curDay)).toLocaleString("ru-RU")} ₽**.`;
   } else if (q.includes("бюджет") || q.includes("лимит") || q.includes("расход") || q.includes("эконом") || q.includes("трат")) {
     advice = `💡 **Анализ расходов и бюджетирования:**\n\n` +
       `• Всего учтено расходов: **${exp.toLocaleString("ru-RU")} ₽**\n` +
