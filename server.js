@@ -207,29 +207,119 @@ app.get("/api/chat", auth, async (req, res) => {
   }
 });
 
+function generateBuiltinAdvice(question, transactions, budgets, goals) {
+  const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount), 0);
+  const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount), 0);
+  const balance = inc - exp;
+  const q = question.toLowerCase();
+
+  const numbers = question.match(/\d+[\d\s]*\d+|\d+/g);
+  const askedAmount = numbers ? Number(numbers[0].replace(/\s+/g, "")) : null;
+  const baseIncome = askedAmount && (q.includes("доход") || q.includes("зарплат") || q.includes("получа")) ? askedAmount : (inc || 60000);
+
+  let advice = "";
+
+  if (q.includes("отпуск") || q.includes("резерв") || q.includes("подушк") || q.includes("откладывать") || q.includes("50/30/20") || q.includes("распредел")) {
+    const needs = Math.round(baseIncome * 0.5);
+    const wants = Math.round(baseIncome * 0.3);
+    const savings = Math.round(baseIncome * 0.2);
+    const reserve = Math.round(savings * 0.5);
+    const vacation = Math.round(savings * 0.5);
+
+    advice = `📊 **Финансовый расчет по правилу 50/30/20** (при доходе ${baseIncome.toLocaleString("ru-RU")} ₽):\n\n` +
+      `1. **Обязательные расходы (50%):** ${needs.toLocaleString("ru-RU")} ₽ — жилье, еда, ЖКХ, связь, базовые платежи.\n` +
+      `2. **Личные траты и отдых (30%):** ${wants.toLocaleString("ru-RU")} ₽ — кафе, развлечения, покупки.\n` +
+      `3. **Накопления и цели (20%):** ${savings.toLocaleString("ru-RU")} ₽ в месяц:\n` +
+      `   • **Финансовая подушка (10%):** ${reserve.toLocaleString("ru-RU")} ₽ (цель — накопить на 3–6 месяцев базовых расходов, около ${(needs * 3).toLocaleString("ru-RU")} ₽).\n` +
+      `   • **На отпуск / крупные цели (10%):** ${vacation.toLocaleString("ru-RU")} ₽.\n\n` +
+      `📌 *Ваша статистика в приложении:* учтено доходов: ${inc.toLocaleString("ru-RU")} ₽, расходов: ${exp.toLocaleString("ru-RU")} ₽, остаток: ${balance.toLocaleString("ru-RU")} ₽.`;
+  } else if (q.includes("бюджет") || q.includes("лимит") || q.includes("расход") || q.includes("эконом") || q.includes("трат")) {
+    advice = `💡 **Анализ расходов и бюджетирования:**\n\n` +
+      `• Всего учтено расходов: **${exp.toLocaleString("ru-RU")} ₽**\n` +
+      `• Всего учтено доходов: **${inc.toLocaleString("ru-RU")} ₽**\n` +
+      `• Текущий баланс: **${balance.toLocaleString("ru-RU")} ₽**\n\n` +
+      `Рекомендация: перейдите во вкладку «Бюджет» и задайте месячные лимиты по основным статьям расходов (продукты, кафе, такси). Оптимально, чтобы ни одна отдельная категория не забирала более 25-30% от всех расходов.`;
+  } else if (q.includes("цел") || q.includes("накоп") || q.includes("купить") || q.includes("машин") || q.includes("квартир")) {
+    const goalsList = goals.length > 0
+      ? goals.map(g => `• **${g.name}**: накоплено ${Number(g.saved_amount).toLocaleString("ru-RU")} ₽ из ${Number(g.target_amount).toLocaleString("ru-RU")} ₽ (${Math.round((g.saved_amount / g.target_amount) * 100) || 0}%)`).join("\n")
+      : "У вас пока не добавлено целей во вкладке «Цели».";
+
+    advice = `🎯 **Ваши финансовые цели:**\n\n${goalsList}\n\n` +
+      `💡 Совет: чтобы цель достигалась быстрее, откладывайте фиксированную сумму сразу в день поступления дохода, а не в конце месяца по остаточному принципу.`;
+  } else {
+    advice = `🤖 **Финансовый советник Finkaif:**\n\n` +
+      `Вы спросили: *«${question}»*\n\n` +
+      `По текущим данным вашего аккаунта:\n` +
+      `• Доходы: **${inc.toLocaleString("ru-RU")} ₽**\n` +
+      `• Расходы: **${exp.toLocaleString("ru-RU")} ₽**\n` +
+      `• Баланс: **${balance.toLocaleString("ru-RU")} ₽**\n` +
+      `• Целей: **${goals.length}**, лимитов бюджета: **${budgets.length}**\n\n` +
+      `Сформулируйте вопрос с указанием сумм или целей (например: *«Доход 80000, сколько откладывать на отпуск?»* или *«Как оптимизировать расходы?»*).`;
+  }
+
+  advice += `\n\n*(ℹ️ Режим умного финансового анализа. Чтобы подключить OpenAI, DeepSeek, Groq или Gemini, добавьте API-ключ в переменные Variables на Railway).*`;
+  return advice;
+}
+
 app.post("/api/assistant", auth, async (req, res) => {
   try {
     const question = String(req.body.question || "").trim();
     if (!question) return res.status(400).json({ error: "Введите вопрос." });
-    if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: "ИИ ещё не подключён. Добавьте OPENAI_API_KEY в Railway Variables." });
+
     const [tr, bu, go] = await Promise.all([
       db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250", [req.user.id]),
       db.query("select category,limit_amount from budgets where user_id=$1", [req.user.id]),
       db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id])
     ]);
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const prompt = `Ты — внимательный русскоязычный помощник Finkaif по личным финансам. Отвечай естественно, подробно, но без воды. Анализируй вопрос и финансовый контекст. Сначала объясни ситуацию, затем предложи конкретные действия, суммы или формулу если хватает данных. Если данных не хватает, задай не более двух точных вопросов. Не выдумывай факты. Не проси пароли, номера карт или банковские реквизиты. Не обещай доходность и не выдавай ответ за персональную инвестиционную, юридическую или кредитную рекомендацию. Контекст: ${JSON.stringify({ transactions: tr.rows, budgets: bu.rows, goals: go.rows })}`;
-    const r = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.45,
-      messages: [{ role: "system", content: prompt }, { role: "user", content: question }]
-    });
-    const answer = r.choices[0]?.message?.content || "Не удалось получить ответ.";
+
+    const transactions = tr.rows;
+    const budgets = bu.rows;
+    const goals = go.rows;
+
+    let apiKey = process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.GEMINI_API_KEY;
+    let baseURL = process.env.OPENAI_BASE_URL || undefined;
+    let model = process.env.OPENAI_MODEL;
+
+    if (process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
+      apiKey = process.env.GROQ_API_KEY;
+      baseURL = "https://api.groq.com/openai/v1";
+      model = model || "llama-3.3-70b-versatile";
+    } else if (process.env.DEEPSEEK_API_KEY && !process.env.OPENAI_API_KEY) {
+      apiKey = process.env.DEEPSEEK_API_KEY;
+      baseURL = "https://api.deepseek.com";
+      model = model || "deepseek-chat";
+    } else if (process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
+      apiKey = process.env.GEMINI_API_KEY;
+      baseURL = "https://generativelanguage.googleapis.com/v1beta/openai/";
+      model = model || "gemini-1.5-flash";
+    } else {
+      model = model || "gpt-4o-mini";
+    }
+
+    let answer = "";
+
+    if (apiKey) {
+      const client = new OpenAI({ apiKey, baseURL });
+      const prompt = `Ты — внимательный русскоязычный помощник Finkaif по личным финансам. Отвечай естественно, понятно, с четкой структурой и без лишней воды. Анализируй вопрос и контекст пользователя. Предлагай конкретные действия, распределение сумм или процентные доли. Финансовый контекст: ${JSON.stringify({ transactions, budgets, goals })}`;
+      
+      const r = await client.chat.completions.create({
+        model,
+        temperature: 0.45,
+        messages: [
+          { role: "system", content: prompt },
+          { role: "user", content: question }
+        ]
+      });
+      answer = r.choices[0]?.message?.content || "Не удалось получить ответ от нейросети.";
+    } else {
+      answer = generateBuiltinAdvice(question, transactions, budgets, goals);
+    }
+
     await db.query("insert into chat_messages(user_id,role,content) values($1,$2,$3),($1,$4,$5)", [req.user.id, "user", question, "assistant", answer]);
     res.json({ answer });
   } catch (e) {
     console.error("Assistant error:", e);
-    res.status(500).json({ error: "Не удалось получить ответ ИИ. Проверьте OPENAI_API_KEY." });
+    res.status(500).json({ error: "Ошибка ответа ИИ: " + (e.message || "Проверьте ключ API в Railway Variables.") });
   }
 });
 
