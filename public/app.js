@@ -141,7 +141,17 @@ const pluralizeCats = n => {
 function pointsToSmoothPath(pts) {
   if (!pts || pts.length === 0) return '';
   if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
-  if (pts.length === 2) return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
+  if (pts.length === 2) {
+    pts.__splineSegments = [{
+      x0: pts[0].x, y0: pts[0].y,
+      cp1x: pts[0].x + (pts[1].x - pts[0].x) / 3, cp1y: pts[0].y + (pts[1].y - pts[0].y) / 3,
+      cp2x: pts[1].x - (pts[1].x - pts[0].x) / 3, cp2y: pts[1].y - (pts[1].y - pts[0].y) / 3,
+      x1: pts[1].x, y1: pts[1].y,
+      bal0: pts[0].balance, bal1: pts[1].balance,
+      pt0: pts[0], pt1: pts[1]
+    }];
+    return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
+  }
 
   const n = pts.length;
   const d = [];
@@ -165,6 +175,7 @@ function pointsToSmoothPath(pts) {
   }
   m.push(d[n - 2]);
 
+  const segments = [];
   let path = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
   for (let i = 0; i < n - 1; i++) {
     const p1 = pts[i];
@@ -175,8 +186,29 @@ function pointsToSmoothPath(pts) {
     const cp2x = p2.x - deltaX / 3;
     const cp2y = p2.y - m[i + 1] * (deltaX / 3);
     path += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+    segments.push({
+      x0: p1.x,
+      y0: p1.y,
+      cp1x,
+      cp1y,
+      cp2x,
+      cp2y,
+      x1: p2.x,
+      y1: p2.y,
+      bal0: p1.balance,
+      bal1: p2.balance,
+      pt0: p1,
+      pt1: p2
+    });
   }
+  pts.__splineSegments = segments;
   return path;
+}
+
+// Continuous Cubic Bezier evaluator along curve for smooth scrubbing
+function evaluateBezierY(y0, cp1y, cp2y, y1, t) {
+  const mt = 1 - t;
+  return (mt * mt * mt * y0) + (3 * mt * mt * t * cp1y) + (3 * mt * t * t * cp2y) + (t * t * t * y1);
 }
 
 // Financial Rank Calculator
@@ -333,7 +365,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.7</span>
+          <span class="brand-badge">8.8</span>
         </div>
       </div>
 
@@ -567,27 +599,20 @@ function renderHomeView() {
     `;
   }).join('');
 
-  // Terminal Beacon on the latest point
+  // HTML-based live terminal beacon (100% round circle, zero SVG distortion)
   const terminalBeaconHtml = `
-    <g class="chart-terminal-beacon">
-      <circle cx="${lastPt.x}" cy="${lastPt.y}" r="8" fill="${accentColor}" opacity="0.25" class="beacon-pulse" />
-      <circle cx="${lastPt.x}" cy="${lastPt.y}" r="3.5" fill="${accentColor}" stroke="#0F141C" stroke-width="1.8" />
-    </g>
+    <div id="home-terminal-beacon" class="home-terminal-beacon" style="left: ${((lastPt.x / svgW) * 100).toFixed(2)}%; top: ${((lastPt.y / svgH) * 100).toFixed(2)}%;">
+      <div class="terminal-pulse-ring" style="border-color: ${accentColor}; background: ${isDeficit ? 'rgba(251, 113, 133, 0.15)' : 'rgba(45, 212, 191, 0.15)'};"></div>
+      <div class="terminal-core-dot" style="background: ${accentColor}; box-shadow: 0 0 6px ${accentColor};"></div>
+    </div>
   `;
 
-  // Intermediate Activity Pips
+  // HTML-based activity micro-pips (100% round circles, zero aspect distortion)
   const activityPipsHtml = points.slice(0, -1).filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
-    let pipColor = pt.inc > 0 && pt.exp === 0 ? '#34D399' : (pt.exp > 0 && pt.inc === 0 ? '#FB7185' : '#2DD4BF');
-    return `
-      <circle
-        class="home-chart-pip"
-        cx="${pt.x}" cy="${pt.y}"
-        r="3"
-        fill="${pipColor}"
-        stroke="#0F141C"
-        stroke-width="1.5"
-      />
-    `;
+    let pipColor = pt.inc > 0 && pt.exp === 0 ? '#34D399' : (pt.exp > 0 && pt.inc === 0 ? '#FB7185' : accentColor);
+    const leftPct = ((pt.x / svgW) * 100).toFixed(2);
+    const topPct = ((pt.y / svgH) * 100).toFixed(2);
+    return `<div class="home-activity-pip" style="left: ${leftPct}%; top: ${topPct}%; background: ${pipColor};"></div>`;
   }).join('');
 
   // Quick categories breakdown for teaser
@@ -680,17 +705,6 @@ function renderHomeView() {
           <path d="${areaPath}" fill="url(#chartGrad)" />
           <path d="${curvePath}" fill="none" stroke="${accentColor}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#homeGlow)" />
 
-          <!-- Dynamic Scrubber Guide Elements (Revealed on hover) -->
-          <line id="home-scrubber-line" class="home-scrubber-line" x1="0" y1="${padTop}" x2="0" y2="${svgH - padBottom}" />
-          <circle id="home-scrubber-ring" class="home-scrubber-ring" cx="0" cy="0" r="10" />
-          <circle id="home-scrubber-dot" class="home-scrubber-dot" cx="0" cy="0" r="4.5" />
-
-          <!-- Terminal Live Beacon -->
-          ${terminalBeaconHtml}
-
-          <!-- Intermediate Micro-Pips -->
-          ${activityPipsHtml}
-
           <!-- Date Ticks Axis -->
           ${axisBaselineHtml}
           ${dateLabelsHtml}
@@ -698,6 +712,16 @@ function renderHomeView() {
           <!-- Full Width Interactive Hover Overlay -->
           <rect id="home-chart-overlay" class="home-chart-overlay" x="0" y="0" width="${svgW}" height="${svgH}" fill="transparent" />
         </svg>
+
+        <!-- HTML-based Perfectly Circular Indicators & Fluid Scrubber (No SVG distortion) -->
+        ${activityPipsHtml}
+        ${terminalBeaconHtml}
+        <div id="home-scrubber-laser" class="home-scrubber-laser" style="background: linear-gradient(180deg, transparent 0%, ${accentColor} 20%, ${accentColor} 80%, transparent 100%);"></div>
+        <div id="home-scrubber-beacon" class="home-scrubber-beacon">
+          <div class="scrubber-pulse-ring" style="border-color: ${accentColor}; background: ${isDeficit ? 'rgba(251, 113, 133, 0.20)' : 'rgba(45, 212, 191, 0.20)'}; box-shadow: 0 0 10px ${glowColor};"></div>
+          <div class="scrubber-core-dot"></div>
+        </div>
+
         <div id="home-chart-tooltip" class="chart-tooltip"></div>
       </div>
     </div>
@@ -2287,93 +2311,102 @@ function bindInteractiveEvents() {
     };
   });
 
-  // Home Balance Chart Dynamic Scrubber & Tooltip
+  // Home Balance Chart Dynamic Continuous Scrubber & Tooltip
   const homeWrap = document.getElementById('home-chart-wrap');
   const homeTooltip = document.getElementById('home-chart-tooltip');
-  const homeScrubberLine = document.getElementById('home-scrubber-line');
-  const homeScrubberDot = document.getElementById('home-scrubber-dot');
-  const homeScrubberRing = document.getElementById('home-scrubber-ring');
+  const homeScrubberLaser = document.getElementById('home-scrubber-laser');
+  const homeScrubberBeacon = document.getElementById('home-scrubber-beacon');
+  const homeTerminalBeacon = document.getElementById('home-terminal-beacon');
   const heroBalVal = document.getElementById('hero-balance-val');
   const heroBalLbl = document.getElementById('hero-balance-lbl');
 
   if (homeWrap && homeTooltip && window.__homePoints && window.__homePoints.length > 0) {
     const pts = window.__homePoints;
+    const svgW = 760;
     const svgH = window.__homeSvgH || 130;
     const baseBalText = heroBalVal ? heroBalVal.getAttribute('data-base') : '';
+    const segments = pts.__splineSegments || [];
 
     homeWrap.onmousemove = e => {
       const rect = homeWrap.getBoundingClientRect();
-      const mouseX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-      const svgW = 760;
-      const scaleX = svgW / rect.width;
-      const targetSvgX = mouseX * scaleX;
+      if (!rect.width || rect.width <= 0) return;
 
-      let closestPt = pts[0];
-      let minDx = Math.abs(pts[0].x - targetSvgX);
-      for (let i = 1; i < pts.length; i++) {
-        const dx = Math.abs(pts[i].x - targetSvgX);
-        if (dx < minDx) {
-          minDx = dx;
-          closestPt = pts[i];
-        }
+      const mousePxX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const targetSvgX = (mousePxX / rect.width) * svgW;
+
+      const minX = pts[0].x;
+      const maxX = pts[pts.length - 1].x;
+      const clampedX = Math.max(minX, Math.min(targetSvgX, maxX));
+
+      // Continuous Bezier Spline evaluation
+      let seg = segments.find(s => clampedX >= s.x0 && clampedX <= s.x1);
+      if (!seg) {
+        if (clampedX <= minX) seg = segments[0];
+        else seg = segments[segments.length - 1];
       }
 
-      const accent = window.__homeAccentColor || '#2DD4BF';
-      const isDef = window.__homeIsDeficit || false;
+      let curBal = pts[0].balance;
+      let svgY = pts[0].y;
+      let activePt = pts[0];
 
-      if (homeScrubberLine) {
-        homeScrubberLine.setAttribute('x1', closestPt.x);
-        homeScrubberLine.setAttribute('x2', closestPt.x);
-        homeScrubberLine.style.stroke = isDef ? 'rgba(251, 113, 133, 0.45)' : 'rgba(45, 212, 191, 0.45)';
-        homeScrubberLine.style.opacity = '1';
+      if (seg) {
+        const segSpan = seg.x1 - seg.x0 || 1;
+        const t = Math.max(0, Math.min(1, (clampedX - seg.x0) / segSpan));
+        svgY = evaluateBezierY(seg.y0, seg.cp1y, seg.cp2y, seg.y1, t);
+        curBal = Math.round(seg.bal0 + (seg.bal1 - seg.bal0) * t);
+        activePt = t < 0.5 ? seg.pt0 : seg.pt1;
       }
-      if (homeScrubberRing) {
-        homeScrubberRing.setAttribute('cx', closestPt.x);
-        homeScrubberRing.setAttribute('cy', closestPt.y);
-        homeScrubberRing.style.stroke = accent;
-        homeScrubberRing.style.fill = isDef ? 'rgba(251, 113, 133, 0.16)' : 'rgba(45, 212, 191, 0.16)';
-        homeScrubberRing.style.opacity = '1';
+
+      // Exact pixel coordinates in the container
+      const pxX = (clampedX / svgW) * rect.width;
+      const pxY = (svgY / svgH) * rect.height;
+
+      // Glide laser line and beacon smoothly with sub-pixel precision
+      if (homeScrubberLaser) {
+        homeScrubberLaser.style.left = `${pxX}px`;
+        homeScrubberLaser.style.opacity = '1';
       }
-      if (homeScrubberDot) {
-        homeScrubberDot.setAttribute('cx', closestPt.x);
-        homeScrubberDot.setAttribute('cy', closestPt.y);
-        homeScrubberDot.style.stroke = accent;
-        homeScrubberDot.style.opacity = '1';
+
+      if (homeScrubberBeacon) {
+        homeScrubberBeacon.style.left = `${pxX}px`;
+        homeScrubberBeacon.style.top = `${pxY}px`;
+        homeScrubberBeacon.style.opacity = '1';
+      }
+
+      if (homeTerminalBeacon) {
+        homeTerminalBeacon.style.opacity = '0';
       }
 
       if (heroBalVal) {
-        heroBalVal.innerText = money(closestPt.balance);
+        heroBalVal.innerText = money(curBal);
       }
       if (heroBalLbl) {
-        heroBalLbl.innerText = `Остаток на ${closestPt.dayDisplay || closestPt.dayLabel}`;
+        heroBalLbl.innerText = `Остаток на ${activePt.dayDisplay || activePt.dayLabel}`;
       }
 
       let deltaHtml = '';
-      if (closestPt.inc > 0 && closestPt.exp > 0) {
+      if (activePt.inc > 0 && activePt.exp > 0) {
         deltaHtml = `
           <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <span class="chart-tooltip-badge" style="color: var(--accent-jade); background: rgba(45,212,191,0.12); padding: 2px 6px; border-radius: 4px;">+${money(closestPt.inc)}</span>
-            <span class="chart-tooltip-badge" style="color: var(--accent-coral); background: rgba(251,113,133,0.12); padding: 2px 6px; border-radius: 4px;">−${money(closestPt.exp)}</span>
+            <span class="chart-tooltip-badge" style="color: var(--accent-jade); background: rgba(45,212,191,0.12); padding: 2px 6px; border-radius: 4px;">+${money(activePt.inc)}</span>
+            <span class="chart-tooltip-badge" style="color: var(--accent-coral); background: rgba(251,113,133,0.12); padding: 2px 6px; border-radius: 4px;">−${money(activePt.exp)}</span>
           </div>
         `;
-      } else if (closestPt.inc > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade); margin-top: 4px;">+${money(closestPt.inc)} доход</div>`;
-      } else if (closestPt.exp > 0) {
-        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-coral); margin-top: 4px;">−${money(closestPt.exp)} расход</div>`;
+      } else if (activePt.inc > 0) {
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade); margin-top: 4px;">+${money(activePt.inc)} доход</div>`;
+      } else if (activePt.exp > 0) {
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-coral); margin-top: 4px;">−${money(activePt.exp)} расход</div>`;
       } else {
         deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">Операций в этот день не было</div>`;
       }
 
       homeTooltip.innerHTML = `
-        <div class="chart-tooltip-title">${esc(closestPt.fullDate || closestPt.dayDisplay || closestPt.dayLabel)}</div>
-        <div class="chart-tooltip-value num">${money(closestPt.balance)}</div>
+        <div class="chart-tooltip-title">${esc(activePt.fullDate || activePt.dayDisplay || activePt.dayLabel)}</div>
+        <div class="chart-tooltip-value num">${money(curBal)}</div>
         ${deltaHtml}
       `;
 
-      const pxX = (closestPt.x / svgW) * rect.width;
-      const pxY = (closestPt.y / svgH) * rect.height;
-
-      // Keep tooltip centered on point and inside chart area
+      // Center tooltip on cursor, constrained within chart bounds
       const tooltipW = 160;
       let leftPos = pxX;
       if (leftPos + tooltipW / 2 > rect.width) {
@@ -2383,14 +2416,14 @@ function bindInteractiveEvents() {
       }
 
       homeTooltip.style.left = `${leftPos}px`;
-      homeTooltip.style.top = `${Math.max(10, pxY - 10)}px`;
+      homeTooltip.style.top = `${Math.max(8, pxY - 14)}px`;
       homeTooltip.classList.add('visible');
     };
 
     homeWrap.onmouseleave = () => {
-      if (homeScrubberLine) homeScrubberLine.style.opacity = '0';
-      if (homeScrubberRing) homeScrubberRing.style.opacity = '0';
-      if (homeScrubberDot) homeScrubberDot.style.opacity = '0';
+      if (homeScrubberLaser) homeScrubberLaser.style.opacity = '0';
+      if (homeScrubberBeacon) homeScrubberBeacon.style.opacity = '0';
+      if (homeTerminalBeacon) homeTerminalBeacon.style.opacity = '1';
       homeTooltip.classList.remove('visible');
 
       if (heroBalVal && baseBalText) {
