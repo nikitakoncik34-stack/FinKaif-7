@@ -261,22 +261,104 @@ function generateBuiltinAdvice(question, transactions, budgets, goals) {
   return advice;
 }
 
-async function callGemini(apiKey, systemPrompt, userMessage) {
+function buildSystemPrompt(transactions, budgets, goals) {
+  const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount), 0);
+  const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount), 0);
+  const balance = inc - exp;
+
+  const expByCat = {};
+  for (const t of transactions) {
+    if (t.type === "expense") {
+      expByCat[t.category] = (expByCat[t.category] || 0) + Number(t.amount);
+    }
+  }
+
+  const topCats = Object.entries(expByCat)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([cat, amt]) => `• ${cat}: ${Math.round(amt).toLocaleString("ru-RU")} ₽`)
+    .join("\n");
+
+  const budgetsSummary = budgets.length > 0
+    ? budgets.map(b => `• ${b.category}: лимит ${Number(b.limit_amount).toLocaleString("ru-RU")} ₽`).join("\n")
+    : "Лимиты бюджета пока не настроены.";
+
+  const goalsSummary = goals.length > 0
+    ? goals.map(g => `• ${g.name}: накоплено ${Number(g.saved_amount).toLocaleString("ru-RU")} ₽ из ${Number(g.target_amount).toLocaleString("ru-RU")} ₽ (${Math.round((g.saved_amount / g.target_amount) * 100) || 0}%)`).join("\n")
+    : "Целей пока не добавлено.";
+
+  return `Ты — персональный финансовый ментор и ИИ-помощник в приложении **Finkaif** («Финансы в кайф»).
+Твоя цель — помочь пользователю легко, осознанно и без чувства вины управлять своими личными финансами, достигать целей и формировать капитал.
+
+ФИЛОСОФИЯ И МЕТОДОЛОГИЯ FINKAIF:
+1. «Финансы в кайф» — управление деньгами не должно быть унылой экономией на спичках и страданиями. Это инструмент свободы, уверенности и спокойствия.
+2. Не запрещать себе жить, а выделять бюджет: на радости, хобби и комфорт обязательно закладывается процент от дохода.
+3. Правило 50/30/20 как базовый маяк:
+   • 50% — Базовые потребности (жилье, еда, ЖКХ, связь, обязательные платежи).
+   • 30% — Личные желания, комфорт и образ жизни (кафе, покупки, подарки, развлечения).
+   • 20% — Будущее и безопасность (сбережения, закрытие долгов, подушка безопасности, цели).
+4. Принцип «Сначала заплати себе»: откладывать фиксированную сумму сразу при получении дохода, а не то, что останется в конце месяца.
+5. Финансовая подушка безопасности на 3–6 месяцев базовых расходов — основа психологического спокойствия.
+
+РЕАЛЬНЫЕ ФИНАНСОВЫЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ИЗ БАЗЫ FINKAIF:
+• Зафиксировано доходов: ${inc.toLocaleString("ru-RU")} ₽
+• Зафиксировано расходов: ${exp.toLocaleString("ru-RU")} ₽
+• Текущий баланс: ${balance.toLocaleString("ru-RU")} ₽
+• Топ категорий расходов:
+${topCats || "• Нет зафиксированных расходов"}
+• Установленные бюджеты по категориям:
+${budgetsSummary}
+• Финансовые цели:
+${goalsSummary}
+
+ПРАВИЛА ОБЩЕНИЯ И ФОРМАТ ОТВЕТОВ:
+1. Тон: дружелюбный, экспертный, спокойный, подбадривающий, без занудства и нравоучений. Обращайся к пользователю на «ты» или уважительное «вы» по контексту.
+2. Персонализация: ВСЕГДА используй реальные цифры и категории пользователя из данных выше! Если спрашивают «Как распределить доход?» или «Что делать с бюджетом?», приводи расчеты в рублях под его конкретную финансовую ситуацию.
+3. Формат:
+   - Краткий вывод/диагноз ситуации в 1–2 предложениях.
+   - Четкие расчеты по пунктам (с эмодзи и выделением сумм **жирным**).
+   - 1–3 простых действия прямо в приложении Finkaif (например: «Во вкладке Бюджет установи лимит на кафе 15 000 ₽», «Во вкладке Цели создай цель Подушка безопасности»).
+4. Безопасность:
+   - Не давай рискованных инвестиционных рекомендаций (не призывай скупать акции конкретных компаний или крипту).
+   - Никогда не проси и не принимай данные банковских карт, CVV, пароли или смс-коды.`;
+}
+
+async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
+  const contents = [
+    {
+      role: "user",
+      parts: [
+        { text: `[СИСТЕМНАЯ УСТАНОВКА И ОБУЧЕНИЕ МЕНТОРА FINKAIF]\n${systemPrompt}` }
+      ]
+    },
+    {
+      role: "model",
+      parts: [
+        { text: "Принято! Я персональный финансовый ментор Finkaif («Финансы в кайф»). Готов анализировать данные аккаунта, рассчитывать бюджеты и помогать достигать целей легко и с удовольствием." }
+      ]
+    }
+  ];
+
+  for (const msg of history) {
+    contents.push({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }]
+    });
+  }
+
+  contents.push({
+    role: "user",
+    parts: [{ text: userMessage }]
+  });
+
   const body = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: `${systemPrompt}\n\nПользователь спрашивает: ${userMessage}` }
-        ]
-      }
-    ],
+    contents,
     generationConfig: {
-      temperature: 0.45,
-      maxOutputTokens: 1200
+      temperature: 0.5,
+      maxOutputTokens: 1500
     }
   };
 
@@ -299,15 +381,17 @@ app.post("/api/assistant", auth, async (req, res) => {
     const question = String(req.body.question || "").trim();
     if (!question) return res.status(400).json({ error: "Введите вопрос." });
 
-    const [tr, bu, go] = await Promise.all([
+    const [tr, bu, go, prevMsgs] = await Promise.all([
       db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250", [req.user.id]),
       db.query("select category,limit_amount from budgets where user_id=$1", [req.user.id]),
-      db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id])
+      db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id]),
+      db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 8", [req.user.id])
     ]);
 
     const transactions = tr.rows;
     const budgets = bu.rows;
     const goals = go.rows;
+    const history = prevMsgs.rows.reverse();
 
     let apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY;
     let baseURL = process.env.OPENAI_BASE_URL || undefined;
@@ -316,10 +400,10 @@ app.post("/api/assistant", auth, async (req, res) => {
     const isGemini = apiKey && (apiKey.startsWith("AQ.") || apiKey.startsWith("AIza") || process.env.GEMINI_API_KEY);
 
     let answer = "";
-    const prompt = `Ты — внимательный русскоязычный помощник Finkaif по личным финансам. Отвечай естественно, понятно, с четкой структурой и без лишней воды. Анализируй вопрос и контекст пользователя. Предлагай конкретные действия, распределение сумм или процентные доли. Финансовый контекст пользователя: ${JSON.stringify({ transactions, budgets, goals })}`;
+    const prompt = buildSystemPrompt(transactions, budgets, goals);
 
     if (isGemini) {
-      answer = await callGemini(apiKey, prompt, question);
+      answer = await callGemini(apiKey, prompt, question, history);
     } else if (apiKey) {
       if (process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
         baseURL = "https://api.groq.com/openai/v1";
@@ -332,13 +416,16 @@ app.post("/api/assistant", auth, async (req, res) => {
       }
 
       const client = new OpenAI({ apiKey, baseURL });
+      const messages = [
+        { role: "system", content: prompt },
+        ...history.map(m => ({ role: m.role, content: m.content })),
+        { role: "user", content: question }
+      ];
+
       const r = await client.chat.completions.create({
         model,
-        temperature: 0.45,
-        messages: [
-          { role: "system", content: prompt },
-          { role: "user", content: question }
-        ]
+        temperature: 0.5,
+        messages
       });
       answer = r.choices[0]?.message?.content || "Не удалось получить ответ от нейросети.";
     } else {
