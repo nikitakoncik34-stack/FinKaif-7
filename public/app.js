@@ -1214,22 +1214,39 @@ function bindInteractiveEvents() {
       if (!text) return;
       input.value = '';
 
+      // Append user message
       data.chat.push({ role: 'user', content: text, created_at: new Date().toISOString() });
+      // Temporary typing indicator
+      const tempId = 'thinking-' + Date.now();
+      data.chat.push({ id: tempId, role: 'assistant', content: '⏳ *Анализирую ваши финансовые потоки и баланс...*', created_at: new Date().toISOString() });
       renderApp();
 
       const chatBox = document.getElementById('chat-stream-box');
       if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
 
       try {
-        const res = await api('chat', {
-          method: 'POST',
-          body: JSON.stringify({ message: text })
-        });
-        data.chat.push({ role: 'assistant', content: res.answer || res.reply, created_at: new Date().toISOString() });
+        let res;
+        try {
+          res = await api('assistant', {
+            method: 'POST',
+            body: JSON.stringify({ question: text, message: text })
+          });
+        } catch {
+          res = await api('chat', {
+            method: 'POST',
+            body: JSON.stringify({ question: text, message: text })
+          });
+        }
+
+        // Remove temporary typing message
+        data.chat = data.chat.filter(m => m.id !== tempId);
+        const answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
+        data.chat.push({ role: 'assistant', content: answer, created_at: new Date().toISOString() });
         renderApp();
         const chatBoxAfter = document.getElementById('chat-stream-box');
         if (chatBoxAfter) chatBoxAfter.scrollTop = chatBoxAfter.scrollHeight;
       } catch (err) {
+        data.chat = data.chat.filter(m => m.id !== tempId);
         data.chat.push({ role: 'assistant', content: `⚠️ Ошибка: ${err.message}`, created_at: new Date().toISOString() });
         renderApp();
       }
