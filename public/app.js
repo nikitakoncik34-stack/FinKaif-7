@@ -137,22 +137,44 @@ const pluralizeCats = n => {
   return 'категорий';
 };
 
-// Natural Cubic Bezier Spline generator for smooth chart curves
+// Monotone Cubic Spline generator (Fritsch-Carlson) for natural, fluid financial curves
 function pointsToSmoothPath(pts) {
   if (!pts || pts.length === 0) return '';
   if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
   if (pts.length === 2) return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
 
-  let path = `M ${pts[0].x},${pts[0].y}`;
-  for (let i = 1; i < pts.length; i++) {
-    const prev = pts[i - 1];
-    const curr = pts[i];
-    const dx = curr.x - prev.x;
-    const cp1x = prev.x + dx * 0.36;
-    const cp1y = prev.y;
-    const cp2x = curr.x - dx * 0.36;
-    const cp2y = curr.y;
-    path += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${curr.x.toFixed(1)},${curr.y.toFixed(1)}`;
+  const n = pts.length;
+  const d = [];
+  const dx = [];
+  for (let i = 0; i < n - 1; i++) {
+    const deltaX = pts[i + 1].x - pts[i].x;
+    const deltaY = pts[i + 1].y - pts[i].y;
+    dx.push(deltaX);
+    d.push(deltaX === 0 ? 0 : deltaY / deltaX);
+  }
+
+  const m = [d[0]];
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) {
+      m.push(0);
+    } else {
+      const w1 = 2 * dx[i] + dx[i - 1];
+      const w2 = dx[i] + 2 * dx[i - 1];
+      m.push((w1 + w2) / (w1 / d[i - 1] + w2 / d[i]));
+    }
+  }
+  m.push(d[n - 2]);
+
+  let path = `M ${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const deltaX = dx[i];
+    const cp1x = p1.x + deltaX / 3;
+    const cp1y = p1.y + m[i] * (deltaX / 3);
+    const cp2x = p2.x - deltaX / 3;
+    const cp2y = p2.y - m[i + 1] * (deltaX / 3);
+    path += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
   }
   return path;
 }
@@ -311,7 +333,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.6</span>
+          <span class="brand-badge">8.7</span>
         </div>
       </div>
 
@@ -455,12 +477,17 @@ function renderHomeView() {
   const minVal = Math.min(...pointsWithBal.map(p => p.balance));
   const maxVal = Math.max(...pointsWithBal.map(p => p.balance));
   const balDiff = maxVal - minVal;
+  const netDelta = pointsWithBal[pointsWithBal.length - 1].balance - pointsWithBal[0].balance;
+
+  const isDeficit = balance < 0;
+  const accentColor = isDeficit ? '#FB7185' : '#2DD4BF';
+  const glowColor = isDeficit ? 'rgba(251, 113, 133, 0.45)' : 'rgba(45, 212, 191, 0.45)';
 
   const svgW = 760;
   const svgH = 130;
-  const padX = 26;
-  const padTop = 18;
-  const padBottom = 26;
+  const padX = 28;
+  const padTop = 22;
+  const padBottom = 32;
   const plotW = svgW - 2 * padX;
   const plotH = svgH - padTop - padBottom;
 
@@ -470,7 +497,7 @@ function renderHomeView() {
     if (balDiff === 0) {
       y = Math.round(padTop + plotH * 0.5);
     } else {
-      const margin = Math.max(balDiff * 0.15, 100);
+      const margin = Math.max(balDiff * 0.20, 100);
       const yMin = minVal - margin;
       const yMax = maxVal + margin;
       y = Math.round(svgH - padBottom - ((p.balance - yMin) / (yMax - yMin)) * plotH);
@@ -481,9 +508,13 @@ function renderHomeView() {
   window.__homePoints = points;
   window.__homeCurrentBalance = balance;
   window.__homeSvgH = svgH;
+  window.__homeAccentColor = accentColor;
+  window.__homeIsDeficit = isDeficit;
 
+  const firstPt = points[0];
+  const lastPt = points[points.length - 1];
   const curvePath = pointsToSmoothPath(points);
-  const areaPath = `${curvePath} L ${points[points.length - 1].x},${svgH - padBottom} L ${points[0].x},${svgH - padBottom} Z`;
+  const areaPath = `${curvePath} L ${lastPt.x},${svgH - padBottom} L ${firstPt.x},${svgH - padBottom} Z`;
 
   // Dynamic reference grid lines
   const gridLevels = [
@@ -492,22 +523,26 @@ function renderHomeView() {
     { y: Math.round(padTop + plotH * 0.95) }
   ];
 
-  // Zero-line indicator if range crosses zero
+  // Zero-line indicator if range crosses zero and doesn't clash with line
   let zeroLineHtml = '';
   if (balDiff > 0) {
-    const margin = Math.max(balDiff * 0.15, 100);
+    const margin = Math.max(balDiff * 0.20, 100);
     const yMin = minVal - margin;
     const yMax = maxVal + margin;
-    if (yMin <= 0 && yMax >= 0) {
+    if (yMin < -100 && yMax > 100) {
       const yZero = Math.round(svgH - padBottom - ((0 - yMin) / (yMax - yMin)) * plotH);
-      zeroLineHtml = `
-        <line class="home-grid-zero" x1="${padX}" y1="${yZero}" x2="${svgW - padX}" y2="${yZero}" stroke="rgba(251, 113, 133, 0.35)" stroke-dasharray="3 3" stroke-width="1.2" />
-        <text x="${svgW - padX}" y="${yZero - 4}" fill="rgba(251, 113, 133, 0.75)" font-size="9" text-anchor="end" font-family="var(--font-sans)" font-weight="600">0 ₽</text>
-      `;
+      if (Math.abs(yZero - firstPt.y) > 16 && Math.abs(yZero - lastPt.y) > 16) {
+        zeroLineHtml = `
+          <line class="home-grid-zero" x1="${padX}" y1="${yZero}" x2="${svgW - padX}" y2="${yZero}" stroke="rgba(255, 255, 255, 0.12)" stroke-dasharray="3 3" stroke-width="1" />
+          <text x="${svgW - padX}" y="${yZero - 4}" fill="#64748B" font-size="9" text-anchor="end" font-family="var(--font-sans)" font-weight="600">0 ₽</text>
+        `;
+      }
     }
   }
 
-  // Generate Date Axis Labels along the bottom
+  // Date Axis Baseline and Labels
+  const axisBaselineHtml = `<line x1="${padX}" y1="${svgH - padBottom + 2}" x2="${svgW - padX}" y2="${svgH - padBottom + 2}" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1" />`;
+
   const dateLabelsHtml = points.map((pt, idx) => {
     let show = false;
     if (period === '7d') show = true;
@@ -515,40 +550,42 @@ function renderHomeView() {
     else show = (idx % 2 === 0 || idx === points.length - 1);
 
     if (!show) return '';
+    const isLatest = (idx === points.length - 1);
     const labelText = pt.dayDisplay || pt.dayLabel;
     return `
+      <line x1="${pt.x}" y1="${svgH - padBottom + 2}" x2="${pt.x}" y2="${svgH - padBottom + 6}" stroke="${isLatest ? accentColor : 'rgba(255, 255, 255, 0.14)'}" stroke-width="1" />
       <text
         class="home-chart-axis-label"
         x="${pt.x}"
         y="${svgH - 8}"
         text-anchor="middle"
-        fill="#64748B"
+        fill="${isLatest ? '#FFFFFF' : '#64748B'}"
         font-size="10"
-        font-weight="500"
+        font-weight="${isLatest ? '700' : '500'}"
         font-family="var(--font-sans)"
       >${esc(labelText)}</text>
     `;
   }).join('');
 
-  // Activity Pips (Refined micro-dots ONLY on days with actual financial operations)
-  const activityPipsHtml = points.filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
-    let pipColor = '#2DD4BF';
-    if (pt.inc > 0 && pt.exp === 0) pipColor = '#34D399';
-    else if (pt.exp > 0 && pt.inc === 0) pipColor = '#FB7185';
+  // Terminal Beacon on the latest point
+  const terminalBeaconHtml = `
+    <g class="chart-terminal-beacon">
+      <circle cx="${lastPt.x}" cy="${lastPt.y}" r="8" fill="${accentColor}" opacity="0.25" class="beacon-pulse" />
+      <circle cx="${lastPt.x}" cy="${lastPt.y}" r="3.5" fill="${accentColor}" stroke="#0F141C" stroke-width="1.8" />
+    </g>
+  `;
 
+  // Intermediate Activity Pips
+  const activityPipsHtml = points.slice(0, -1).filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
+    let pipColor = pt.inc > 0 && pt.exp === 0 ? '#34D399' : (pt.exp > 0 && pt.inc === 0 ? '#FB7185' : '#2DD4BF');
     return `
       <circle
         class="home-chart-pip"
         cx="${pt.x}" cy="${pt.y}"
-        r="3.5"
+        r="3"
         fill="${pipColor}"
         stroke="#0F141C"
-        stroke-width="1.8"
-        data-idx="${pt.idx}"
-        data-date="${esc(pt.fullDate || pt.dayLabel)}"
-        data-bal="${pt.balance}"
-        data-inc="${pt.inc}"
-        data-exp="${pt.exp}"
+        stroke-width="1.5"
       />
     `;
   }).join('');
@@ -562,6 +599,20 @@ function renderHomeView() {
 
   const recentTransactions = [...data.transactions].slice(0, 6);
 
+  const badgeHtml = isDeficit
+    ? `
+      <div class="hero-balance-badge deficit num">
+        ${icon('trendDown', 13)}
+        <span>Дефицит остатка</span>
+      </div>
+    `
+    : `
+      <div class="hero-balance-badge num">
+        ${icon('trendUp', 13)}
+        <span>${savingsRate}% норма накоплений</span>
+      </div>
+    `;
+
   return `
     <div class="view-header">
       <div>
@@ -572,7 +623,7 @@ function renderHomeView() {
     </div>
 
     <!-- Main Capital Hero Card -->
-    <div class="hero-balance-card">
+    <div class="hero-balance-card ${isDeficit ? 'deficit' : ''}">
       <div class="hero-topline">
         <span class="hero-label" id="hero-balance-lbl">Чистый свободный остаток</span>
         <div class="period-tabs">
@@ -584,9 +635,23 @@ function renderHomeView() {
 
       <div class="hero-balance-row">
         <div class="hero-balance-figure num" id="hero-balance-val" data-base="${money(balance)}">${money(balance)}</div>
-        <div class="hero-balance-badge num">
-          ${icon('trendUp', 13)}
-          <span>${savingsRate}% норма накоплений</span>
+        ${badgeHtml}
+      </div>
+
+      <!-- Contextual Meta Chips Strip -->
+      <div class="hero-chart-meta">
+        <div class="hero-meta-chip">
+          <span class="hero-meta-dot" style="background: ${accentColor};"></span>
+          <span class="hero-meta-lbl">Динамика:</span>
+          <span class="hero-meta-val num ${netDelta >= 0 ? 'inc' : 'exp'}">${netDelta >= 0 ? '+' : ''}${money(netDelta)}</span>
+        </div>
+        <div class="hero-meta-chip muted">
+          <span class="hero-meta-lbl">Старт:</span>
+          <span class="hero-meta-val num">${money(pointsWithBal[0].balance)}</span>
+        </div>
+        <div class="hero-meta-chip muted">
+          <span class="hero-meta-lbl">Текущий:</span>
+          <span class="hero-meta-val num">${money(balance)}</span>
         </div>
       </div>
 
@@ -595,35 +660,39 @@ function renderHomeView() {
         <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" id="home-chart-svg">
           <defs>
             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.26"/>
-              <stop offset="65%" stop-color="#2DD4BF" stop-opacity="0.05"/>
-              <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
+              <stop offset="0%" stop-color="${accentColor}" stop-opacity="0.14"/>
+              <stop offset="70%" stop-color="${accentColor}" stop-opacity="0.02"/>
+              <stop offset="100%" stop-color="${accentColor}" stop-opacity="0.0"/>
             </linearGradient>
             <filter id="homeGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#2DD4BF" flood-opacity="0.45"/>
+              <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="${accentColor}" flood-opacity="0.5"/>
             </filter>
           </defs>
 
           <!-- Horizontal Reference Grid Lines -->
           ${gridLevels.map(g => `
-            <line class="home-grid-line" x1="${padX}" y1="${g.y}" x2="${svgW - padX}" y2="${g.y}" stroke="rgba(255, 255, 255, 0.05)" stroke-dasharray="4 4" stroke-width="1" />
+            <line class="home-grid-line" x1="${padX}" y1="${g.y}" x2="${svgW - padX}" y2="${g.y}" stroke="rgba(255, 255, 255, 0.04)" stroke-dasharray="4 4" stroke-width="1" />
           `).join('')}
 
           ${zeroLineHtml}
 
           <!-- Area & Smooth Trajectory -->
           <path d="${areaPath}" fill="url(#chartGrad)" />
-          <path d="${curvePath}" fill="none" stroke="#2DD4BF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#homeGlow)" />
+          <path d="${curvePath}" fill="none" stroke="${accentColor}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#homeGlow)" />
 
           <!-- Dynamic Scrubber Guide Elements (Revealed on hover) -->
           <line id="home-scrubber-line" class="home-scrubber-line" x1="0" y1="${padTop}" x2="0" y2="${svgH - padBottom}" />
           <circle id="home-scrubber-ring" class="home-scrubber-ring" cx="0" cy="0" r="10" />
           <circle id="home-scrubber-dot" class="home-scrubber-dot" cx="0" cy="0" r="4.5" />
 
-          <!-- Micro-Pips (Only on days with real operations) -->
+          <!-- Terminal Live Beacon -->
+          ${terminalBeaconHtml}
+
+          <!-- Intermediate Micro-Pips -->
           ${activityPipsHtml}
 
           <!-- Date Ticks Axis -->
+          ${axisBaselineHtml}
           ${dateLabelsHtml}
 
           <!-- Full Width Interactive Hover Overlay -->
@@ -2249,19 +2318,26 @@ function bindInteractiveEvents() {
         }
       }
 
+      const accent = window.__homeAccentColor || '#2DD4BF';
+      const isDef = window.__homeIsDeficit || false;
+
       if (homeScrubberLine) {
         homeScrubberLine.setAttribute('x1', closestPt.x);
         homeScrubberLine.setAttribute('x2', closestPt.x);
+        homeScrubberLine.style.stroke = isDef ? 'rgba(251, 113, 133, 0.45)' : 'rgba(45, 212, 191, 0.45)';
         homeScrubberLine.style.opacity = '1';
       }
       if (homeScrubberRing) {
         homeScrubberRing.setAttribute('cx', closestPt.x);
         homeScrubberRing.setAttribute('cy', closestPt.y);
+        homeScrubberRing.style.stroke = accent;
+        homeScrubberRing.style.fill = isDef ? 'rgba(251, 113, 133, 0.16)' : 'rgba(45, 212, 191, 0.16)';
         homeScrubberRing.style.opacity = '1';
       }
       if (homeScrubberDot) {
         homeScrubberDot.setAttribute('cx', closestPt.x);
         homeScrubberDot.setAttribute('cy', closestPt.y);
+        homeScrubberDot.style.stroke = accent;
         homeScrubberDot.style.opacity = '1';
       }
 
