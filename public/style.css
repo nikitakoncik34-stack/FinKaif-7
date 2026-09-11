@@ -1739,12 +1739,16 @@ html, body {
 
 .donut-segment {
   cursor: pointer;
-  transition: stroke-width 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+  transition: stroke-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease, filter 0.22s ease;
 }
 
 .donut-segment:hover, .donut-segment.focused {
   opacity: 1;
   filter: drop-shadow(0 0 8px currentColor);
+}
+
+.donut-segment.dimmed {
+  opacity: 0.25;
 }
 
 .donut-center-info {
@@ -1806,9 +1810,13 @@ html, body {
   transition: all 0.2s ease;
 }
 
-.donut-cat-item:hover, .donut-cat-item.selected {
-  background: rgba(255, 255, 255, 0.05);
+.donut-cat-item:hover, .donut-cat-item.hovered, .donut-cat-item.selected {
+  background: rgba(255, 255, 255, 0.06);
   border-color: var(--border-medium);
+}
+
+.donut-cat-item.dimmed {
+  opacity: 0.35;
 }
 
 .donut-cat-head {
@@ -1899,6 +1907,7 @@ html, body {
 
 .cashflow-chart-box {
   margin: 14px 0;
+  position: relative;
 }
 
 .mom-strip {
@@ -2260,4 +2269,58 @@ html, body {
   .user-btn {
     padding: 3px 7px 3px 3px;
   }
+}
+
+/* ==========================================================================
+   INTERACTIVE CHART TOOLTIPS & SVG POINTS
+   ========================================================================== */
+.home-chart-pt, .cf-pt {
+  cursor: pointer;
+  transition: r 0.18s cubic-bezier(0.16, 1, 0.3, 1), stroke-width 0.18s ease;
+}
+
+.home-chart-pt:hover, .cf-pt:hover {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(20, 26, 35, 0.95);
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  z-index: 100;
+  opacity: 0;
+  transform: translate(-50%, -100%) translateY(-8px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.chart-tooltip.visible {
+  opacity: 1;
+  transform: translate(-50%, -100%) translateY(-14px);
+}
+
+.chart-tooltip-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+
+.chart-tooltip-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.chart-tooltip-badge {
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
 }
