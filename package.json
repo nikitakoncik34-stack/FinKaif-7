@@ -1,1 +1,19 @@
-{"name":"finkaif-railway-fixed","version":"0.6.1","private":true,"type":"module","scripts":{"start":"node server.js"},"dependencies":{"bcryptjs":"^2.4.3","cookie-parser":"^1.4.7","dotenv":"^16.4.7","express":"^4.21.2","jsonwebtoken":"^9.0.2","openai":"^4.85.1","pg":"^8.13.3"}}
+{
+  "name": "finkaif-railway-fixed",
+  "version": "0.6.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prestart": "node db/migrate.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "openai": "^4.85.1",
+    "pg": "^8.13.3"
+  }
+}
