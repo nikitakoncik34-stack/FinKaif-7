@@ -91,8 +91,41 @@ const formatMarkdown = s => {
     .replace(/\n/g, '<br>');
 };
 
-// Safe ISO Date helper (YYYY-MM-DD)
-const getTxIso = t => String(t?.occurred_on || '').slice(0, 10);
+// Local Date YYYY-MM-DD helper without UTC timezone distortion
+const toDateIso = d => {
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Safe ISO Date extractor (YYYY-MM-DD) from string, Date or object
+const getTxIso = t => {
+  if (!t) return '';
+  const val = t.occurred_on || t.date || '';
+  const s = String(val);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return toDateIso(d);
+  return s.slice(0, 10);
+};
+
+const defaultCategories = [
+  'Продукты', 'Рестораны', 'Кафе', 'Транспорт', 'Такси',
+  'Подписки', 'Здоровье', 'Спорт', 'Покупки', 'Жилье',
+  'ЖКХ', 'Путешествия', 'Развлечения', 'Авто', 'Инвестиции'
+];
+
+const getAllCategories = () => {
+  const cats = new Set(defaultCategories);
+  (data.transactions || []).forEach(t => {
+    if (t.category && String(t.category).trim()) {
+      cats.add(String(t.category).trim());
+    }
+  });
+  return Array.from(cats);
+};
 
 // Russian pluralization helper for categories
 const pluralizeCats = n => {
@@ -278,7 +311,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.4</span>
+          <span class="brand-badge">8.5</span>
         </div>
       </div>
 
@@ -380,7 +413,7 @@ function renderHomeView() {
     const numDays = period === '7d' ? 7 : 30;
     for (let i = numDays - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = toDateIso(d);
       const dayExp = data.transactions
         .filter(t => t.type === 'expense' && getTxIso(t) === iso)
         .reduce((s, t) => s + Number(t.amount), 0);
@@ -438,8 +471,11 @@ function renderHomeView() {
       const yMax = maxVal + margin;
       y = Math.round(svgH - padY - ((p.balance - yMin) / (yMax - yMin)) * plotH);
     }
-    return { x, y, ...p };
+    return { x, y, idx, ...p };
   });
+
+  window.__homePoints = points;
+  window.__homeCurrentBalance = balance;
 
   const curvePath = pointsToSmoothPath(points);
   const areaPath = `${curvePath} L ${points[points.length - 1].x},${svgH} L ${points[0].x},${svgH} Z`;
@@ -465,7 +501,7 @@ function renderHomeView() {
     <!-- Main Capital Hero Card -->
     <div class="hero-balance-card">
       <div class="hero-topline">
-        <span class="hero-label">Чистый свободный остаток</span>
+        <span class="hero-label" id="hero-balance-lbl">Чистый свободный остаток</span>
         <div class="period-tabs">
           <button class="period-tab ${period === '7d' ? 'active' : ''}" data-period="7d">7 дней</button>
           <button class="period-tab ${period === '30d' ? 'active' : ''}" data-period="30d">30 дней</button>
@@ -474,16 +510,16 @@ function renderHomeView() {
       </div>
 
       <div class="hero-balance-row">
-        <div class="hero-balance-figure num">${money(balance)}</div>
+        <div class="hero-balance-figure num" id="hero-balance-val" data-base="${money(balance)}">${money(balance)}</div>
         <div class="hero-balance-badge num">
           ${icon('trendUp', 13)}
           <span>${savingsRate}% норма накоплений</span>
         </div>
       </div>
 
-      <!-- Clean Cashflow Curve -->
+      <!-- Clean Dynamic Cashflow Curve -->
       <div class="hero-chart-container" id="home-chart-wrap">
-        <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+        <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" id="home-chart-svg">
           <defs>
             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.28"/>
@@ -492,6 +528,11 @@ function renderHomeView() {
           </defs>
           <path d="${areaPath}" fill="url(#chartGrad)" />
           <path d="${curvePath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />
+
+          <!-- Dynamic Scrubber Guide Elements -->
+          <line id="home-scrubber-line" class="home-scrubber-line" x1="0" y1="0" x2="0" y2="${svgH}" />
+          <circle id="home-scrubber-dot" class="home-scrubber-dot" cx="0" cy="0" r="5" />
+
           ${points.map(pt => `
             <circle
               class="home-chart-pt"
@@ -500,12 +541,15 @@ function renderHomeView() {
               fill="#141A23"
               stroke="#2DD4BF"
               stroke-width="2"
+              data-idx="${pt.idx}"
               data-date="${esc(pt.fullDate || pt.dayLabel)}"
               data-bal="${pt.balance}"
               data-inc="${pt.inc}"
               data-exp="${pt.exp}"
             />
           `).join('')}
+
+          <rect id="home-chart-overlay" class="home-chart-overlay" x="0" y="0" width="${svgW}" height="${svgH}" fill="transparent" />
         </svg>
         <div id="home-chart-tooltip" class="chart-tooltip"></div>
       </div>
@@ -615,14 +659,16 @@ function renderAnalyticsView() {
 
   if (analyticsPeriod === '7d') {
     daysCount = 7;
-    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).toISOString().slice(0, 10);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const since = toDateIso(d);
     periodTxs = data.transactions.filter(t => getTxIso(t) >= since);
   } else if (analyticsPeriod === '30d') {
     daysCount = 30;
-    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29).toISOString().slice(0, 10);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    const since = toDateIso(d);
     periodTxs = data.transactions.filter(t => getTxIso(t) >= since);
   } else if (analyticsPeriod === 'month') {
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const monthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
     periodTxs = data.transactions.filter(t => getTxIso(t) >= monthStart);
     daysCount = Math.max(1, now.getDate());
   } else {
@@ -682,11 +728,11 @@ function renderAnalyticsView() {
     '#94A3B8'  // Slate Muted
   ];
 
-  // SVG Donut Slices Math with crisp gaps and zero bleed
-  const radius = 58;
-  const circ = 2 * Math.PI * radius; // ~364.42
+  // SVG Donut Slices Math with crisp gaps and zero bleed (Radius 70 -> 124px inner hole diameter)
+  const radius = 70;
+  const circ = 2 * Math.PI * radius; // ~439.82
   let accumulatedOffset = 0;
-  const gap = sortedCats.length > 1 ? 3 : 0;
+  const gap = sortedCats.length > 1 ? 4 : 0;
   const totalGaps = gap * sortedCats.length;
   const usableCirc = Math.max(10, circ - totalGaps);
 
@@ -712,9 +758,9 @@ function renderAnalyticsView() {
   const targetDonut = activeAnalyticsCat ? donutSlices.find(s => s.cat === activeAnalyticsCat) : null;
 
   // Month-over-Month calculation
-  const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-  const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().slice(0, 10);
+  const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
+  const prevMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const prevMonthSameDay = toDateIso(new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()));
 
   const curMonthExp = data.transactions
     .filter(t => t.type === 'expense' && getTxIso(t) >= curMonthStart)
@@ -758,7 +804,7 @@ function renderAnalyticsView() {
     const chartDays = analyticsPeriod === '7d' ? 7 : (analyticsPeriod === 'month' ? Math.max(7, now.getDate()) : 30);
     for (let i = chartDays - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = toDateIso(d);
       const dExp = data.transactions
         .filter(t => t.type === 'expense' && getTxIso(t) === iso)
         .reduce((s, t) => s + Number(t.amount), 0);
@@ -790,8 +836,10 @@ function renderAnalyticsView() {
     const x = Math.round(padX + (idx / (cashflowPoints.length - 1 || 1)) * usableW);
     const yInc = Math.round(baselineY - (p.inc / cfMax) * plotH);
     const yExp = Math.round(baselineY - (p.exp / cfMax) * plotH);
-    return { x, yInc, yExp, ...p };
+    return { x, yInc, yExp, idx, ...p };
   });
+
+  window.__cfPoints = cfCoords;
 
   const incPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yInc })));
   const incArea = cfCoords.length > 0
@@ -881,10 +929,10 @@ function renderAnalyticsView() {
         </div>
 
         <div class="donut-layout">
-          <!-- SVG Donut Canvas -->
+          <!-- SVG Donut Canvas (200x200 with 124px inner hole) -->
           <div class="donut-chart-box">
-            <svg class="donut-svg" viewBox="0 0 170 170">
-              <circle cx="85" cy="85" r="${radius}" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="16" />
+            <svg class="donut-svg" viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="${radius}" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="16" />
               ${donutSlices.length > 0 ? donutSlices.map(s => `
                 <circle
                   class="donut-segment ${(activeAnalyticsCat === s.cat) ? 'focused' : ''}"
@@ -892,30 +940,31 @@ function renderAnalyticsView() {
                   data-amt="${s.amt}"
                   data-pct="${s.pct}"
                   data-icon="${s.icon}"
-                  cx="85" cy="85" r="${radius}"
+                  cx="100" cy="100" r="${radius}"
                   fill="none"
                   stroke="${s.color}"
-                  stroke-width="${activeAnalyticsCat === s.cat ? 22 : 16}"
+                  stroke-width="${activeAnalyticsCat === s.cat ? 20 : 16}"
                   stroke-dasharray="${s.sliceLen} ${Math.max(0.1, circ - s.sliceLen)}"
                   stroke-dashoffset="${-s.offset}"
                   stroke-linecap="butt"
-                  transform="rotate(-90 85 85)"
+                  transform="rotate(-90 100 100)"
                 />
               `).join('') : `
-                <circle cx="85" cy="85" r="${radius}" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14" stroke-dasharray="6 6" />
+                <circle cx="100" cy="100" r="${radius}" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14" stroke-dasharray="6 6" />
               `}
             </svg>
 
-            <!-- Center Readout -->
+            <!-- Center Readout (Always perfectly fits inside the 124px inner hole without overflowing) -->
             <div class="donut-center-info" id="donut-center-info" data-default-amt="${pExp}" data-default-count="${sortedCats.length}">
               ${targetDonut ? `
                 <div class="donut-center-icon">${targetDonut.icon}</div>
                 <div class="donut-center-amt num">${money(targetDonut.amt)}</div>
-                <div class="donut-center-lbl">${esc(targetDonut.cat)} (${targetDonut.pct}%)</div>
+                <div class="donut-center-cat" title="${esc(targetDonut.cat)}">${esc(targetDonut.cat)}</div>
+                <div class="donut-center-badge">${targetDonut.pct}% трат</div>
               ` : `
                 <div class="donut-center-lbl">ВСЕГО ТРАТ</div>
                 <div class="donut-center-amt num">${money(pExp)}</div>
-                <div class="donut-center-sub">${sortedCats.length} ${pluralizeCats(sortedCats.length)}</div>
+                <div class="donut-center-badge jade">${sortedCats.length} ${pluralizeCats(sortedCats.length)}</div>
               `}
             </div>
           </div>
@@ -953,7 +1002,7 @@ function renderAnalyticsView() {
         <div class="card-title-row">
           <div>
             <h3 class="card-title">Денежный поток (Cashflow)</h3>
-            <p class="card-desc">Сравнение поступлений и списаний по дням</p>
+            <p class="card-desc">Сравнение поступлений и списаний по дням с интерактивным курсором</p>
           </div>
           <div class="cashflow-legend-pills">
             <span class="cf-pill inc"><span class="cf-dot" style="background: #2DD4BF;"></span> Доходы</span>
@@ -962,7 +1011,7 @@ function renderAnalyticsView() {
         </div>
 
         <div class="cashflow-chart-box" id="cf-chart-wrap">
-          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" style="width: 100%; height: 160px; overflow: visible;">
+          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" id="cf-chart-svg" style="width: 100%; height: 160px; overflow: visible;">
             <defs>
               <linearGradient id="cfIncGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.25"/>
@@ -985,6 +1034,11 @@ function renderAnalyticsView() {
             ${expArea ? `<path d="${expArea}" fill="url(#cfExpGrad)" />` : ''}
             ${expPath ? `<path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />` : ''}
 
+            <!-- Dynamic Scrubber Guide Elements -->
+            <line id="cf-scrubber-line" class="cf-scrubber-line" x1="0" y1="0" x2="0" y2="${baselineY}" />
+            <circle id="cf-scrubber-inc" class="cf-scrubber-dot inc" cx="0" cy="0" r="5" />
+            <circle id="cf-scrubber-exp" class="cf-scrubber-dot exp" cx="0" cy="0" r="5" />
+
             <!-- Interactive Dots & Clean Labels -->
             ${cfCoords.map((pt, idx) => {
               const showLabel = cfCoords.length <= 8
@@ -992,11 +1046,13 @@ function renderAnalyticsView() {
                 || (cfCoords.length > 15 && (idx % 5 === 0 || idx === cfCoords.length - 1));
 
               return `
-                ${pt.inc > 0 ? `<circle class="cf-pt inc" cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
-                ${pt.exp > 0 ? `<circle class="cf-pt exp" cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
-                ${showLabel ? `<text x="${pt.x}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
+                ${pt.inc > 0 ? `<circle class="cf-pt inc" cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2" data-idx="${idx}" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
+                ${pt.exp > 0 ? `<circle class="cf-pt exp" cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2" data-idx="${idx}" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
+                ${showLabel ? `<text x="${pt.x}" y="${cfH - 4}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
               `;
             }).join('')}
+
+            <rect id="cf-chart-overlay" class="cf-chart-overlay" x="0" y="0" width="${cfW}" height="${cfH}" fill="transparent" />
           </svg>
           <div id="cf-chart-tooltip" class="chart-tooltip"></div>
         </div>
@@ -1061,9 +1117,13 @@ function renderTransactionsView() {
     return true;
   });
 
+  const txInc = filtered.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const txExp = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  const txNet = txInc - txExp;
+
   const groups = {};
   filtered.forEach(t => {
-    const d = t.occurred_on || 'Не указана';
+    const d = getTxIso(t) || 'Не указана';
     if (!groups[d]) groups[d] = [];
     groups[d].push(t);
   });
@@ -1074,12 +1134,32 @@ function renderTransactionsView() {
     <div class="view-header">
       <div>
         <h1 class="view-title">История операций</h1>
-        <p class="view-subtitle">Полный журнал поступлений и списаний средств с быстрым поиском.</p>
+        <p class="view-subtitle">Полный журнал поступлений и списаний средств с быстрым поиском и итогами.</p>
       </div>
       <button class="btn-primary" id="btn-add-tx-view">
         ${icon('plus', 14)}
         <span>Новая операция</span>
       </button>
+    </div>
+
+    <!-- Summary Metrics Strip for Transactions -->
+    <div class="tx-summary-strip">
+      <div class="tx-summary-card">
+        <span class="tx-summary-lbl">Всего записей</span>
+        <span class="tx-summary-val num">${filtered.length}</span>
+      </div>
+      <div class="tx-summary-card">
+        <span class="tx-summary-lbl">Поступления</span>
+        <span class="tx-summary-val num inc">+${money(txInc)}</span>
+      </div>
+      <div class="tx-summary-card">
+        <span class="tx-summary-lbl">Списания</span>
+        <span class="tx-summary-val num exp">−${money(txExp)}</span>
+      </div>
+      <div class="tx-summary-card">
+        <span class="tx-summary-lbl">Сальдо периода</span>
+        <span class="tx-summary-val num ${txNet >= 0 ? 'inc' : 'exp'}">${txNet >= 0 ? '+' : ''}${money(txNet)}</span>
+      </div>
     </div>
 
     <!-- Search & Filters -->
@@ -1099,14 +1179,26 @@ function renderTransactionsView() {
 
     <!-- Transactions Grouped by Date -->
     <div class="tx-groups">
-      ${sortedDates.length > 0 ? sortedDates.map(dateStr => `
-        <div class="tx-date-group">
-          <div class="tx-date-label">${formatDateLabel(dateStr)}</div>
-          <div class="tx-list">
-            ${groups[dateStr].map(t => renderTxCard(t)).join('')}
+      ${sortedDates.length > 0 ? sortedDates.map(dateStr => {
+        const dayTxs = groups[dateStr];
+        const dayInc = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+        const dayExp = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+
+        return `
+          <div class="tx-date-group">
+            <div class="tx-date-header">
+              <span class="tx-date-title">${formatDateLabel(dateStr)}</span>
+              <div class="tx-date-summary num">
+                ${dayInc > 0 ? `<span class="tx-summary-badge inc">+${money(dayInc)}</span>` : ''}
+                ${dayExp > 0 ? `<span class="tx-summary-badge exp">−${money(dayExp)}</span>` : ''}
+              </div>
+            </div>
+            <div class="tx-list">
+              ${dayTxs.map(t => renderTxCard(t)).join('')}
+            </div>
           </div>
-        </div>
-      `).join('') : `
+        `;
+      }).join('') : `
         <div style="text-align: center; padding: 60px 20px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
           <div style="color: var(--text-muted); margin-bottom: 8px;">Операции не найдены</div>
           <p style="color: var(--text-secondary); font-size: 13px;">Попробуйте изменить поисковый запрос или фильтр.</p>
@@ -1117,16 +1209,30 @@ function renderTransactionsView() {
 }
 
 function formatDateLabel(dStr) {
+  if (!dStr || dStr === 'Не указана') return 'Дата не указана';
   try {
-    const d = new Date(dStr + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const clean = String(dStr).slice(0, 10);
+    const parts = clean.split('-');
+    if (parts.length !== 3) return dStr;
 
-    const diff = Math.round((today - d) / 86400000);
-    if (diff === 0) return 'Сегодня';
-    if (diff === 1) return 'Вчера';
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(y, m, day);
 
-    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' });
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diff = Math.round((today.getTime() - d.getTime()) / 86400000);
+
+    const dayMonthStr = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    const dayName = d.toLocaleDateString('ru-RU', { weekday: 'short' });
+
+    if (diff === 0) return `Сегодня, ${dayMonthStr}`;
+    if (diff === 1) return `Вчера, ${dayMonthStr}`;
+    if (d.getFullYear() === now.getFullYear()) {
+      return `${dayMonthStr}, ${dayName}`;
+    }
+    return `${dayMonthStr} ${y} г.`;
   } catch {
     return dStr;
   }
@@ -1168,12 +1274,14 @@ function renderTxCard(t) {
    ========================================================================== */
 function renderBudgetsView() {
   const now = new Date();
-  const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1);
 
   // Calculate actual spending in current month per category
   const actualSpending = {};
   data.transactions
-    .filter(t => t.type === 'expense' && t.occurred_on >= curMonthStart)
+    .filter(t => t.type === 'expense' && getTxIso(t) >= curMonthStart)
     .forEach(t => {
       actualSpending[t.category] = (actualSpending[t.category] || 0) + Number(t.amount);
     });
@@ -1182,11 +1290,13 @@ function renderBudgetsView() {
   const totalSpent = data.budgets.reduce((s, b) => s + (actualSpending[b.category] || 0), 0);
   const overallPct = totalLimit > 0 ? Math.min(100, Math.round((totalSpent / totalLimit) * 100)) : 0;
 
+  const allAvailableCats = getAllCategories();
+
   return `
     <div class="view-header">
       <div>
         <h1 class="view-title">Лимиты бюджета</h1>
-        <p class="view-subtitle">Контроль месячных расходов без чувства вины и переплат.</p>
+        <p class="view-subtitle">Контроль месячных расходов без чувства вины, дисциплина трат и предупреждения.</p>
       </div>
     </div>
 
@@ -1205,11 +1315,28 @@ function renderBudgetsView() {
       </div>
     </div>
 
-    <!-- Create / Edit Budget Form -->
+    <!-- Create / Edit Budget Form with Category Quick Chips & Datalist -->
     <div class="create-card">
-      <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px;">Установить или обновить лимит</h3>
-      <form id="budget-form" style="display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 12px;">
-        <input class="form-input" id="budget-cat" placeholder="Категория (напр. Продукты)" required>
+      <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px;">Установить или обновить лимит</h3>
+      
+      <!-- Category Quick Chips -->
+      <div class="budget-quick-chips">
+        <span class="budget-quick-lbl">Быстрый выбор:</span>
+        <div class="budget-chips-stream">
+          ${allAvailableCats.slice(0, 10).map(c => `
+            <button type="button" class="budget-chip" data-cat="${esc(c)}">
+              ${getCategoryIcon(c)} <span>${esc(c)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <datalist id="budget-categories-datalist">
+        ${allAvailableCats.map(c => `<option value="${esc(c)}">`).join('')}
+      </datalist>
+
+      <form id="budget-form" style="display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 12px; margin-top: 12px;">
+        <input class="form-input" id="budget-cat" list="budget-categories-datalist" placeholder="Категория (выберите или введите)" required>
         <input class="form-input num" id="budget-limit" type="number" min="1" step="any" placeholder="Сумма лимита (₽)" required>
         <button type="submit" class="btn-primary" style="height: 42px; justify-content: center;">
           ${icon('plus', 14)}
@@ -1227,15 +1354,16 @@ function renderBudgetsView() {
         const rem = lim - spent;
         const isExceeded = rem < 0;
         const catIcon = getCategoryIcon(b.category);
+        const dailyAllowance = Math.max(0, Math.round(rem / daysLeft));
 
         return `
-          <div class="budget-card">
+          <div class="budget-card ${isExceeded ? 'budget-card-exceeded' : ''}">
             <div class="budget-head">
               <div style="display: flex; align-items: center; gap: 10px;">
                 <div class="budget-cat-icon">${catIcon}</div>
                 <div>
                   <div class="budget-cat-title">${esc(b.category)}</div>
-                  <div style="font-size: 11px; color: var(--text-muted);">Месячный лимит</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">Месячный лимит: ${money(lim)}</div>
                 </div>
               </div>
               <button class="budget-delete-btn" data-id="${b.id}" title="Удалить лимит">
@@ -1250,7 +1378,7 @@ function renderBudgetsView() {
             <div class="budget-stats-row num">
               <div>
                 <div style="color: var(--text-muted); font-size: 11px;">Потрачено</div>
-                <div style="font-weight: 700; color: #FFFFFF; font-size: 14px;">${money(spent)}</div>
+                <div style="font-weight: 700; color: #FFFFFF; font-size: 14px;">${money(spent)} (${pct}%)</div>
               </div>
               <div style="text-align: right;">
                 <div style="color: var(--text-muted); font-size: 11px;">${isExceeded ? 'Превышение' : 'Осталось'}</div>
@@ -1259,12 +1387,24 @@ function renderBudgetsView() {
                 </div>
               </div>
             </div>
+
+            <div class="budget-pace-box">
+              ${isExceeded ? `
+                <span class="badge-tag coral" style="width: 100%; justify-content: center;">
+                  ⚠️ Превышение лимита на ${money(Math.abs(rem))}!
+                </span>
+              ` : `
+                <span class="budget-pace-text">
+                  Доступно: <strong class="num" style="color: var(--accent-jade);">${money(dailyAllowance)}</strong> в день (${daysLeft} дн. до конца месяца)
+                </span>
+              `}
+            </div>
           </div>
         `;
       }).join('') : `
         <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
           <div style="color: var(--text-muted); margin-bottom: 8px;">Лимиты пока не заданы</div>
-          <p style="color: var(--text-secondary); font-size: 13px;">Установите лимиты на Продукты, Кафе или Транспорт, чтобы контролировать бюджет.</p>
+          <p style="color: var(--text-secondary); font-size: 13px;">Установите лимиты на Продукты, Кафе или Транспорт, чтобы контролировать бюджет и получать предупреждения при тратах.</p>
         </div>
       `}
     </div>
@@ -1454,6 +1594,8 @@ function renderAssistantView() {
    MODAL 1: NEW OPERATION
    ========================================================================== */
 function renderModal() {
+  const allCats = getAllCategories();
+
   return `
     <div id="tx-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-card">
@@ -1473,6 +1615,10 @@ function renderModal() {
           <span class="cat-chip" data-cat="Дивиденды" data-type="income">📈 Дивиденды</span>
         </div>
 
+        <datalist id="tx-categories-datalist">
+          ${allCats.map(c => `<option value="${esc(c)}">`).join('')}
+        </datalist>
+
         <form id="tx-modal-form">
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
@@ -1484,7 +1630,7 @@ function renderModal() {
             </div>
             <div class="form-group">
               <label class="form-label">Категория</label>
-              <input class="form-input" id="form-category" value="Продукты" placeholder="Напр. Кафе" required>
+              <input class="form-input" id="form-category" list="tx-categories-datalist" value="Продукты" placeholder="Напр. Кафе" required>
             </div>
           </div>
 
@@ -1495,9 +1641,12 @@ function renderModal() {
             </div>
             <div class="form-group">
               <label class="form-label">Дата</label>
-              <input class="form-input" id="form-date" type="date" value="${new Date().toISOString().slice(0, 10)}" required>
+              <input class="form-input" id="form-date" type="date" value="${toDateIso(new Date())}" required>
             </div>
           </div>
+
+          <!-- Live Budget Control Indicator -->
+          <div id="tx-budget-warning" class="tx-budget-banner" style="display: none;"></div>
 
           <div class="form-group">
             <label class="form-label">Описание</label>
@@ -1876,7 +2025,8 @@ function bindInteractiveEvents() {
       center.innerHTML = `
         <div class="donut-center-icon">${icon || '💳'}</div>
         <div class="donut-center-amt num">${money(amt)}</div>
-        <div class="donut-center-lbl">${esc(cat)} (${pct}%)</div>
+        <div class="donut-center-cat" title="${esc(cat)}">${esc(cat)}</div>
+        <div class="donut-center-badge">${pct}% трат</div>
       `;
     } else {
       const defaultAmt = center.getAttribute('data-default-amt') || 0;
@@ -1884,7 +2034,7 @@ function bindInteractiveEvents() {
       center.innerHTML = `
         <div class="donut-center-lbl">ВСЕГО ТРАТ</div>
         <div class="donut-center-amt num">${money(defaultAmt)}</div>
-        <div class="donut-center-sub">${defaultCount} ${pluralizeCats(defaultCount)}</div>
+        <div class="donut-center-badge jade">${defaultCount} ${pluralizeCats(defaultCount)}</div>
       `;
     }
   };
@@ -1899,7 +2049,7 @@ function bindInteractiveEvents() {
         if (s.getAttribute('data-cat') === cat) {
           s.classList.add('focused');
           s.classList.remove('dimmed');
-          s.setAttribute('stroke-width', '22');
+          s.setAttribute('stroke-width', '20');
         } else {
           s.classList.remove('focused');
           s.classList.add('dimmed');
@@ -1920,7 +2070,7 @@ function bindInteractiveEvents() {
         const isAct = s.getAttribute('data-cat') === activeAnalyticsCat;
         s.classList.toggle('focused', isAct);
         s.classList.remove('dimmed');
-        s.setAttribute('stroke-width', isAct ? '22' : '16');
+        s.setAttribute('stroke-width', isAct ? '20' : '16');
       });
       items.forEach(it => {
         const isAct = it.getAttribute('data-cat') === activeAnalyticsCat;
@@ -1990,88 +2140,163 @@ function bindInteractiveEvents() {
     };
   });
 
-  // Home Balance Chart Tooltip
+  // Home Balance Chart Dynamic Scrubber & Tooltip
   const homeWrap = document.getElementById('home-chart-wrap');
   const homeTooltip = document.getElementById('home-chart-tooltip');
-  if (homeWrap && homeTooltip) {
-    $$('.home-chart-pt').forEach(pt => {
-      pt.onmouseenter = () => {
-        const date = pt.getAttribute('data-date');
-        const bal = pt.getAttribute('data-bal');
-        const dInc = Number(pt.getAttribute('data-inc')) || 0;
-        const dExp = Number(pt.getAttribute('data-exp')) || 0;
+  const homeScrubberLine = document.getElementById('home-scrubber-line');
+  const homeScrubberDot = document.getElementById('home-scrubber-dot');
+  const heroBalVal = document.getElementById('hero-balance-val');
+  const heroBalLbl = document.getElementById('hero-balance-lbl');
 
-        let deltaHtml = '';
-        if (dInc > 0 && dExp > 0) {
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(dInc)}</div><div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(dExp)}</div>`;
-        } else if (dInc > 0) {
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(dInc)} доход</div>`;
-        } else if (dExp > 0) {
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(dExp)} расход</div>`;
+  if (homeWrap && homeTooltip && window.__homePoints && window.__homePoints.length > 0) {
+    const pts = window.__homePoints;
+    const baseBalText = heroBalVal ? heroBalVal.getAttribute('data-base') : '';
+
+    homeWrap.onmousemove = e => {
+      const rect = homeWrap.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const svgW = 760;
+      const scaleX = svgW / rect.width;
+      const targetSvgX = mouseX * scaleX;
+
+      let closestPt = pts[0];
+      let minDx = Math.abs(pts[0].x - targetSvgX);
+      for (let i = 1; i < pts.length; i++) {
+        const dx = Math.abs(pts[i].x - targetSvgX);
+        if (dx < minDx) {
+          minDx = dx;
+          closestPt = pts[i];
         }
+      }
 
-        homeTooltip.innerHTML = `
-          <div class="chart-tooltip-title">${esc(date)}</div>
-          <div class="chart-tooltip-value">${money(bal)}</div>
-          ${deltaHtml}
-        `;
+      if (homeScrubberLine) {
+        homeScrubberLine.setAttribute('x1', closestPt.x);
+        homeScrubberLine.setAttribute('x2', closestPt.x);
+        homeScrubberLine.style.opacity = '1';
+      }
+      if (homeScrubberDot) {
+        homeScrubberDot.setAttribute('cx', closestPt.x);
+        homeScrubberDot.setAttribute('cy', closestPt.y);
+        homeScrubberDot.style.opacity = '1';
+      }
 
-        const wrapRect = homeWrap.getBoundingClientRect();
-        const ptRect = pt.getBoundingClientRect();
-        const left = ptRect.left - wrapRect.left + ptRect.width / 2;
-        const top = ptRect.top - wrapRect.top;
+      if (heroBalVal) {
+        heroBalVal.innerText = money(closestPt.balance);
+      }
+      if (heroBalLbl) {
+        heroBalLbl.innerText = `Баланс на ${closestPt.dayLabel}`;
+      }
 
-        homeTooltip.style.left = `${left}px`;
-        homeTooltip.style.top = `${top}px`;
-        homeTooltip.classList.add('visible');
-        pt.setAttribute('r', '6');
-      };
+      let deltaHtml = '';
+      if (closestPt.inc > 0 && closestPt.exp > 0) {
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(closestPt.inc)}</div><div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(closestPt.exp)}</div>`;
+      } else if (closestPt.inc > 0) {
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(closestPt.inc)} доход</div>`;
+      } else if (closestPt.exp > 0) {
+        deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(closestPt.exp)} расход</div>`;
+      }
 
-      pt.onmouseleave = () => {
-        homeTooltip.classList.remove('visible');
-        pt.setAttribute('r', $$('.home-chart-pt').length > 15 ? '3' : '4');
-      };
-    });
+      homeTooltip.innerHTML = `
+        <div class="chart-tooltip-title">${esc(closestPt.fullDate || closestPt.dayLabel)}</div>
+        <div class="chart-tooltip-value">${money(closestPt.balance)}</div>
+        ${deltaHtml}
+      `;
+
+      const pxX = (closestPt.x / svgW) * rect.width;
+      const pxY = (closestPt.y / 80) * rect.height;
+
+      homeTooltip.style.left = `${pxX}px`;
+      homeTooltip.style.top = `${pxY}px`;
+      homeTooltip.classList.add('visible');
+    };
+
+    homeWrap.onmouseleave = () => {
+      if (homeScrubberLine) homeScrubberLine.style.opacity = '0';
+      if (homeScrubberDot) homeScrubberDot.style.opacity = '0';
+      homeTooltip.classList.remove('visible');
+
+      if (heroBalVal && baseBalText) {
+        heroBalVal.innerText = baseBalText;
+      }
+      if (heroBalLbl) {
+        heroBalLbl.innerText = 'Чистый свободный остаток';
+      }
+    };
   }
 
-  // Cashflow Dual Wave Tooltip
+  // Cashflow Dual Wave Dynamic Scrubber & Tooltip
   const cfWrap = document.getElementById('cf-chart-wrap');
   const cfTooltip = document.getElementById('cf-chart-tooltip');
-  if (cfWrap && cfTooltip) {
-    $$('.cf-pt').forEach(pt => {
-      pt.onmouseenter = () => {
-        const date = pt.getAttribute('data-date');
-        const dInc = Number(pt.getAttribute('data-inc')) || 0;
-        const dExp = Number(pt.getAttribute('data-exp')) || 0;
-        const dNet = dInc - dExp;
+  const cfLine = document.getElementById('cf-scrubber-line');
+  const cfDotInc = document.getElementById('cf-scrubber-inc');
+  const cfDotExp = document.getElementById('cf-scrubber-exp');
 
-        cfTooltip.innerHTML = `
-          <div class="chart-tooltip-title">${esc(date)}</div>
-          <div style="display: flex; gap: 10px; margin-top: 2px;">
-            <span style="color: var(--accent-jade); font-weight: 700;">+${money(dInc)}</span>
-            <span style="color: var(--accent-amber); font-weight: 700;">−${money(dExp)}</span>
-          </div>
-          <div style="font-size: 11px; color: ${dNet >= 0 ? 'var(--accent-jade)' : 'var(--accent-coral)'}; margin-top: 3px;">
-            Чистый поток: ${dNet >= 0 ? '+' : ''}${money(dNet)}
-          </div>
-        `;
+  if (cfWrap && cfTooltip && window.__cfPoints && window.__cfPoints.length > 0) {
+    const cfPts = window.__cfPoints;
+    const cfW = 760;
+    const cfH = 150;
 
-        const wrapRect = cfWrap.getBoundingClientRect();
-        const ptRect = pt.getBoundingClientRect();
-        const left = ptRect.left - wrapRect.left + ptRect.width / 2;
-        const top = ptRect.top - wrapRect.top;
+    cfWrap.onmousemove = e => {
+      const rect = cfWrap.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const scaleX = cfW / rect.width;
+      const targetSvgX = mouseX * scaleX;
 
-        cfTooltip.style.left = `${left}px`;
-        cfTooltip.style.top = `${top}px`;
-        cfTooltip.classList.add('visible');
-        pt.setAttribute('r', '5.5');
-      };
+      let closest = cfPts[0];
+      let minDx = Math.abs(cfPts[0].x - targetSvgX);
+      for (let i = 1; i < cfPts.length; i++) {
+        const dx = Math.abs(cfPts[i].x - targetSvgX);
+        if (dx < minDx) {
+          minDx = dx;
+          closest = cfPts[i];
+        }
+      }
 
-      pt.onmouseleave = () => {
-        cfTooltip.classList.remove('visible');
-        pt.setAttribute('r', '3.5');
-      };
-    });
+      if (cfLine) {
+        cfLine.setAttribute('x1', closest.x);
+        cfLine.setAttribute('x2', closest.x);
+        cfLine.style.opacity = '1';
+      }
+
+      if (cfDotInc) {
+        cfDotInc.setAttribute('cx', closest.x);
+        cfDotInc.setAttribute('cy', closest.yInc);
+        cfDotInc.style.opacity = closest.inc > 0 ? '1' : '0.35';
+      }
+
+      if (cfDotExp) {
+        cfDotExp.setAttribute('cx', closest.x);
+        cfDotExp.setAttribute('cy', closest.yExp);
+        cfDotExp.style.opacity = closest.exp > 0 ? '1' : '0.35';
+      }
+
+      const dNet = closest.inc - closest.exp;
+      cfTooltip.innerHTML = `
+        <div class="chart-tooltip-title">${esc(closest.fullDate || closest.dayLabel)}</div>
+        <div style="display: flex; gap: 10px; margin-top: 2px;">
+          <span style="color: var(--accent-jade); font-weight: 700;">+${money(closest.inc)}</span>
+          <span style="color: var(--accent-amber); font-weight: 700;">−${money(closest.exp)}</span>
+        </div>
+        <div style="font-size: 11px; color: ${dNet >= 0 ? 'var(--accent-jade)' : 'var(--accent-coral)'}; margin-top: 3px;">
+          Чистый поток: ${dNet >= 0 ? '+' : ''}${money(dNet)}
+        </div>
+      `;
+
+      const pxX = (closest.x / cfW) * rect.width;
+      const minY = Math.min(closest.yInc, closest.yExp);
+      const pxY = (minY / cfH) * rect.height;
+
+      cfTooltip.style.left = `${pxX}px`;
+      cfTooltip.style.top = `${pxY}px`;
+      cfTooltip.classList.add('visible');
+    };
+
+    cfWrap.onmouseleave = () => {
+      if (cfLine) cfLine.style.opacity = '0';
+      if (cfDotInc) cfDotInc.style.opacity = '0';
+      if (cfDotExp) cfDotExp.style.opacity = '0';
+      cfTooltip.classList.remove('visible');
+    };
   }
 
   const btnResetDonut = document.getElementById('btn-reset-donut-filter');
@@ -2097,12 +2322,71 @@ function bindInteractiveEvents() {
   const qAddExp = document.getElementById('quick-add-expense');
   const qAddInc = document.getElementById('quick-add-income');
 
+  const updateModalBudgetAlert = () => {
+    const type = document.getElementById('form-type')?.value;
+    const cat = document.getElementById('form-category')?.value.trim();
+    const amt = Number(document.getElementById('form-amount')?.value) || 0;
+    const banner = document.getElementById('tx-budget-warning');
+    if (!banner) return;
+
+    if (type !== 'expense' || !cat) {
+      banner.style.display = 'none';
+      return;
+    }
+
+    const budget = (data.budgets || []).find(b => b.category.toLowerCase() === cat.toLowerCase());
+    if (!budget) {
+      banner.className = 'tx-budget-banner muted';
+      banner.innerHTML = `<span>ℹ️ По категории «${esc(cat)}» лимит не установлен</span>`;
+      banner.style.display = 'block';
+      return;
+    }
+
+    const now = new Date();
+    const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
+    const spentThisMonth = (data.transactions || [])
+      .filter(t => t.type === 'expense' && (t.category || '').toLowerCase() === cat.toLowerCase() && getTxIso(t) >= curMonthStart)
+      .reduce((s, t) => s + Number(t.amount), 0);
+
+    const lim = Number(budget.limit_amount);
+    const newTotal = spentThisMonth + amt;
+
+    if (newTotal > lim) {
+      const overspend = newTotal - lim;
+      banner.className = 'tx-budget-banner danger';
+      banner.innerHTML = `
+        <div style="font-weight: 700;">⚠️ Внимание! Превышение лимита бюджета</div>
+        <div style="font-size: 11.5px; margin-top: 2px;">
+          Лимит: ${money(lim)} • Уже потрачено: ${money(spentThisMonth)}<br>
+          С учетом этой операции (${money(amt)}) превышение составит <strong class="num" style="color: #FFF;">${money(overspend)}</strong>!
+        </div>
+      `;
+      banner.style.display = 'block';
+    } else if (newTotal >= lim * 0.8) {
+      banner.className = 'tx-budget-banner warning';
+      banner.innerHTML = `
+        <div style="font-weight: 700;">⚡ Внимание: приближение к лимиту</div>
+        <div style="font-size: 11.5px; margin-top: 2px;">
+          Лимит: ${money(lim)} • Останется всего: <strong class="num" style="color: #FFF;">${money(lim - newTotal)}</strong> (${Math.round((newTotal / lim) * 100)}% лимита).
+        </div>
+      `;
+      banner.style.display = 'block';
+    } else {
+      banner.className = 'tx-budget-banner safe';
+      banner.innerHTML = `
+        <div>✓ В рамках бюджета: останется <strong class="num" style="color: #FFF;">${money(lim - newTotal)}</strong> из ${money(lim)}</div>
+      `;
+      banner.style.display = 'block';
+    }
+  };
+
   const openTxModal = (type = 'expense') => {
     const modal = document.getElementById('tx-modal');
     if (modal) {
       modal.style.display = 'flex';
       const typeSelect = document.getElementById('form-type');
       if (typeSelect) typeSelect.value = type;
+      updateModalBudgetAlert();
     }
   };
 
@@ -2131,10 +2415,19 @@ function bindInteractiveEvents() {
       const typeSelect = document.getElementById('form-type');
       if (catInput) catInput.value = cat;
       if (typeSelect) typeSelect.value = catType;
+      updateModalBudgetAlert();
     };
   });
 
-  // Modal Form Submit (Create Transaction)
+  // Modal Inputs dynamic budget warning
+  const modalCatInput = document.getElementById('form-category');
+  const modalAmtInput = document.getElementById('form-amount');
+  const modalTypeSelect = document.getElementById('form-type');
+  if (modalCatInput) modalCatInput.oninput = updateModalBudgetAlert;
+  if (modalAmtInput) modalAmtInput.oninput = updateModalBudgetAlert;
+  if (modalTypeSelect) modalTypeSelect.onchange = updateModalBudgetAlert;
+
+  // Modal Form Submit (Create Transaction with Budget Protection)
   const txModalForm = document.getElementById('tx-modal-form');
   if (txModalForm) {
     txModalForm.onsubmit = async e => {
@@ -2148,6 +2441,26 @@ function bindInteractiveEvents() {
       if (!category || amount <= 0) {
         alert('Заполните категорию и сумму операции');
         return;
+      }
+
+      // Budget Enforcement Protection
+      if (type === 'expense') {
+        const budget = (data.budgets || []).find(b => b.category.toLowerCase() === category.toLowerCase());
+        if (budget) {
+          const now = new Date();
+          const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
+          const spentThisMonth = (data.transactions || [])
+            .filter(t => t.type === 'expense' && (t.category || '').toLowerCase() === category.toLowerCase() && getTxIso(t) >= curMonthStart)
+            .reduce((s, t) => s + Number(t.amount), 0);
+
+          const lim = Number(budget.limit_amount);
+          const newTotal = spentThisMonth + amount;
+          if (newTotal > lim) {
+            const overspend = newTotal - lim;
+            const ok = confirm(`⚠️ Внимание! Превышение лимита бюджета!\n\nКатегория «${category}» имеет установленный лимит ${money(lim)} в месяц.\nУже израсходовано в этом месяце: ${money(spentThisMonth)}.\n\nС добавлением этой записи (${money(amount)}) расходы превысят лимит на ${money(overspend)}!\n\nВы точно хотите зафиксировать этот расход сверх лимита?`);
+            if (!ok) return;
+          }
+        }
       }
 
       try {
@@ -2164,6 +2477,17 @@ function bindInteractiveEvents() {
       }
     };
   }
+
+  // Budget Quick Chips selection
+  $$('.budget-chip').forEach(chip => {
+    chip.onclick = () => {
+      const cat = chip.getAttribute('data-cat');
+      const catInput = document.getElementById('budget-cat');
+      const limitInput = document.getElementById('budget-limit');
+      if (catInput) catInput.value = cat;
+      if (limitInput) limitInput.focus();
+    };
+  });
 
   // Transaction Filters & Search
   $$('.filter-tab').forEach(btn => {
