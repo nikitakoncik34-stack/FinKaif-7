@@ -1793,6 +1793,7 @@ html, body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+  gap: 12px;
 }
 
 .donut-cat-meta {
