@@ -390,7 +390,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.10</span>
+          <span class="brand-badge">8.11</span>
         </div>
       </div>
 
@@ -531,85 +531,26 @@ function renderHomeView() {
   const windowNet = dayBuckets.reduce((s, p) => s + (p.inc - p.exp), 0);
   let runningBal = balance - windowNet;
 
-  const timelineNodes = [];
-  const N = dayBuckets.length;
-  const dayWidth = plotW / (N || 1);
-
-  for (let i = 0; i < N; i++) {
-    const bucket = dayBuckets[i];
-    const xStart = padX + i * dayWidth;
-    const xEnd = padX + (i + 1) * dayWidth;
-    const dayOpenBal = runningBal;
-
-    bucket.xStart = xStart;
-    bucket.xEnd = xEnd;
-    bucket.xMid = (xStart + xEnd) / 2;
-    bucket.openBalance = dayOpenBal;
-
-    // Node at start of day
-    timelineNodes.push({
-      x: xStart,
-      balance: dayOpenBal,
-      dayIdx: i,
-      bucket,
-      isDayStart: true
-    });
-
-    // Intraday transaction transitions
-    if (bucket.txs && bucket.txs.length > 0) {
-      for (const tx of bucket.txs) {
-        const mins = getTxMinutes(tx);
-        const frac = Math.max(0.04, Math.min(0.96, mins / 1440));
-        const txX = xStart + frac * dayWidth;
-        const transW = Math.min(3.5, Math.max(1.5, dayWidth * 0.035));
-
-        timelineNodes.push({
-          x: Math.max(xStart + 0.5, txX - transW),
-          balance: runningBal,
-          dayIdx: i,
-          bucket
-        });
-
-        runningBal += (tx.type === 'income' ? Number(tx.amount) : -Number(tx.amount));
-
-        timelineNodes.push({
-          x: Math.min(xEnd - 0.5, txX + transW),
-          balance: runningBal,
-          dayIdx: i,
-          bucket,
-          tx
-        });
-      }
-    }
-
-    // Node at end of day
-    timelineNodes.push({
-      x: xEnd,
-      balance: runningBal,
-      dayIdx: i,
-      bucket,
-      isDayEnd: true
-    });
-  }
-
-  // De-duplicate adjacent nodes with nearly identical X
-  const cleanNodes = [];
-  for (let i = 0; i < timelineNodes.length; i++) {
-    const pt = timelineNodes[i];
-    if (cleanNodes.length > 0 && Math.abs(cleanNodes[cleanNodes.length - 1].x - pt.x) < 0.25) {
-      cleanNodes[cleanNodes.length - 1].balance = pt.balance;
-      if (pt.tx) cleanNodes[cleanNodes.length - 1].tx = pt.tx;
-    } else {
-      cleanNodes.push({ ...pt });
-    }
-  }
+  const pointsWithBal = dayBuckets.map((bucket, idx) => {
+    const openBal = runningBal;
+    runningBal += (bucket.inc - bucket.exp);
+    const closeBal = runningBal;
+    bucket.openBalance = openBal;
+    bucket.closeBalance = closeBal;
+    return {
+      ...bucket,
+      openBal,
+      closeBal,
+      balance: closeBal
+    };
+  });
 
   const periodInc = dayBuckets.reduce((s, p) => s + p.inc, 0);
   const periodExp = dayBuckets.reduce((s, p) => s + p.exp, 0);
   const periodFootnote = period === '7d' ? 'За последние 7 дней' : (period === '30d' ? 'За последние 30 дней' : 'За последние 12 месяцев');
 
-  const minVal = Math.min(...cleanNodes.map(p => p.balance));
-  const maxVal = Math.max(...cleanNodes.map(p => p.balance));
+  const minVal = Math.min(...pointsWithBal.map(p => p.balance));
+  const maxVal = Math.max(...pointsWithBal.map(p => p.balance));
   const balDiff = maxVal - minVal;
   const netDelta = balance - (balance - windowNet);
 
@@ -617,23 +558,28 @@ function renderHomeView() {
   const accentColor = isDeficit ? '#FB7185' : '#2DD4BF';
   const glowColor = isDeficit ? 'rgba(251, 113, 133, 0.45)' : 'rgba(45, 212, 191, 0.45)';
 
-  cleanNodes.forEach(p => {
+  const points = pointsWithBal.map((p, idx) => {
+    const x = Math.round(padX + (idx / (pointsWithBal.length - 1 || 1)) * plotW);
+    let y;
     if (balDiff === 0) {
-      p.y = Math.round(padTop + plotH * 0.5);
+      y = Math.round(padTop + plotH * 0.5);
     } else {
       const margin = Math.max(balDiff * 0.20, 100);
       const yMin = minVal - margin;
       const yMax = maxVal + margin;
-      p.y = Math.round(svgH - padBottom - ((p.balance - yMin) / (yMax - yMin)) * plotH);
+      y = Math.round(svgH - padBottom - ((p.balance - yMin) / (yMax - yMin)) * plotH);
     }
+    if (dayBuckets[idx]) dayBuckets[idx].xMid = x;
+    p.xMid = x;
+    return { x, y, idx, ...p };
   });
 
-  const firstPt = cleanNodes[0];
-  const lastPt = cleanNodes[cleanNodes.length - 1];
-  const curvePath = pointsToSmoothPath(cleanNodes);
+  const firstPt = points[0];
+  const lastPt = points[points.length - 1];
+  const curvePath = pointsToSmoothPath(points);
   const areaPath = `${curvePath} L ${lastPt.x},${svgH - padBottom} L ${firstPt.x},${svgH - padBottom} Z`;
 
-  window.__homeTimelineNodes = cleanNodes;
+  window.__homePoints = points;
   window.__homeDayBuckets = dayBuckets;
   window.__homeCurrentBalance = balance;
   window.__homeSvgH = svgH;
@@ -669,24 +615,24 @@ function renderHomeView() {
   }
 
   // HTML Executive Date Axis Items (Never distorted by SVG!)
-  const axisItemsHtml = dayBuckets.map((bucket, idx) => {
+  const axisItemsHtml = points.map((pt, idx) => {
     let show = false;
     if (period === '7d') show = true;
-    else if (period === '30d') show = (idx % 5 === 0 || idx === dayBuckets.length - 1);
-    else show = (idx % 2 === 0 || idx === dayBuckets.length - 1);
+    else if (period === '30d') show = (idx % 5 === 0 || idx === points.length - 1);
+    else show = (idx % 2 === 0 || idx === points.length - 1);
 
     if (!show) return '';
-    const isLatest = (idx === dayBuckets.length - 1);
-    const leftPct = ((bucket.xMid / svgW) * 100).toFixed(2);
+    const isLatest = (idx === points.length - 1);
+    const leftPct = ((pt.x / svgW) * 100).toFixed(2);
 
     let badgeContent = '';
     if (period === '7d') {
       badgeContent = `
-        <span class="axis-dow">${esc(bucket.wkShort || '')}</span>
-        <span class="axis-num">${esc(String(bucket.dayNum || ''))}</span>
+        <span class="axis-dow">${esc(pt.wkShort || '')}</span>
+        <span class="axis-num">${esc(String(pt.dayNum || ''))}</span>
       `;
     } else {
-      badgeContent = `<span class="axis-num">${esc(bucket.dayDisplay || bucket.dayLabel)}</span>`;
+      badgeContent = `<span class="axis-num">${esc(pt.dayDisplay || pt.dayLabel)}</span>`;
     }
 
     return `
@@ -707,13 +653,12 @@ function renderHomeView() {
     </div>
   `;
 
-  // HTML-based activity micro-pips (100% round circles, placed at exact transaction moments)
-  const activityPipsHtml = cleanNodes.filter(n => n.tx).map(n => {
-    const isInc = n.tx.type === 'income';
-    const pipColor = isInc ? '#34D399' : '#FB7185';
-    const leftPct = ((n.x / svgW) * 100).toFixed(2);
-    const topPct = ((n.y / svgH) * 100).toFixed(2);
-    return `<div class="home-activity-pip" style="left: ${leftPct}%; top: ${topPct}%; background: ${pipColor};" title="${isInc ? '+' : '−'}${money(n.tx.amount)} (${esc(n.tx.category)})"></div>`;
+  // HTML-based activity micro-pips (100% round circles, zero aspect distortion)
+  const activityPipsHtml = points.slice(0, -1).filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
+    let pipColor = pt.inc > 0 && pt.exp === 0 ? '#34D399' : (pt.exp > 0 && pt.inc === 0 ? '#FB7185' : accentColor);
+    const leftPct = ((pt.x / svgW) * 100).toFixed(2);
+    const topPct = ((pt.y / svgH) * 100).toFixed(2);
+    return `<div class="home-activity-pip" style="left: ${leftPct}%; top: ${topPct}%; background: ${pipColor};"></div>`;
   }).join('');
 
   // Quick categories breakdown for teaser
@@ -773,7 +718,7 @@ function renderHomeView() {
         </div>
         <div class="hero-meta-chip muted">
           <span class="hero-meta-lbl">Старт:</span>
-          <span class="hero-meta-val num">${money(cleanNodes[0].balance)}</span>
+          <span class="hero-meta-val num">${money(points[0].balance)}</span>
         </div>
         <div class="hero-meta-chip muted">
           <span class="hero-meta-lbl">Текущий:</span>
@@ -2490,8 +2435,8 @@ function bindInteractiveEvents() {
   const heroBalVal = document.getElementById('hero-balance-val');
   const heroBalLbl = document.getElementById('hero-balance-lbl');
 
-  if (homeWrap && homeTooltip && window.__homeTimelineNodes && window.__homeTimelineNodes.length > 0) {
-    const nodes = window.__homeTimelineNodes;
+  if (homeWrap && homeTooltip && window.__homePoints && window.__homePoints.length > 0) {
+    const pts = window.__homePoints;
     const dayBuckets = window.__homeDayBuckets || [];
     const svgW = window.__homeSvgW || 760;
     const svgH = window.__homeSvgH || 120;
@@ -2499,10 +2444,15 @@ function bindInteractiveEvents() {
     const plotW = window.__homePlotW || (svgW - 2 * padX);
     const plotCanvasH = 122;
     const baseBalText = heroBalVal ? heroBalVal.getAttribute('data-base') : '';
-    const segments = nodes.__splineSegments || [];
-    const numBuckets = dayBuckets.length;
-    const dayWidth = plotW / (numBuckets || 1);
+    const segments = pts.__splineSegments || [];
+    const N = pts.length;
     const currentPeriod = window.__homePeriod || '7d';
+
+    // Midpoints between adjacent dates for exact day mapping
+    const mids = [];
+    for (let i = 0; i < N - 1; i++) {
+      mids.push((pts[i].x + pts[i + 1].x) / 2);
+    }
 
     homeWrap.onmousemove = e => {
       const rect = homeWrap.getBoundingClientRect();
@@ -2510,8 +2460,8 @@ function bindInteractiveEvents() {
 
       const mousePxX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
       const targetSvgX = (mousePxX / rect.width) * svgW;
-      const minX = padX;
-      const maxX = padX + plotW;
+      const minX = pts[0].x;
+      const maxX = pts[pts.length - 1].x;
       const clampedX = Math.max(minX, Math.min(targetSvgX, maxX));
 
       // Continuous Bezier Spline evaluation for visual Y along curve
@@ -2528,12 +2478,29 @@ function bindInteractiveEvents() {
         svgY = evaluateBezierY(seg.y0, seg.cp1y, seg.cp2y, seg.y1, t);
       }
 
-      // Map clampedX to day bucket & exact time
-      const relX = clampedX - padX;
-      const rawBucketIdx = Math.floor(relX / dayWidth);
-      const dayIdx = Math.min(numBuckets - 1, Math.max(0, rawBucketIdx));
-      const bucket = dayBuckets[dayIdx] || dayBuckets[0];
-      const dayFrac = Math.max(0, Math.min(1, (relX - dayIdx * dayWidth) / dayWidth));
+      // Map clampedX to active Day and Time progression (00:00 - 23:59)
+      let dayIdx = 0;
+      let dayFrac = 0;
+
+      if (clampedX <= mids[0]) {
+        dayIdx = 0;
+        dayFrac = (clampedX - minX) / (mids[0] - minX || 1);
+      } else if (clampedX >= mids[N - 2]) {
+        dayIdx = N - 1;
+        dayFrac = (clampedX - mids[N - 2]) / (maxX - mids[N - 2] || 1);
+      } else {
+        for (let i = 0; i < mids.length - 1; i++) {
+          if (clampedX >= mids[i] && clampedX <= mids[i + 1]) {
+            dayIdx = i + 1;
+            dayFrac = (clampedX - mids[i]) / (mids[i + 1] - mids[i] || 1);
+            break;
+          }
+        }
+      }
+
+      dayFrac = Math.max(0, Math.min(1, dayFrac));
+      const activePt = pts[dayIdx] || pts[0];
+      const bucket = dayBuckets[dayIdx] || activePt;
 
       let timeStr = '12:00';
       let minuteOfDay = 12 * 60;
@@ -2550,8 +2517,10 @@ function bindInteractiveEvents() {
       }
 
       // Exact Capital Balance at this specific physical minute:
-      // Start with opening balance of this bucket, plus all transactions up to minuteOfDay!
-      let curBal = bucket.openBalance;
+      // Operations on that day happen at their exact physical minutes.
+      // Before an operation: balance does NOT jump or stretch.
+      // At/after an operation: balance changes by the operation amount.
+      let curBal = activePt.openBal;
       const sortedDayTxs = (bucket.txs || []).slice().sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
       const txsUpToNow = sortedDayTxs.filter(t => getTxMinutes(t) <= minuteOfDay);
       for (const t of txsUpToNow) {
