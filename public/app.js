@@ -341,11 +341,18 @@ function renderHomeView() {
 
   const maxVal = Math.max(1000, ...dayPoints.map(p => Math.max(p.exp, p.inc)));
   const svgW = 760;
-  const svgH = 110;
+  const svgH = 70;
 
+  const hasActivity = dayPoints.some(p => p.exp > 0 || p.inc > 0);
   const points = dayPoints.map((p, idx) => {
     const x = Math.round((idx / (dayPoints.length - 1 || 1)) * (svgW - 40) + 20);
-    const y = Math.round(svgH - 20 - (p.exp / maxVal) * (svgH - 40));
+    let y;
+    if (hasActivity) {
+      const v = p.exp || (p.inc ? p.inc * 0.4 : 0);
+      y = Math.round(svgH - 14 - (v / maxVal) * (svgH - 28));
+    } else {
+      y = Math.round(svgH * 0.55 + Math.sin(idx * 0.9) * 7);
+    }
     return { x, y, ...p };
   });
 
