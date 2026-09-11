@@ -114,7 +114,11 @@ const getTxIso = t => {
 // Intraday transaction minute parser (0..1439) with timezone awareness
 const getTxMinutes = t => {
   if (!t) return 12 * 60;
-  const raw = t.created_at || t.occurred_at || t.time || '';
+  if (t.time && /^\d{1,2}:\d{2}$/.test(String(t.time).trim())) {
+    const p = String(t.time).trim().split(':');
+    return Math.min(1439, Math.max(0, Number(p[0]) * 60 + Number(p[1])));
+  }
+  const raw = t.created_at || t.occurred_at || '';
   if (raw) {
     const s = String(raw).trim();
     if (/^\d{1,2}:\d{2}/.test(s)) {
@@ -130,10 +134,20 @@ const getTxMinutes = t => {
 };
 
 const formatTxTime = t => {
-  const mins = getTxMinutes(t);
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  if (!t) return '12:00';
+  if (t.time && /^\d{1,2}:\d{2}$/.test(String(t.time).trim())) {
+    return String(t.time).trim();
+  }
+  const raw = t.created_at || t.occurred_at;
+  if (raw) {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+  }
+  return '12:00';
 };
 
 const defaultCategories = [
@@ -390,7 +404,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.11</span>
+          <span class="brand-badge">8.12</span>
         </div>
       </div>
 
@@ -1518,7 +1532,7 @@ function renderTxCard(t) {
           ${catIcon}
         </div>
         <div class="tx-meta">
-          <div class="tx-category">${esc(t.category)}</div>
+          <div class="tx-category">${esc(t.category)} <span class="tx-time-chip" style="font-size: 11px; font-weight: 600; color: var(--text-muted); margin-left: 6px;">${formatTxTime(t)}</span></div>
           <div class="tx-desc">${t.description ? esc(t.description) : 'Без описания'}</div>
         </div>
       </div>
@@ -2478,54 +2492,23 @@ function bindInteractiveEvents() {
         svgY = evaluateBezierY(seg.y0, seg.cp1y, seg.cp2y, seg.y1, t);
       }
 
-      // Map clampedX to active Day and Time progression (00:00 - 23:59)
+      // Identify active Day
       let dayIdx = 0;
-      let dayFrac = 0;
-
       if (clampedX <= mids[0]) {
         dayIdx = 0;
-        dayFrac = (clampedX - minX) / (mids[0] - minX || 1);
       } else if (clampedX >= mids[N - 2]) {
         dayIdx = N - 1;
-        dayFrac = (clampedX - mids[N - 2]) / (maxX - mids[N - 2] || 1);
       } else {
         for (let i = 0; i < mids.length - 1; i++) {
           if (clampedX >= mids[i] && clampedX <= mids[i + 1]) {
             dayIdx = i + 1;
-            dayFrac = (clampedX - mids[i]) / (mids[i + 1] - mids[i] || 1);
             break;
           }
         }
       }
 
-      dayFrac = Math.max(0, Math.min(1, dayFrac));
       const activePt = pts[dayIdx] || pts[0];
       const bucket = dayBuckets[dayIdx] || activePt;
-
-      let timeStr = '12:00';
-      let minuteOfDay = 12 * 60;
-
-      if (currentPeriod === 'year') {
-        const dayOfMonth = Math.max(1, Math.min(30, Math.floor(dayFrac * 30) + 1));
-        timeStr = `${dayOfMonth} число`;
-      } else {
-        const totalMins = Math.min(1439, Math.floor(dayFrac * 1440));
-        minuteOfDay = totalMins;
-        const hours = Math.min(23, Math.floor(totalMins / 60));
-        const mins = Math.min(59, totalMins % 60);
-        timeStr = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-      }
-
-      // Exact Capital Balance at this specific physical minute:
-      // Operations on that day happen at their exact physical minutes.
-      // Before an operation: balance does NOT jump or stretch.
-      // At/after an operation: balance changes by the operation amount.
-      let curBal = activePt.openBal;
-      const sortedDayTxs = (bucket.txs || []).slice().sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
-      const txsUpToNow = sortedDayTxs.filter(t => getTxMinutes(t) <= minuteOfDay);
-      for (const t of txsUpToNow) {
-        curBal += (t.type === 'income' ? Number(t.amount) : -Number(t.amount));
-      }
 
       // Exact pixel coordinates in plot container
       const pxX = (clampedX / svgW) * rect.width;
@@ -2554,51 +2537,47 @@ function bindInteractiveEvents() {
         else el.classList.remove('active');
       });
 
+      // Clear solid day balance in hero card
       if (heroBalVal) {
-        heroBalVal.innerText = money(curBal);
+        heroBalVal.innerText = money(activePt.balance);
       }
       if (heroBalLbl) {
-        heroBalLbl.innerHTML = `Остаток на ${esc(bucket.dayDisplay || bucket.dayLabel)} • <span class="num" style="color: #FFFFFF; font-weight: 700;">${timeStr}</span>`;
+        heroBalLbl.innerText = `Остаток на ${esc(activePt.dayDisplay || activePt.dayLabel)}`;
       }
 
-      // Dynamic contextual tooltip delta breakdown
-      let deltaHtml = '';
-      if (txsUpToNow.length > 0) {
-        const upInc = txsUpToNow.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-        const upExp = txsUpToNow.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-        const lastTx = txsUpToNow[txsUpToNow.length - 1];
+      // Display operations of THIS SPECIFIC DAY ONLY:
+      // An operation only appears where it actually occurred!
+      const dayTxs = (bucket.txs || []).slice().sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
 
-        if (upInc > 0 && upExp > 0) {
-          deltaHtml = `
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <span class="chart-tooltip-badge" style="color: var(--accent-jade); background: rgba(45,212,191,0.12); padding: 2px 6px; border-radius: 4px;">+${money(upInc)}</span>
-              <span class="chart-tooltip-badge" style="color: var(--accent-coral); background: rgba(251,113,133,0.12); padding: 2px 6px; border-radius: 4px;">−${money(upExp)}</span>
-            </div>
-          `;
-        } else if (upExp > 0) {
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-coral); margin-top: 4px;">−${money(upExp)} (${esc(lastTx.category || 'Расход')})</div>`;
-        } else if (upInc > 0) {
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade); margin-top: 4px;">+${money(upInc)} (${esc(lastTx.category || 'Доход')})</div>`;
-        }
+      let txsHtml = '';
+      if (dayTxs.length > 0) {
+        txsHtml = `
+          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+            ${dayTxs.map(t => {
+              const isInc = t.type === 'income';
+              const color = isInc ? 'var(--accent-jade)' : 'var(--accent-coral)';
+              const bg = isInc ? 'rgba(45,212,191,0.12)' : 'rgba(251,113,133,0.12)';
+              const sign = isInc ? '+' : '−';
+              const tTime = formatTxTime(t);
+              return `
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11.5px; background: ${bg}; padding: 3px 8px; border-radius: 4px;">
+                  <span style="color: var(--text-secondary); font-size: 10.5px; font-weight: 600;">${tTime} • ${esc(t.category)}</span>
+                  <span style="color: ${color}; font-weight: 700;">${sign}${money(t.amount)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
       } else {
-        if (sortedDayTxs.length > 0) {
-          const firstTx = sortedDayTxs[0];
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">До ${timeStr} операций не было (первая в ${formatTxTime(firstTx)})</div>`;
-        } else {
-          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 4px; font-size: 11px;">В этот день операций не было</div>`;
-        }
+        txsHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 5px; font-size: 11px;">В этот день операций не было</div>`;
       }
 
       homeTooltip.innerHTML = `
         <div class="chart-tooltip-header">
           <span class="chart-tooltip-title">${esc(bucket.fullDate || bucket.dayDisplay || bucket.dayLabel)}</span>
-          <span class="chart-tooltip-clock">
-            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-            ${timeStr}
-          </span>
         </div>
-        <div class="chart-tooltip-value num">${money(curBal)}</div>
-        ${deltaHtml}
+        <div class="chart-tooltip-value num">${money(activePt.balance)}</div>
+        ${txsHtml}
       `;
 
       // Center tooltip on cursor, constrained within chart bounds
@@ -2851,7 +2830,15 @@ function bindInteractiveEvents() {
       const amount = Number(document.getElementById('form-amount').value);
       const occurred_on = document.getElementById('form-date').value;
       const timeVal = document.getElementById('form-time') ? document.getElementById('form-time').value : '';
-      const created_at = timeVal ? `${occurred_on}T${timeVal}:00` : new Date().toISOString();
+      let created_at;
+      if (occurred_on && timeVal) {
+        const [y, m, d] = occurred_on.split('-').map(Number);
+        const [hh, mm] = timeVal.split(':').map(Number);
+        const localDt = new Date(y, m - 1, d, hh, mm, 0);
+        created_at = localDt.toISOString();
+      } else {
+        created_at = new Date().toISOString();
+      }
       const description = document.getElementById('form-desc').value.trim();
 
       if (!category || amount <= 0) {
