@@ -365,7 +365,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.8</span>
+          <span class="brand-badge">8.9</span>
         </div>
       </div>
 
@@ -482,7 +482,8 @@ function renderHomeView() {
       dayPoints.push({
         date: iso,
         dayNum: d.getDate(),
-        dayLabel: period === '7d' ? wkShort : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+        wkShort: capWk,
+        dayLabel: period === '7d' ? capWk : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
         dayDisplay: period === '7d' ? `${capWk} ${d.getDate()}` : `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
         fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
         exp: dayExp,
@@ -516,10 +517,10 @@ function renderHomeView() {
   const glowColor = isDeficit ? 'rgba(251, 113, 133, 0.45)' : 'rgba(45, 212, 191, 0.45)';
 
   const svgW = 760;
-  const svgH = 130;
+  const svgH = 120;
   const padX = 28;
-  const padTop = 22;
-  const padBottom = 32;
+  const padTop = 18;
+  const padBottom = 16;
   const plotW = svgW - 2 * padX;
   const plotH = svgH - padTop - padBottom;
 
@@ -542,6 +543,7 @@ function renderHomeView() {
   window.__homeSvgH = svgH;
   window.__homeAccentColor = accentColor;
   window.__homeIsDeficit = isDeficit;
+  window.__homePeriod = period;
 
   const firstPt = points[0];
   const lastPt = points[points.length - 1];
@@ -572,30 +574,34 @@ function renderHomeView() {
     }
   }
 
-  // Date Axis Baseline and Labels
-  const axisBaselineHtml = `<line x1="${padX}" y1="${svgH - padBottom + 2}" x2="${svgW - padX}" y2="${svgH - padBottom + 2}" stroke="rgba(255, 255, 255, 0.08)" stroke-width="1" />`;
-
-  const dateLabelsHtml = points.map((pt, idx) => {
+  // HTML Executive Date Axis Items (Never distorted by SVG!)
+  const axisItemsHtml = points.map((pt, idx) => {
     let show = false;
     if (period === '7d') show = true;
-    else if (period === '30d') show = (idx % 6 === 0 || idx === points.length - 1);
+    else if (period === '30d') show = (idx % 5 === 0 || idx === points.length - 1);
     else show = (idx % 2 === 0 || idx === points.length - 1);
 
     if (!show) return '';
     const isLatest = (idx === points.length - 1);
-    const labelText = pt.dayDisplay || pt.dayLabel;
+    const leftPct = ((pt.x / svgW) * 100).toFixed(2);
+
+    let badgeContent = '';
+    if (period === '7d') {
+      badgeContent = `
+        <span class="axis-dow">${esc(pt.wkShort || '')}</span>
+        <span class="axis-num">${esc(String(pt.dayNum || ''))}</span>
+      `;
+    } else {
+      badgeContent = `<span class="axis-num">${esc(pt.dayDisplay || pt.dayLabel)}</span>`;
+    }
+
     return `
-      <line x1="${pt.x}" y1="${svgH - padBottom + 2}" x2="${pt.x}" y2="${svgH - padBottom + 6}" stroke="${isLatest ? accentColor : 'rgba(255, 255, 255, 0.14)'}" stroke-width="1" />
-      <text
-        class="home-chart-axis-label"
-        x="${pt.x}"
-        y="${svgH - 8}"
-        text-anchor="middle"
-        fill="${isLatest ? '#FFFFFF' : '#64748B'}"
-        font-size="10"
-        font-weight="${isLatest ? '700' : '500'}"
-        font-family="var(--font-sans)"
-      >${esc(labelText)}</text>
+      <div class="home-axis-item ${isLatest ? 'is-latest' : ''}" data-idx="${idx}" style="left: ${leftPct}%;">
+        <div class="axis-tick-pip"></div>
+        <div class="axis-date-badge">
+          ${badgeContent}
+        </div>
+      </div>
     `;
   }).join('');
 
@@ -682,7 +688,8 @@ function renderHomeView() {
 
       <!-- Clean Dynamic Cashflow Curve -->
       <div class="hero-chart-container" id="home-chart-wrap">
-        <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" id="home-chart-svg">
+        <div class="home-chart-plot" id="home-chart-plot">
+          <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none" id="home-chart-svg">
           <defs>
             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="${accentColor}" stop-opacity="0.14"/>
@@ -705,24 +712,26 @@ function renderHomeView() {
           <path d="${areaPath}" fill="url(#chartGrad)" />
           <path d="${curvePath}" fill="none" stroke="${accentColor}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#homeGlow)" />
 
-          <!-- Date Ticks Axis -->
-          ${axisBaselineHtml}
-          ${dateLabelsHtml}
+            <!-- Full Width Interactive Hover Overlay -->
+            <rect id="home-chart-overlay" class="home-chart-overlay" x="0" y="0" width="${svgW}" height="${svgH}" fill="transparent" />
+          </svg>
 
-          <!-- Full Width Interactive Hover Overlay -->
-          <rect id="home-chart-overlay" class="home-chart-overlay" x="0" y="0" width="${svgW}" height="${svgH}" fill="transparent" />
-        </svg>
+          <!-- HTML-based Perfectly Circular Indicators & Fluid Scrubber (No SVG distortion) -->
+          ${activityPipsHtml}
+          ${terminalBeaconHtml}
+          <div id="home-scrubber-laser" class="home-scrubber-laser" style="background: linear-gradient(180deg, transparent 0%, ${accentColor} 20%, ${accentColor} 80%, transparent 100%);"></div>
+          <div id="home-scrubber-beacon" class="home-scrubber-beacon">
+            <div class="scrubber-pulse-ring" style="border-color: ${accentColor}; background: ${isDeficit ? 'rgba(251, 113, 133, 0.20)' : 'rgba(45, 212, 191, 0.20)'}; box-shadow: 0 0 10px ${glowColor};"></div>
+            <div class="scrubber-core-dot"></div>
+          </div>
 
-        <!-- HTML-based Perfectly Circular Indicators & Fluid Scrubber (No SVG distortion) -->
-        ${activityPipsHtml}
-        ${terminalBeaconHtml}
-        <div id="home-scrubber-laser" class="home-scrubber-laser" style="background: linear-gradient(180deg, transparent 0%, ${accentColor} 20%, ${accentColor} 80%, transparent 100%);"></div>
-        <div id="home-scrubber-beacon" class="home-scrubber-beacon">
-          <div class="scrubber-pulse-ring" style="border-color: ${accentColor}; background: ${isDeficit ? 'rgba(251, 113, 133, 0.20)' : 'rgba(45, 212, 191, 0.20)'}; box-shadow: 0 0 10px ${glowColor};"></div>
-          <div class="scrubber-core-dot"></div>
+          <div id="home-chart-tooltip" class="chart-tooltip"></div>
         </div>
 
-        <div id="home-chart-tooltip" class="chart-tooltip"></div>
+        <!-- HTML-based High-DPI Executive Date Axis Strip -->
+        <div class="home-chart-axis-strip" id="home-chart-axis-strip">
+          ${axisItemsHtml}
+        </div>
       </div>
     </div>
 
@@ -2311,7 +2320,7 @@ function bindInteractiveEvents() {
     };
   });
 
-  // Home Balance Chart Dynamic Continuous Scrubber & Tooltip
+  // Home Balance Chart Dynamic Continuous Scrubber & Time Tracker
   const homeWrap = document.getElementById('home-chart-wrap');
   const homeTooltip = document.getElementById('home-chart-tooltip');
   const homeScrubberLaser = document.getElementById('home-scrubber-laser');
@@ -2323,9 +2332,18 @@ function bindInteractiveEvents() {
   if (homeWrap && homeTooltip && window.__homePoints && window.__homePoints.length > 0) {
     const pts = window.__homePoints;
     const svgW = 760;
-    const svgH = window.__homeSvgH || 130;
+    const svgH = window.__homeSvgH || 120;
+    const plotCanvasH = 122;
     const baseBalText = heroBalVal ? heroBalVal.getAttribute('data-base') : '';
     const segments = pts.__splineSegments || [];
+    const N = pts.length;
+    const currentPeriod = window.__homePeriod || '7d';
+
+    // Midpoints between adjacent dates for continuous time zones
+    const mids = [];
+    for (let i = 0; i < N - 1; i++) {
+      mids.push((pts[i].x + pts[i + 1].x) / 2);
+    }
 
     homeWrap.onmousemove = e => {
       const rect = homeWrap.getBoundingClientRect();
@@ -2338,7 +2356,7 @@ function bindInteractiveEvents() {
       const maxX = pts[pts.length - 1].x;
       const clampedX = Math.max(minX, Math.min(targetSvgX, maxX));
 
-      // Continuous Bezier Spline evaluation
+      // Continuous Bezier Spline evaluation for Y and balance
       let seg = segments.find(s => clampedX >= s.x0 && clampedX <= s.x1);
       if (!seg) {
         if (clampedX <= minX) seg = segments[0];
@@ -2347,19 +2365,57 @@ function bindInteractiveEvents() {
 
       let curBal = pts[0].balance;
       let svgY = pts[0].y;
-      let activePt = pts[0];
 
       if (seg) {
         const segSpan = seg.x1 - seg.x0 || 1;
         const t = Math.max(0, Math.min(1, (clampedX - seg.x0) / segSpan));
         svgY = evaluateBezierY(seg.y0, seg.cp1y, seg.cp2y, seg.y1, t);
         curBal = Math.round(seg.bal0 + (seg.bal1 - seg.bal0) * t);
-        activePt = t < 0.5 ? seg.pt0 : seg.pt1;
       }
 
-      // Exact pixel coordinates in the container
+      // Calculate Day and Time progression
+      let dayIdx = 0;
+      let dayT = 0;
+
+      if (clampedX <= mids[0]) {
+        dayIdx = 0;
+        dayT = (clampedX - minX) / (mids[0] - minX || 1);
+      } else if (clampedX >= mids[N - 2]) {
+        dayIdx = N - 1;
+        dayT = (clampedX - mids[N - 2]) / (maxX - mids[N - 2] || 1);
+      } else {
+        for (let i = 0; i < mids.length - 1; i++) {
+          if (clampedX >= mids[i] && clampedX <= mids[i + 1]) {
+            dayIdx = i + 1;
+            dayT = (clampedX - mids[i]) / (mids[i + 1] - mids[i] || 1);
+            break;
+          }
+        }
+      }
+
+      const activePt = pts[dayIdx] || pts[0];
+
+      // Time progression string
+      let timeStr = '12:00';
+      if (currentPeriod === 'year') {
+        const dayOfMonth = Math.max(1, Math.min(30, Math.floor(dayT * 30) + 1));
+        timeStr = `${dayOfMonth} число`;
+      } else {
+        let maxDayMinutes = 24 * 60;
+        const isToday = (dayIdx === N - 1 && currentPeriod === '7d');
+        if (isToday) {
+          const nowDate = new Date();
+          maxDayMinutes = Math.max(60, nowDate.getHours() * 60 + nowDate.getMinutes());
+        }
+        const totalMins = Math.min(maxDayMinutes, Math.floor(dayT * maxDayMinutes));
+        const hours = Math.min(23, Math.floor(totalMins / 60));
+        const mins = Math.min(50, Math.floor((totalMins % 60) / 10) * 10);
+        timeStr = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      }
+
+      // Exact pixel coordinates in plot container
       const pxX = (clampedX / svgW) * rect.width;
-      const pxY = (svgY / svgH) * rect.height;
+      const pxY = (svgY / svgH) * plotCanvasH;
 
       // Glide laser line and beacon smoothly with sub-pixel precision
       if (homeScrubberLaser) {
@@ -2377,11 +2433,18 @@ function bindInteractiveEvents() {
         homeTerminalBeacon.style.opacity = '0';
       }
 
+      // Update date axis active indicator
+      document.querySelectorAll('.home-axis-item').forEach(el => {
+        const idx = Number(el.getAttribute('data-idx'));
+        if (idx === dayIdx) el.classList.add('active');
+        else el.classList.remove('active');
+      });
+
       if (heroBalVal) {
         heroBalVal.innerText = money(curBal);
       }
       if (heroBalLbl) {
-        heroBalLbl.innerText = `Остаток на ${activePt.dayDisplay || activePt.dayLabel}`;
+        heroBalLbl.innerHTML = `Остаток на ${esc(activePt.dayDisplay || activePt.dayLabel)} • <span class="num" style="color: #FFFFFF; font-weight: 700;">${timeStr}</span>`;
       }
 
       let deltaHtml = '';
@@ -2401,13 +2464,19 @@ function bindInteractiveEvents() {
       }
 
       homeTooltip.innerHTML = `
-        <div class="chart-tooltip-title">${esc(activePt.fullDate || activePt.dayDisplay || activePt.dayLabel)}</div>
+        <div class="chart-tooltip-header">
+          <span class="chart-tooltip-title">${esc(activePt.fullDate || activePt.dayDisplay || activePt.dayLabel)}</span>
+          <span class="chart-tooltip-clock">
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            ${timeStr}
+          </span>
+        </div>
         <div class="chart-tooltip-value num">${money(curBal)}</div>
         ${deltaHtml}
       `;
 
       // Center tooltip on cursor, constrained within chart bounds
-      const tooltipW = 160;
+      const tooltipW = 175;
       let leftPos = pxX;
       if (leftPos + tooltipW / 2 > rect.width) {
         leftPos = rect.width - tooltipW / 2 - 8;
@@ -2424,6 +2493,7 @@ function bindInteractiveEvents() {
       if (homeScrubberLaser) homeScrubberLaser.style.opacity = '0';
       if (homeScrubberBeacon) homeScrubberBeacon.style.opacity = '0';
       if (homeTerminalBeacon) homeTerminalBeacon.style.opacity = '1';
+      document.querySelectorAll('.home-axis-item').forEach(el => el.classList.remove('active'));
       homeTooltip.classList.remove('visible');
 
       if (heroBalVal && baseBalText) {
