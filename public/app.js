@@ -91,6 +91,39 @@ const formatMarkdown = s => {
     .replace(/\n/g, '<br>');
 };
 
+// Safe ISO Date helper (YYYY-MM-DD)
+const getTxIso = t => String(t?.occurred_on || '').slice(0, 10);
+
+// Russian pluralization helper for categories
+const pluralizeCats = n => {
+  const num = Math.abs(Number(n) || 0) % 100;
+  const num1 = num % 10;
+  if (num > 10 && num < 20) return 'категорий';
+  if (num1 > 1 && num1 < 5) return 'категории';
+  if (num1 === 1) return 'категория';
+  return 'категорий';
+};
+
+// Natural Cubic Bezier Spline generator for smooth chart curves
+function pointsToSmoothPath(pts) {
+  if (!pts || pts.length === 0) return '';
+  if (pts.length === 1) return `M ${pts[0].x},${pts[0].y}`;
+  if (pts.length === 2) return `M ${pts[0].x},${pts[0].y} L ${pts[1].x},${pts[1].y}`;
+
+  let path = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1];
+    const curr = pts[i];
+    const dx = curr.x - prev.x;
+    const cp1x = prev.x + dx * 0.36;
+    const cp1y = prev.y;
+    const cp2x = curr.x - dx * 0.36;
+    const cp2y = curr.y;
+    path += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${curr.x.toFixed(1)},${curr.y.toFixed(1)}`;
+  }
+  return path;
+}
+
 // Financial Rank Calculator
 function getFinancialRank(balance, goals) {
   const totalSaved = (goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
@@ -245,7 +278,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.3</span>
+          <span class="brand-badge">8.4</span>
         </div>
       </div>
 
@@ -315,57 +348,100 @@ function renderHomeView() {
 
   const savingsRate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
 
-  // Build daily timeline points for smooth chart
-  const numDays = period === '7d' ? 7 : period === '30d' ? 30 : 14;
+  // Build daily timeline points for smooth capital balance chart
   const now = new Date();
   const dayPoints = [];
 
-  for (let i = numDays - 1; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 86400000);
-    const iso = d.toISOString().slice(0, 10);
-    const dayExp = data.transactions
-      .filter(t => t.type === 'expense' && t.occurred_on === iso)
-      .reduce((s, t) => s + Number(t.amount), 0);
-    const dayInc = data.transactions
-      .filter(t => t.type === 'income' && t.occurred_on === iso)
-      .reduce((s, t) => s + Number(t.amount), 0);
+  if (period === 'year') {
+    // 12 calendar month buckets
+    for (let m = 11; m >= 0; m--) {
+      const target = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      const year = target.getFullYear();
+      const monthNum = String(target.getMonth() + 1).padStart(2, '0');
+      const prefix = `${year}-${monthNum}`;
 
-    dayPoints.push({
-      date: iso,
-      dayNum: d.getDate(),
-      dayLabel: d.toLocaleDateString('ru-RU', { weekday: 'short' }),
-      exp: dayExp,
-      inc: dayInc
-    });
+      const mExp = data.transactions
+        .filter(t => t.type === 'expense' && getTxIso(t).startsWith(prefix))
+        .reduce((s, t) => s + Number(t.amount), 0);
+      const mInc = data.transactions
+        .filter(t => t.type === 'income' && getTxIso(t).startsWith(prefix))
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      dayPoints.push({
+        date: prefix,
+        dayLabel: target.toLocaleDateString('ru-RU', { month: 'short' }),
+        fullDate: target.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+        exp: mExp,
+        inc: mInc
+      });
+    }
+  } else {
+    // 7 days or 30 days
+    const numDays = period === '7d' ? 7 : 30;
+    for (let i = numDays - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      const dayExp = data.transactions
+        .filter(t => t.type === 'expense' && getTxIso(t) === iso)
+        .reduce((s, t) => s + Number(t.amount), 0);
+      const dayInc = data.transactions
+        .filter(t => t.type === 'income' && getTxIso(t) === iso)
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      dayPoints.push({
+        date: iso,
+        dayNum: d.getDate(),
+        dayLabel: period === '7d'
+          ? d.toLocaleDateString('ru-RU', { weekday: 'short' })
+          : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        exp: dayExp,
+        inc: dayInc
+      });
+    }
   }
 
-  const maxVal = Math.max(1000, ...dayPoints.map(p => Math.max(p.exp, p.inc)));
-  const svgW = 760;
-  const svgH = 70;
+  // True Cumulative Capital Trajectory
+  const windowNet = dayPoints.reduce((s, p) => s + (p.inc - p.exp), 0);
+  let runningBal = balance - windowNet;
+  const pointsWithBal = dayPoints.map(p => {
+    runningBal += (p.inc - p.exp);
+    return {
+      ...p,
+      balance: runningBal
+    };
+  });
 
-  const hasActivity = dayPoints.some(p => p.exp > 0 || p.inc > 0);
-  const points = dayPoints.map((p, idx) => {
-    const x = Math.round((idx / (dayPoints.length - 1 || 1)) * (svgW - 40) + 20);
+  const periodInc = dayPoints.reduce((s, p) => s + p.inc, 0);
+  const periodExp = dayPoints.reduce((s, p) => s + p.exp, 0);
+  const periodFootnote = period === '7d' ? 'За последние 7 дней' : (period === '30d' ? 'За последние 30 дней' : 'За последние 12 месяцев');
+
+  const minVal = Math.min(...pointsWithBal.map(p => p.balance));
+  const maxVal = Math.max(...pointsWithBal.map(p => p.balance));
+  const balDiff = maxVal - minVal;
+
+  const svgW = 760;
+  const svgH = 80;
+  const padX = 20;
+  const padY = 16;
+  const plotW = svgW - 2 * padX;
+  const plotH = svgH - 2 * padY;
+
+  const points = pointsWithBal.map((p, idx) => {
+    const x = Math.round(padX + (idx / (pointsWithBal.length - 1 || 1)) * plotW);
     let y;
-    if (hasActivity) {
-      const v = p.exp || (p.inc ? p.inc * 0.4 : 0);
-      y = Math.round(svgH - 14 - (v / maxVal) * (svgH - 28));
+    if (balDiff === 0) {
+      y = maxVal === 0 ? Math.round(svgH * 0.65) : Math.round(svgH * 0.5);
     } else {
-      y = Math.round(svgH * 0.55 + Math.sin(idx * 0.9) * 7);
+      const margin = Math.max(balDiff * 0.15, 100);
+      const yMin = minVal - margin;
+      const yMax = maxVal + margin;
+      y = Math.round(svgH - padY - ((p.balance - yMin) / (yMax - yMin)) * plotH);
     }
     return { x, y, ...p };
   });
 
-  const curvePath = points.reduce((acc, pt, idx, arr) => {
-    if (idx === 0) return `M ${pt.x},${pt.y}`;
-    const prev = arr[idx - 1];
-    const c1x = prev.x + (pt.x - prev.x) / 2;
-    const c1y = prev.y;
-    const c2x = prev.x + (pt.x - prev.x) / 2;
-    const c2y = pt.y;
-    return `${acc} C ${c1x},${c1y} ${c2x},${c2y} ${pt.x},${pt.y}`;
-  }, '');
-
+  const curvePath = pointsToSmoothPath(points);
   const areaPath = `${curvePath} L ${points[points.length - 1].x},${svgH} L ${points[0].x},${svgH} Z`;
 
   // Quick categories breakdown for teaser
@@ -406,20 +482,32 @@ function renderHomeView() {
       </div>
 
       <!-- Clean Cashflow Curve -->
-      <div class="hero-chart-container">
+      <div class="hero-chart-container" id="home-chart-wrap">
         <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
           <defs>
             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.25"/>
+              <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.28"/>
               <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
             </linearGradient>
           </defs>
           <path d="${areaPath}" fill="url(#chartGrad)" />
           <path d="${curvePath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />
           ${points.map(pt => `
-            <circle cx="${pt.x}" cy="${pt.y}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2"/>
+            <circle
+              class="home-chart-pt"
+              cx="${pt.x}" cy="${pt.y}"
+              r="${points.length > 15 ? 3 : 4}"
+              fill="#141A23"
+              stroke="#2DD4BF"
+              stroke-width="2"
+              data-date="${esc(pt.fullDate || pt.dayLabel)}"
+              data-bal="${pt.balance}"
+              data-inc="${pt.inc}"
+              data-exp="${pt.exp}"
+            />
           `).join('')}
         </svg>
+        <div id="home-chart-tooltip" class="chart-tooltip"></div>
       </div>
     </div>
 
@@ -430,8 +518,8 @@ function renderHomeView() {
           <span class="stat-card-title">Поступления за период</span>
           <div class="stat-icon inc">${icon('trendUp', 16)}</div>
         </div>
-        <div class="stat-amount inc num">+${money(inc)}</div>
-        <div class="stat-footnote">Все зафиксированные доходы</div>
+        <div class="stat-amount inc num">+${money(periodInc)}</div>
+        <div class="stat-footnote">${periodFootnote}</div>
       </div>
 
       <div class="stat-card">
@@ -439,8 +527,8 @@ function renderHomeView() {
           <span class="stat-card-title">Расходы за период</span>
           <div class="stat-icon exp">${icon('trendDown', 16)}</div>
         </div>
-        <div class="stat-amount exp num">−${money(exp)}</div>
-        <div class="stat-footnote">Списания по всем категориям</div>
+        <div class="stat-amount exp num">−${money(periodExp)}</div>
+        <div class="stat-footnote">${periodFootnote}</div>
       </div>
     </div>
 
@@ -527,19 +615,20 @@ function renderAnalyticsView() {
 
   if (analyticsPeriod === '7d') {
     daysCount = 7;
-    const since = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
-    periodTxs = data.transactions.filter(t => t.occurred_on >= since);
+    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).toISOString().slice(0, 10);
+    periodTxs = data.transactions.filter(t => getTxIso(t) >= since);
   } else if (analyticsPeriod === '30d') {
     daysCount = 30;
-    const since = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10);
-    periodTxs = data.transactions.filter(t => t.occurred_on >= since);
+    const since = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29).toISOString().slice(0, 10);
+    periodTxs = data.transactions.filter(t => getTxIso(t) >= since);
   } else if (analyticsPeriod === 'month') {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-    periodTxs = data.transactions.filter(t => t.occurred_on >= monthStart);
+    periodTxs = data.transactions.filter(t => getTxIso(t) >= monthStart);
     daysCount = Math.max(1, now.getDate());
   } else {
     // all time
-    daysCount = Math.max(30, data.transactions.length);
+    periodTxs = [...data.transactions];
+    daysCount = Math.max(30, Math.round((now.getTime() - new Date(periodTxs[periodTxs.length - 1]?.occurred_on || now).getTime()) / 86400000) || 30);
   }
 
   const pInc = periodTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
@@ -593,17 +682,20 @@ function renderAnalyticsView() {
     '#94A3B8'  // Slate Muted
   ];
 
-  // SVG Donut Slices Math
-  const radius = 64;
-  const circ = 2 * Math.PI * radius; // ~402.12
+  // SVG Donut Slices Math with crisp gaps and zero bleed
+  const radius = 58;
+  const circ = 2 * Math.PI * radius; // ~364.42
   let accumulatedOffset = 0;
+  const gap = sortedCats.length > 1 ? 3 : 0;
+  const totalGaps = gap * sortedCats.length;
+  const usableCirc = Math.max(10, circ - totalGaps);
 
   const donutSlices = sortedCats.map(([cat, amt], idx) => {
     const pct = pExp > 0 ? (amt / pExp) : 0;
-    const sliceLen = Math.max(1, pct * circ);
+    const sliceLen = sortedCats.length === 1 ? circ : Math.max(2, pct * usableCirc);
     const strokeColor = donutPalette[idx % donutPalette.length];
     const offset = accumulatedOffset;
-    accumulatedOffset += sliceLen;
+    accumulatedOffset += sliceLen + gap;
 
     return {
       cat,
@@ -616,10 +708,8 @@ function renderAnalyticsView() {
     };
   });
 
-  // Current active or hovered readout in donut center
-  const targetDonut = hoveredAnalyticsCat
-    ? donutSlices.find(s => s.cat === hoveredAnalyticsCat)
-    : (activeAnalyticsCat ? donutSlices.find(s => s.cat === activeAnalyticsCat) : null);
+  // Current active readout in donut center
+  const targetDonut = activeAnalyticsCat ? donutSlices.find(s => s.cat === activeAnalyticsCat) : null;
 
   // Month-over-Month calculation
   const curMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
@@ -627,10 +717,10 @@ function renderAnalyticsView() {
   const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().slice(0, 10);
 
   const curMonthExp = data.transactions
-    .filter(t => t.type === 'expense' && t.occurred_on >= curMonthStart)
+    .filter(t => t.type === 'expense' && getTxIso(t) >= curMonthStart)
     .reduce((s, t) => s + Number(t.amount), 0);
   const prevMonthExp = data.transactions
-    .filter(t => t.type === 'expense' && t.occurred_on >= prevMonthStart && t.occurred_on <= prevMonthSameDay)
+    .filter(t => t.type === 'expense' && getTxIso(t) >= prevMonthStart && getTxIso(t) <= prevMonthSameDay)
     .reduce((s, t) => s + Number(t.amount), 0);
 
   let momExpDeltaPct = 0;
@@ -638,52 +728,80 @@ function renderAnalyticsView() {
     momExpDeltaPct = Math.round(((curMonthExp - prevMonthExp) / prevMonthExp) * 100);
   }
 
-  // Build dual cashflow area timeline
-  const chartDays = analyticsPeriod === '7d' ? 7 : (analyticsPeriod === 'month' ? Math.max(7, now.getDate()) : 14);
+  // Build dual cashflow area timeline for all periods
   const cashflowPoints = [];
-  for (let i = chartDays - 1; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 86400000);
-    const iso = d.toISOString().slice(0, 10);
-    const dExp = data.transactions
-      .filter(t => t.type === 'expense' && t.occurred_on === iso)
-      .reduce((s, t) => s + Number(t.amount), 0);
-    const dInc = data.transactions
-      .filter(t => t.type === 'income' && t.occurred_on === iso)
-      .reduce((s, t) => s + Number(t.amount), 0);
-    cashflowPoints.push({
-      date: iso,
-      dayLabel: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
-      exp: dExp,
-      inc: dInc
-    });
+
+  if (analyticsPeriod === 'all') {
+    // 12 monthly points
+    for (let m = 11; m >= 0; m--) {
+      const target = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      const year = target.getFullYear();
+      const monthNum = String(target.getMonth() + 1).padStart(2, '0');
+      const prefix = `${year}-${monthNum}`;
+
+      const dExp = data.transactions
+        .filter(t => t.type === 'expense' && getTxIso(t).startsWith(prefix))
+        .reduce((s, t) => s + Number(t.amount), 0);
+      const dInc = data.transactions
+        .filter(t => t.type === 'income' && getTxIso(t).startsWith(prefix))
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      cashflowPoints.push({
+        date: prefix,
+        dayLabel: target.toLocaleDateString('ru-RU', { month: 'short' }),
+        fullDate: target.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+        exp: dExp,
+        inc: dInc
+      });
+    }
+  } else {
+    const chartDays = analyticsPeriod === '7d' ? 7 : (analyticsPeriod === 'month' ? Math.max(7, now.getDate()) : 30);
+    for (let i = chartDays - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const iso = d.toISOString().slice(0, 10);
+      const dExp = data.transactions
+        .filter(t => t.type === 'expense' && getTxIso(t) === iso)
+        .reduce((s, t) => s + Number(t.amount), 0);
+      const dInc = data.transactions
+        .filter(t => t.type === 'income' && getTxIso(t) === iso)
+        .reduce((s, t) => s + Number(t.amount), 0);
+
+      cashflowPoints.push({
+        date: iso,
+        dayLabel: analyticsPeriod === '7d'
+          ? d.toLocaleDateString('ru-RU', { weekday: 'short' })
+          : `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        exp: dExp,
+        inc: dInc
+      });
+    }
   }
 
-  const cfMax = Math.max(2000, ...cashflowPoints.map(p => Math.max(p.exp, p.inc)));
+  const cfMax = Math.max(1000, ...cashflowPoints.map(p => Math.max(p.exp, p.inc)));
   const cfW = 760;
-  const cfH = 140;
+  const cfH = 150;
+  const baselineY = 120;
+  const plotH = 96;
+  const padX = 24;
+  const usableW = cfW - 2 * padX;
 
   const cfCoords = cashflowPoints.map((p, idx) => {
-    const x = Math.round((idx / (cashflowPoints.length - 1 || 1)) * (cfW - 40) + 20);
-    const yInc = Math.round(cfH - 24 - (p.inc / cfMax) * (cfH - 45));
-    const yExp = Math.round(cfH - 24 - (p.exp / cfMax) * (cfH - 45));
+    const x = Math.round(padX + (idx / (cashflowPoints.length - 1 || 1)) * usableW);
+    const yInc = Math.round(baselineY - (p.inc / cfMax) * plotH);
+    const yExp = Math.round(baselineY - (p.exp / cfMax) * plotH);
     return { x, yInc, yExp, ...p };
   });
 
-  const incPath = cfCoords.reduce((acc, pt, idx, arr) => {
-    if (idx === 0) return `M ${pt.x},${pt.yInc}`;
-    const prev = arr[idx - 1];
-    const mx = prev.x + (pt.x - prev.x) / 2;
-    return `${acc} C ${mx},${prev.yInc} ${mx},${pt.yInc} ${pt.x},${pt.yInc}`;
-  }, '');
-  const incArea = `${incPath} L ${cfCoords[cfCoords.length - 1].x},${cfH} L ${cfCoords[0].x},${cfH} Z`;
+  const incPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yInc })));
+  const incArea = cfCoords.length > 0
+    ? `${incPath} L ${cfCoords[cfCoords.length - 1].x},${baselineY} L ${cfCoords[0].x},${baselineY} Z`
+    : '';
 
-  const expPath = cfCoords.reduce((acc, pt, idx, arr) => {
-    if (idx === 0) return `M ${pt.x},${pt.yExp}`;
-    const prev = arr[idx - 1];
-    const mx = prev.x + (pt.x - prev.x) / 2;
-    return `${acc} C ${mx},${prev.yExp} ${mx},${pt.yExp} ${pt.x},${pt.yExp}`;
-  }, '');
-  const expArea = `${expPath} L ${cfCoords[cfCoords.length - 1].x},${cfH} L ${cfCoords[0].x},${cfH} Z`;
+  const expPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yExp })));
+  const expArea = cfCoords.length > 0
+    ? `${expPath} L ${cfCoords[cfCoords.length - 1].x},${baselineY} L ${cfCoords[0].x},${baselineY} Z`
+    : '';
 
   // Filtered operations for drilldown
   const drilldownTxs = activeAnalyticsCat
@@ -766,25 +884,30 @@ function renderAnalyticsView() {
           <!-- SVG Donut Canvas -->
           <div class="donut-chart-box">
             <svg class="donut-svg" viewBox="0 0 170 170">
-              <circle cx="85" cy="85" r="${radius}" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="18" />
-              ${donutSlices.map(s => `
+              <circle cx="85" cy="85" r="${radius}" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="16" />
+              ${donutSlices.length > 0 ? donutSlices.map(s => `
                 <circle
-                  class="donut-segment ${(activeAnalyticsCat === s.cat || hoveredAnalyticsCat === s.cat) ? 'focused' : ''}"
+                  class="donut-segment ${(activeAnalyticsCat === s.cat) ? 'focused' : ''}"
                   data-cat="${esc(s.cat)}"
+                  data-amt="${s.amt}"
+                  data-pct="${s.pct}"
+                  data-icon="${s.icon}"
                   cx="85" cy="85" r="${radius}"
                   fill="none"
                   stroke="${s.color}"
-                  stroke-width="${(activeAnalyticsCat === s.cat || hoveredAnalyticsCat === s.cat) ? 23 : 18}"
-                  stroke-dasharray="${Math.max(1, s.sliceLen - 2)} ${Math.max(1, circ - s.sliceLen + 2)}"
+                  stroke-width="${activeAnalyticsCat === s.cat ? 22 : 16}"
+                  stroke-dasharray="${s.sliceLen} ${Math.max(0.1, circ - s.sliceLen)}"
                   stroke-dashoffset="${-s.offset}"
-                  stroke-linecap="round"
+                  stroke-linecap="butt"
                   transform="rotate(-90 85 85)"
                 />
-              `).join('')}
+              `).join('') : `
+                <circle cx="85" cy="85" r="${radius}" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14" stroke-dasharray="6 6" />
+              `}
             </svg>
 
             <!-- Center Readout -->
-            <div class="donut-center-info">
+            <div class="donut-center-info" id="donut-center-info" data-default-amt="${pExp}" data-default-count="${sortedCats.length}">
               ${targetDonut ? `
                 <div class="donut-center-icon">${targetDonut.icon}</div>
                 <div class="donut-center-amt num">${money(targetDonut.amt)}</div>
@@ -792,7 +915,7 @@ function renderAnalyticsView() {
               ` : `
                 <div class="donut-center-lbl">ВСЕГО ТРАТ</div>
                 <div class="donut-center-amt num">${money(pExp)}</div>
-                <div class="donut-center-sub">${sortedCats.length} категорий</div>
+                <div class="donut-center-sub">${sortedCats.length} ${pluralizeCats(sortedCats.length)}</div>
               `}
             </div>
           </div>
@@ -800,7 +923,7 @@ function renderAnalyticsView() {
           <!-- Category Legend & Progress Bars -->
           <div class="donut-legend-stream">
             ${sortedCats.length > 0 ? donutSlices.map(s => `
-              <div class="donut-cat-item ${activeAnalyticsCat === s.cat ? 'selected' : ''}" data-cat="${esc(s.cat)}">
+              <div class="donut-cat-item ${activeAnalyticsCat === s.cat ? 'selected' : ''}" data-cat="${esc(s.cat)}" data-amt="${s.amt}" data-pct="${s.pct}" data-icon="${s.icon}">
                 <div class="donut-cat-head">
                   <div class="donut-cat-meta">
                     <span class="donut-cat-dot" style="background: ${s.color};"></span>
@@ -838,37 +961,44 @@ function renderAnalyticsView() {
           </div>
         </div>
 
-        <div class="cashflow-chart-box">
+        <div class="cashflow-chart-box" id="cf-chart-wrap">
           <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" style="width: 100%; height: 160px; overflow: visible;">
             <defs>
               <linearGradient id="cfIncGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.22"/>
+                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.25"/>
                 <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
               </linearGradient>
               <linearGradient id="cfExpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.20"/>
+                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.22"/>
                 <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"/>
               </linearGradient>
             </defs>
 
-            <!-- Guide Lines -->
-            <line x1="20" y1="${cfH - 24}" x2="${cfW - 20}" y2="${cfH - 24}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3 3"/>
+            <!-- Guide Line at baseline -->
+            <line x1="${padX}" y1="${baselineY}" x2="${cfW - padX}" y2="${baselineY}" stroke="rgba(255,255,255,0.08)" stroke-dasharray="3 3"/>
 
-            <!-- Income Wave -->
-            <path d="${incArea}" fill="url(#cfIncGrad)" />
-            <path d="${incPath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />
+            <!-- Income Wave Area & Stroke -->
+            ${incArea ? `<path d="${incArea}" fill="url(#cfIncGrad)" />` : ''}
+            ${incPath ? `<path d="${incPath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />` : ''}
 
-            <!-- Expense Wave -->
-            <path d="${expArea}" fill="url(#cfExpGrad)" />
-            <path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />
+            <!-- Expense Wave Area & Stroke -->
+            ${expArea ? `<path d="${expArea}" fill="url(#cfExpGrad)" />` : ''}
+            ${expPath ? `<path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />` : ''}
 
-            <!-- Interactive Dots -->
-            ${cfCoords.map(pt => `
-              ${pt.inc > 0 ? `<circle cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2"/>` : ''}
-              ${pt.exp > 0 ? `<circle cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2"/>` : ''}
-              <text x="${pt.x}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>
-            `).join('')}
+            <!-- Interactive Dots & Clean Labels -->
+            ${cfCoords.map((pt, idx) => {
+              const showLabel = cfCoords.length <= 8
+                || (cfCoords.length <= 15 && idx % 2 === 0)
+                || (cfCoords.length > 15 && (idx % 5 === 0 || idx === cfCoords.length - 1));
+
+              return `
+                ${pt.inc > 0 ? `<circle class="cf-pt inc" cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
+                ${pt.exp > 0 ? `<circle class="cf-pt exp" cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
+                ${showLabel ? `<text x="${pt.x}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
+              `;
+            }).join('')}
           </svg>
+          <div id="cf-chart-tooltip" class="chart-tooltip"></div>
         </div>
 
         <!-- Month-over-Month Bar -->
@@ -1738,38 +1868,211 @@ function bindInteractiveEvents() {
     };
   });
 
-  // Analytics Donut Segment Interactions
+  // Analytics Donut Segment & Legend In-Place Hover Interactions
+  const updateDonutCenter = (cat, amt, pct, icon) => {
+    const center = document.getElementById('donut-center-info');
+    if (!center) return;
+    if (cat) {
+      center.innerHTML = `
+        <div class="donut-center-icon">${icon || '💳'}</div>
+        <div class="donut-center-amt num">${money(amt)}</div>
+        <div class="donut-center-lbl">${esc(cat)} (${pct}%)</div>
+      `;
+    } else {
+      const defaultAmt = center.getAttribute('data-default-amt') || 0;
+      const defaultCount = center.getAttribute('data-default-count') || 0;
+      center.innerHTML = `
+        <div class="donut-center-lbl">ВСЕГО ТРАТ</div>
+        <div class="donut-center-amt num">${money(defaultAmt)}</div>
+        <div class="donut-center-sub">${defaultCount} ${pluralizeCats(defaultCount)}</div>
+      `;
+    }
+  };
+
+  const highlightCategory = (cat, amt, pct, icon) => {
+    updateDonutCenter(cat, amt, pct, icon);
+    const segments = $$('.donut-segment');
+    const items = $$('.donut-cat-item');
+
+    if (cat) {
+      segments.forEach(s => {
+        if (s.getAttribute('data-cat') === cat) {
+          s.classList.add('focused');
+          s.classList.remove('dimmed');
+          s.setAttribute('stroke-width', '22');
+        } else {
+          s.classList.remove('focused');
+          s.classList.add('dimmed');
+          s.setAttribute('stroke-width', '16');
+        }
+      });
+      items.forEach(it => {
+        if (it.getAttribute('data-cat') === cat) {
+          it.classList.add('hovered');
+          it.classList.remove('dimmed');
+        } else {
+          it.classList.remove('hovered');
+          it.classList.add('dimmed');
+        }
+      });
+    } else {
+      segments.forEach(s => {
+        const isAct = s.getAttribute('data-cat') === activeAnalyticsCat;
+        s.classList.toggle('focused', isAct);
+        s.classList.remove('dimmed');
+        s.setAttribute('stroke-width', isAct ? '22' : '16');
+      });
+      items.forEach(it => {
+        const isAct = it.getAttribute('data-cat') === activeAnalyticsCat;
+        it.classList.toggle('selected', isAct);
+        it.classList.remove('hovered', 'dimmed');
+      });
+    }
+  };
+
   $$('.donut-segment').forEach(seg => {
-    seg.onmouseenter = () => {
-      hoveredAnalyticsCat = seg.getAttribute('data-cat');
-      renderApp();
-    };
+    const cat = seg.getAttribute('data-cat');
+    const amt = seg.getAttribute('data-amt');
+    const pct = seg.getAttribute('data-pct');
+    const icon = seg.getAttribute('data-icon');
+
+    seg.onmouseenter = () => highlightCategory(cat, amt, pct, icon);
     seg.onmouseleave = () => {
-      hoveredAnalyticsCat = null;
-      renderApp();
+      if (activeAnalyticsCat) {
+        const actSeg = document.querySelector(`.donut-segment[data-cat="${activeAnalyticsCat}"]`);
+        if (actSeg) {
+          highlightCategory(
+            activeAnalyticsCat,
+            actSeg.getAttribute('data-amt'),
+            actSeg.getAttribute('data-pct'),
+            actSeg.getAttribute('data-icon')
+          );
+        } else {
+          highlightCategory(null);
+        }
+      } else {
+        highlightCategory(null);
+      }
     };
     seg.onclick = () => {
-      const c = seg.getAttribute('data-cat');
-      activeAnalyticsCat = activeAnalyticsCat === c ? null : c;
+      activeAnalyticsCat = activeAnalyticsCat === cat ? null : cat;
       renderApp();
     };
   });
 
   $$('.donut-cat-item').forEach(item => {
-    item.onmouseenter = () => {
-      hoveredAnalyticsCat = item.getAttribute('data-cat');
-      renderApp();
-    };
+    const cat = item.getAttribute('data-cat');
+    const amt = item.getAttribute('data-amt');
+    const pct = item.getAttribute('data-pct');
+    const icon = item.getAttribute('data-icon');
+
+    item.onmouseenter = () => highlightCategory(cat, amt, pct, icon);
     item.onmouseleave = () => {
-      hoveredAnalyticsCat = null;
-      renderApp();
+      if (activeAnalyticsCat) {
+        const actSeg = document.querySelector(`.donut-segment[data-cat="${activeAnalyticsCat}"]`);
+        if (actSeg) {
+          highlightCategory(
+            activeAnalyticsCat,
+            actSeg.getAttribute('data-amt'),
+            actSeg.getAttribute('data-pct'),
+            actSeg.getAttribute('data-icon')
+          );
+        } else {
+          highlightCategory(null);
+        }
+      } else {
+        highlightCategory(null);
+      }
     };
     item.onclick = () => {
-      const c = item.getAttribute('data-cat');
-      activeAnalyticsCat = activeAnalyticsCat === c ? null : c;
+      activeAnalyticsCat = activeAnalyticsCat === cat ? null : cat;
       renderApp();
     };
   });
+
+  // Home Balance Chart Tooltip
+  const homeWrap = document.getElementById('home-chart-wrap');
+  const homeTooltip = document.getElementById('home-chart-tooltip');
+  if (homeWrap && homeTooltip) {
+    $$('.home-chart-pt').forEach(pt => {
+      pt.onmouseenter = () => {
+        const date = pt.getAttribute('data-date');
+        const bal = pt.getAttribute('data-bal');
+        const dInc = Number(pt.getAttribute('data-inc')) || 0;
+        const dExp = Number(pt.getAttribute('data-exp')) || 0;
+
+        let deltaHtml = '';
+        if (dInc > 0 && dExp > 0) {
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(dInc)}</div><div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(dExp)}</div>`;
+        } else if (dInc > 0) {
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-jade);">+${money(dInc)} доход</div>`;
+        } else if (dExp > 0) {
+          deltaHtml = `<div class="chart-tooltip-badge" style="color: var(--accent-amber);">−${money(dExp)} расход</div>`;
+        }
+
+        homeTooltip.innerHTML = `
+          <div class="chart-tooltip-title">${esc(date)}</div>
+          <div class="chart-tooltip-value">${money(bal)}</div>
+          ${deltaHtml}
+        `;
+
+        const wrapRect = homeWrap.getBoundingClientRect();
+        const ptRect = pt.getBoundingClientRect();
+        const left = ptRect.left - wrapRect.left + ptRect.width / 2;
+        const top = ptRect.top - wrapRect.top;
+
+        homeTooltip.style.left = `${left}px`;
+        homeTooltip.style.top = `${top}px`;
+        homeTooltip.classList.add('visible');
+        pt.setAttribute('r', '6');
+      };
+
+      pt.onmouseleave = () => {
+        homeTooltip.classList.remove('visible');
+        pt.setAttribute('r', $$('.home-chart-pt').length > 15 ? '3' : '4');
+      };
+    });
+  }
+
+  // Cashflow Dual Wave Tooltip
+  const cfWrap = document.getElementById('cf-chart-wrap');
+  const cfTooltip = document.getElementById('cf-chart-tooltip');
+  if (cfWrap && cfTooltip) {
+    $$('.cf-pt').forEach(pt => {
+      pt.onmouseenter = () => {
+        const date = pt.getAttribute('data-date');
+        const dInc = Number(pt.getAttribute('data-inc')) || 0;
+        const dExp = Number(pt.getAttribute('data-exp')) || 0;
+        const dNet = dInc - dExp;
+
+        cfTooltip.innerHTML = `
+          <div class="chart-tooltip-title">${esc(date)}</div>
+          <div style="display: flex; gap: 10px; margin-top: 2px;">
+            <span style="color: var(--accent-jade); font-weight: 700;">+${money(dInc)}</span>
+            <span style="color: var(--accent-amber); font-weight: 700;">−${money(dExp)}</span>
+          </div>
+          <div style="font-size: 11px; color: ${dNet >= 0 ? 'var(--accent-jade)' : 'var(--accent-coral)'}; margin-top: 3px;">
+            Чистый поток: ${dNet >= 0 ? '+' : ''}${money(dNet)}
+          </div>
+        `;
+
+        const wrapRect = cfWrap.getBoundingClientRect();
+        const ptRect = pt.getBoundingClientRect();
+        const left = ptRect.left - wrapRect.left + ptRect.width / 2;
+        const top = ptRect.top - wrapRect.top;
+
+        cfTooltip.style.left = `${left}px`;
+        cfTooltip.style.top = `${top}px`;
+        cfTooltip.classList.add('visible');
+        pt.setAttribute('r', '5.5');
+      };
+
+      pt.onmouseleave = () => {
+        cfTooltip.classList.remove('visible');
+        pt.setAttribute('r', '3.5');
+      };
+    });
+  }
 
   const btnResetDonut = document.getElementById('btn-reset-donut-filter');
   if (btnResetDonut) {
