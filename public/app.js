@@ -811,4 +811,5 @@ window.addEventListener('error', function(e) {
   alert('Ошибка JavaScript: ' + e.message);
 });
 
+alert('JavaScript работает');
 boot();
