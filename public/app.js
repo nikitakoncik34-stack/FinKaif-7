@@ -12,15 +12,20 @@ let data = {
 };
 
 const api = async (p, o = {}) => {
+  const token = localStorage.getItem('finkaif_token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(o.headers || {})
+  };
+
   const r = await fetch('/api/' + p, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(o.headers || {})
-    },
-    ...o
+    ...o,
+    headers,
+    credentials: 'include'
   });
 
-  const j = await r.json();
+  const j = await r.json().catch(() => ({}));
 
   if (!r.ok) {
     throw Error(j.error || 'Ошибка');
@@ -112,6 +117,8 @@ function setupAuth() {
 
   const form = $('#authform');
   const switchButton = $('#switch');
+  const submitBtn = $('#submit');
+  const notice = $('#notice');
 
   if (!form || !switchButton) {
     return;
@@ -124,9 +131,15 @@ function setupAuth() {
     const email = $('#email').value.trim();
     const password = $('#password').value;
 
+    if (notice) notice.textContent = '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = mode === 'login' ? 'Вход…' : 'Регистрация…';
+    }
+
     try {
 
-      await api('auth/' + mode, {
+      const res = await api('auth/' + mode, {
         method: 'POST',
         body: JSON.stringify({
           email,
@@ -134,11 +147,26 @@ function setupAuth() {
         })
       });
 
+      if (res && res.token) {
+        localStorage.setItem('finkaif_token', res.token);
+      }
+
       await boot();
 
     } catch (err) {
 
-      $('#notice').textContent = err.message;
+      if (notice) {
+        notice.textContent = err.message;
+      } else {
+        alert(err.message);
+      }
+
+    } finally {
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = mode === 'login' ? 'Войти' : 'Создать аккаунт';
+      }
 
     }
   };
@@ -585,9 +613,13 @@ function render() {
 
   $('#logout').onclick = async () => {
 
-    await api('auth/logout', {
-      method: 'POST'
-    });
+    localStorage.removeItem('finkaif_token');
+
+    try {
+      await api('auth/logout', {
+        method: 'POST'
+      });
+    } catch {}
 
     location.reload();
 
@@ -796,20 +828,27 @@ async function boot() {
 
     me = (await api('me')).user;
 
-    await load();
-
   } catch {
 
+    localStorage.removeItem('finkaif_token');
     $('#app').innerHTML = auth();
-
     setupAuth();
+    return;
+
+  }
+
+  render();
+
+  try {
+
+    await load();
+
+  } catch (err) {
+
+    console.error('Ошибка загрузки данных:', err);
 
   }
 
 }
-window.addEventListener('error', function(e) {
-  alert('Ошибка JavaScript: ' + e.message);
-});
 
-alert('JavaScript работает');
 boot();
