@@ -393,22 +393,30 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "Не удалось получить ответ от Gemini.";
 }
 
-app.post("/api/assistant", auth, async (req, res) => {
+const assistantHandler = async (req, res) => {
   try {
-    const question = String(req.body.question || "").trim();
+    const question = String(req.body.question || req.body.message || "").trim();
     if (!question) return res.status(400).json({ error: "Введите вопрос." });
 
-    const [tr, bu, go, prevMsgs] = await Promise.all([
-      db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250", [req.user.id]),
-      db.query("select category,limit_amount from budgets where user_id=$1", [req.user.id]),
-      db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id]),
-      db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 8", [req.user.id])
-    ]);
+    let transactions = [];
+    let budgets = [];
+    let goals = [];
+    let history = [];
 
-    const transactions = tr.rows;
-    const budgets = bu.rows;
-    const goals = go.rows;
-    const history = prevMsgs.rows.reverse();
+    try {
+      const [tr, bu, go, prevMsgs] = await Promise.all([
+        db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250", [req.user.id]),
+        db.query("select category,limit_amount from budgets where user_id=$1", [req.user.id]),
+        db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id]),
+        db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 8", [req.user.id])
+      ]);
+      transactions = tr.rows || [];
+      budgets = bu.rows || [];
+      goals = go.rows || [];
+      history = (prevMsgs.rows || []).reverse();
+    } catch (dbReadErr) {
+      console.warn("DB read error in assistant:", dbReadErr.message);
+    }
 
     const DEFAULT_GEMINI_KEY = Buffer.from("QVEuQWI4Uk42TFRKMGxod1B2QnpuTE5HQkd4cHBta1hiaHZVYXZ1QXAyc2JGaWNDNERTYmc=", "base64").toString("utf8");
 
@@ -426,47 +434,65 @@ app.post("/api/assistant", auth, async (req, res) => {
     let answer = "";
     const prompt = buildSystemPrompt(transactions, budgets, goals);
 
-    if (geminiKey) {
-      answer = await callGemini(geminiKey, prompt, question, history);
-    } else if (isValidOpenAI || process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY) {
-      let apiKey = isValidOpenAI ? rawOpenAI : (process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY);
-      let baseURL = process.env.OPENAI_BASE_URL || undefined;
-      let model = process.env.OPENAI_MODEL;
+    try {
+      if (geminiKey) {
+        answer = await callGemini(geminiKey, prompt, question, history);
+      } else if (isValidOpenAI || process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY) {
+        let apiKey = isValidOpenAI ? rawOpenAI : (process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY);
+        let baseURL = process.env.OPENAI_BASE_URL || undefined;
+        let model = process.env.OPENAI_MODEL;
 
-      if (process.env.GROQ_API_KEY && !isValidOpenAI) {
-        baseURL = "https://api.groq.com/openai/v1";
-        model = model || "llama-3.3-70b-versatile";
-      } else if (process.env.DEEPSEEK_API_KEY && !isValidOpenAI) {
-        baseURL = "https://api.deepseek.com";
-        model = model || "deepseek-chat";
+        if (process.env.GROQ_API_KEY && !isValidOpenAI) {
+          baseURL = "https://api.groq.com/openai/v1";
+          model = model || "llama-3.3-70b-versatile";
+        } else if (process.env.DEEPSEEK_API_KEY && !isValidOpenAI) {
+          baseURL = "https://api.deepseek.com";
+          model = model || "deepseek-chat";
+        } else {
+          model = model || "gpt-4o-mini";
+        }
+
+        const client = new OpenAI({ apiKey, baseURL });
+        const messages = [
+          { role: "system", content: prompt },
+          ...history.map(m => ({ role: m.role, content: m.content })),
+          { role: "user", content: question }
+        ];
+
+        const r = await client.chat.completions.create({
+          model,
+          temperature: 0.5,
+          messages
+        });
+        answer = r.choices[0]?.message?.content || "Не удалось получить ответ от нейросети.";
       } else {
-        model = model || "gpt-4o-mini";
+        answer = generateBuiltinAdvice(question, transactions, budgets, goals);
       }
-
-      const client = new OpenAI({ apiKey, baseURL });
-      const messages = [
-        { role: "system", content: prompt },
-        ...history.map(m => ({ role: m.role, content: m.content })),
-        { role: "user", content: question }
-      ];
-
-      const r = await client.chat.completions.create({
-        model,
-        temperature: 0.5,
-        messages
-      });
-      answer = r.choices[0]?.message?.content || "Не удалось получить ответ от нейросети.";
-    } else {
+    } catch (aiErr) {
+      console.warn("External AI call error, falling back to smart built-in advice:", aiErr.message);
       answer = generateBuiltinAdvice(question, transactions, budgets, goals);
     }
 
-    await db.query("insert into chat_messages(user_id,role,content) values($1,$2,$3),($1,$4,$5)", [req.user.id, "user", question, "assistant", answer]);
-    res.json({ answer });
+    if (!answer) {
+      answer = generateBuiltinAdvice(question, transactions, budgets, goals);
+    }
+
+    try {
+      await db.query("insert into chat_messages(user_id,role,content) values($1,$2,$3),($1,$4,$5)", [req.user.id, "user", question, "assistant", answer]);
+    } catch (dbInsertErr) {
+      console.warn("Failed to persist chat message:", dbInsertErr.message);
+    }
+
+    res.json({ answer, reply: answer });
   } catch (e) {
-    console.error("Assistant error:", e);
-    res.status(500).json({ error: "Ошибка ответа ИИ: " + (e.message || "Проверьте ключ API в Railway Variables.") });
+    console.error("Assistant outer error:", e);
+    const fallback = generateBuiltinAdvice("анализ", [], [], []);
+    res.json({ answer: fallback, reply: fallback });
   }
-});
+};
+
+app.post("/api/assistant", auth, assistantHandler);
+app.post("/api/chat", auth, assistantHandler);
 
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
