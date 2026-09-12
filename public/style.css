@@ -1428,42 +1428,53 @@ html, body {
    ========================================================================== */
 @media (max-width: 820px) {
   .app-container {
-    padding: 14px 14px 70px;
+    padding: 12px 12px 90px;
   }
 
   .masthead {
-    top: 10px;
-    padding: 6px 10px;
+    top: 8px;
+    padding: 8px 14px;
     gap: 8px;
-    margin-bottom: 22px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  .brand-badge, .balance-pill {
-    display: none;
+  /* Desktop nav replaced by bottom bar on mobile */
+  .masthead .nav-controller {
+    display: none !important;
   }
 
-  .nav-item span {
-    display: none;
+  /* Desktop quick new button replaced by center mobile FAB */
+  .masthead #btn-quick-new {
+    display: none !important;
   }
 
-  .nav-item {
-    padding: 8px 10px;
+  .brand-badge {
+    display: inline-block !important;
+    font-size: 10px;
   }
 
-  .user-btn span {
-    display: none;
+  .balance-pill {
+    display: inline-flex !important;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    gap: 6px;
   }
 
   .user-btn {
     padding: 4px;
   }
 
-  .btn-primary span {
-    display: none;
+  .user-name-text, .user-settings-icon {
+    display: none !important;
   }
 
-  .btn-primary {
-    padding: 8px 10px;
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
   }
 
   .hero-balance-card {
@@ -3261,4 +3272,273 @@ html, body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ==========================================================================
+   FINKAIF v8.15: TRANSACTION EDITING & MOBILE ERGONOMICS
+   ========================================================================== */
+
+/* Clickable Transaction Cards */
+.tx-row-clickable {
+  cursor: pointer;
+  transition: transform var(--t-fast), background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.tx-row-clickable:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(52, 211, 153, 0.28);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+
+.tx-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tx-edit-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--t-fast);
+}
+
+.tx-edit-btn:hover {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34D399;
+}
+
+.tx-badge-editing {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(52, 211, 153, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.btn-ghost-danger {
+  background: transparent;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #F87171;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--t-fast);
+}
+
+.btn-ghost-danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #EF4444;
+}
+
+/* Mobile Bottom Navigation Bar (Hidden on Desktop) */
+.mobile-bottom-bar {
+  display: none;
+}
+
+.mobile-sheet-backdrop {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .mobile-bottom-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: rgba(10, 16, 23, 0.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 10px env(safe-area-inset-bottom, 8px) 10px;
+  }
+
+  .mobile-nav-btn {
+    background: transparent;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 6px 8px;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    transition: all var(--t-fast);
+    min-width: 52px;
+  }
+
+  .mobile-nav-btn.active {
+    color: #34D399;
+  }
+
+  .mobile-nav-btn.active .mobile-nav-icon svg {
+    stroke: #34D399;
+    filter: drop-shadow(0 0 8px rgba(52, 211, 153, 0.5));
+  }
+
+  .mobile-fab-wrap {
+    position: relative;
+    top: -14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-fab-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #34D399 0%, #059669 100%);
+    border: 3px solid #0B1118;
+    color: #052E16;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(16, 185, 129, 0.45);
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+  }
+
+  .mobile-fab-btn:active {
+    transform: scale(0.92);
+  }
+
+  .mobile-fab-btn svg {
+    stroke: #052E16;
+    stroke-width: 2.5;
+  }
+
+  /* Mobile More Drawer Sheet */
+  .mobile-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .mobile-sheet-card {
+    background: #0E1620;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 24px 24px 0 0;
+    padding: 12px 18px calc(24px + env(safe-area-inset-bottom, 12px));
+    animation: slideUpSheet 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .mobile-sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 2px;
+    margin: 0 auto 12px;
+  }
+
+  .mobile-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .mobile-sheet-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #FFFFFF;
+  }
+
+  .mobile-sheet-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .mobile-sheet-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: all var(--t-fast);
+  }
+
+  .mobile-sheet-item:hover, .mobile-sheet-item.active {
+    background: rgba(52, 211, 153, 0.08);
+    border-color: rgba(52, 211, 153, 0.3);
+  }
+
+  .mobile-sheet-item-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--r-sm);
+    background: rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #34D399;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .mobile-sheet-item-name {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFFFFF;
+  }
+
+  .mobile-sheet-item-sub {
+    display: block;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+}
+
 
