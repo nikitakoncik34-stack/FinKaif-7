@@ -21,6 +21,8 @@ let txSearch = '';
 let modalType = 'expense';
 let editingTxId = null;
 let profileModalOpen = false;
+let privacyMode = localStorage.getItem('finkaif_privacy') === 'true';
+let paydaySplitData = null;
 
 let profile = {
   display_name: localStorage.getItem('finkaif_name') || '',
@@ -69,9 +71,12 @@ const currencySymbols = {
   'KZT': '₸'
 };
 
-const money = n => {
-  const num = Math.round(Number(n) || 0);
+const money = (n, force = false) => {
   const sym = currencySymbols[profile.currency] || '₽';
+  if (privacyMode && !force) {
+    return '•••• ' + sym;
+  }
+  const num = Math.round(Number(n) || 0);
   return new Intl.NumberFormat('ru-RU').format(num) + ' ' + sym;
 };
 
@@ -189,12 +194,119 @@ const pluralizeOps = n => {
 };
 
 // Compact currency formatter for axis scales (e.g. 50K ₽, 1.2M ₽)
-const compactMoney = num => {
+const compactMoney = (num, force = false) => {
+  const sym = currencySymbols[profile.currency] || '₽';
+  if (privacyMode && !force) return '••• ' + sym;
   const n = Math.abs(Number(num) || 0);
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M ₽';
-  if (n >= 1000) return Math.round(n / 1000) + 'K ₽';
-  return n + ' ₽';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M ' + sym;
+  if (n >= 1000) return Math.round(n / 1000) + 'K ' + sym;
+  return n + ' ' + sym;
 };
+
+// Smart Natural Language Financial Parser
+function parseQuickTxInput(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+
+  // 1. Extract Amount
+  let amount = 0;
+  let cleanWords = text;
+
+  // Check for k / к / тыс (e.g. 15к, 15k, 15.5к, 80k)
+  const kMatch = text.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ)(?:\s|$)/i);
+  // Check for standard number (e.g. 250, 4500, 25 000)
+  const numMatch = text.match(/(?:^|\s)(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:\s|$)/i);
+
+  if (kMatch) {
+    const val = parseFloat(kMatch[1].replace(',', '.'));
+    if (!isNaN(val) && val > 0) {
+      amount = Math.round(val * 1000);
+      cleanWords = cleanWords.replace(kMatch[0], ' ');
+    }
+  } else if (numMatch) {
+    const rawVal = numMatch[1].replace(/\s+/g, '').replace(',', '.');
+    const val = parseFloat(rawVal);
+    if (!isNaN(val) && val > 0) {
+      amount = Math.round(val);
+      cleanWords = cleanWords.replace(numMatch[0], ' ');
+    }
+  }
+
+  // 2. Extract Date
+  let occurred_on = toDateIso(new Date());
+  let dateLabel = 'Сегодня';
+  if (/вчера/i.test(text)) {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    occurred_on = toDateIso(d);
+    dateLabel = 'Вчера';
+    cleanWords = cleanWords.replace(/вчера/i, ' ');
+  } else if (/позавчера/i.test(text)) {
+    const d = new Date();
+    d.setDate(d.getDate() - 2);
+    occurred_on = toDateIso(d);
+    dateLabel = 'Позавчера';
+    cleanWords = cleanWords.replace(/позавчера/i, ' ');
+  }
+
+  // 3. Category & Type detection
+  const lower = text.toLowerCase();
+  let type = 'expense';
+  let category = 'Продукты';
+  let iconEmoji = '🛒';
+
+  if (/зарплат|аванс|гонорар|преми|дивиденд|фриланс|поступлени|клиент|приход/i.test(lower)) {
+    type = 'income';
+    category = /фриланс|проект/i.test(lower) ? 'Фриланс' : /дивиденд/i.test(lower) ? 'Дивиденды' : 'Зарплата';
+    iconEmoji = '💰';
+  } else if (/кофе|кафе|латте|капучино|булочн|выпечк|пекарн|круассан|эспрессо|чай/i.test(lower)) {
+    type = 'expense';
+    category = 'Кафе';
+    iconEmoji = '☕';
+  } else if (/ресторан|ужин|обед|завтрак|пицц|суши|бургер|доставк|бар|столов/i.test(lower)) {
+    type = 'expense';
+    category = 'Рестораны';
+    iconEmoji = '🍽️';
+  } else if (/такси|uber|яндекс такси|метро|бензин|азс|парковк|проезд|автобус|каршеринг/i.test(lower)) {
+    type = 'expense';
+    category = 'Транспорт';
+    iconEmoji = '🚕';
+  } else if (/подписк|яндекс плюс|apple|spotify|телеграм|сервер|vpn|хостинг|облако/i.test(lower)) {
+    type = 'expense';
+    category = 'Подписки';
+    iconEmoji = '📱';
+  } else if (/аптек|врач|лекарств|анализ|стоматолог|здоровь|больниц/i.test(lower)) {
+    type = 'expense';
+    category = 'Здоровье';
+    iconEmoji = '🏥';
+  } else if (/техник|монитор|ноутбук|телефон|гаджет|девайс/i.test(lower)) {
+    type = 'expense';
+    category = 'Техника';
+    iconEmoji = '💻';
+  } else if (/одежд|обувь|кроссовк|куртк|шопинг|покупк/i.test(lower)) {
+    type = 'expense';
+    category = 'Покупки';
+    iconEmoji = '🛍️';
+  } else if (/жилье|аренд|квартир|жкх|коммуналк|свет|интернет/i.test(lower)) {
+    type = 'expense';
+    category = 'Жилье';
+    iconEmoji = '🏠';
+  }
+
+  const description = cleanWords.replace(/\s+/g, ' ').trim();
+
+  return {
+    raw: text,
+    amount,
+    type,
+    category,
+    icon: iconEmoji,
+    occurred_on,
+    dateLabel,
+    description: description || category
+  };
+}
+
 
 // Collision-free axis label spacing ensuring last label is always visible
 const isLabelVisible = (idx, total) => {
@@ -351,7 +463,9 @@ function icon(name, size = 16) {
     check: '<polyline points="20 6 9 17 4 12"></polyline>',
     wallet: '<path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"></path><path d="M16 13a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"></path>',
     flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
-    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>'
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>',
+    eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
@@ -439,7 +553,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.15</span>
+          <span class="brand-badge">8.16</span>
         </div>
       </div>
 
@@ -471,9 +585,12 @@ function renderMasthead() {
       </nav>
 
       <div class="masthead-actions">
-        <div class="balance-pill num">
+        <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать баланс (горячая клавиша P)' : 'Скрыть баланс (горячая клавиша P)'}">
           <span class="pulse-dot"></span>
           <span>${money(balance)}</span>
+          <button class="privacy-toggle-btn ${privacyMode ? 'active' : ''}" id="btn-toggle-privacy" title="${privacyMode ? 'Показать баланс' : 'Скрыть баланс'}">
+            ${privacyMode ? icon('eyeOff', 14) : icon('eye', 14)}
+          </button>
         </div>
 
         <button class="btn-primary" id="btn-quick-new">
@@ -842,6 +959,41 @@ function renderHomeView() {
         </div>
         <div class="stat-amount exp num">−${money(periodExp)}</div>
         <div class="stat-footnote">${periodFootnote}</div>
+      </div>
+    </div>
+
+    <!-- Smart Quick-Input Express Card -->
+    <div class="quick-express-card">
+      <div class="quick-express-top">
+        <div class="quick-input-wrap">
+          <span class="quick-input-icon">${icon('sparkle', 16)}</span>
+          <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «такси 450 вчера», «зарплата 80к»..." autocomplete="off">
+          <button class="btn-clear-quick" id="btn-clear-quick" style="display: none;">${icon('close', 12)}</button>
+        </div>
+        <button class="btn-submit-express" id="btn-submit-express">
+          ${icon('plus', 14)}
+          <span>Записать</span>
+        </button>
+      </div>
+
+      <!-- Live parse preview bar -->
+      <div id="quick-parse-preview" class="quick-parse-preview" style="display: none;"></div>
+
+      <!-- 1-Tap Quick Tap Pills (Монетки) -->
+      <div class="quick-pills-strip">
+        <span class="quick-pills-label">Быстрые траты:</span>
+        <button class="quick-pill-btn" data-type="expense" data-cat="Кафе" data-amt="250" data-desc="Кофе с собой">
+          <span>☕</span> <span>Кофе 250 ₽</span>
+        </button>
+        <button class="quick-pill-btn" data-type="expense" data-cat="Транспорт" data-amt="450" data-desc="Такси">
+          <span>🚕</span> <span>Такси 450 ₽</span>
+        </button>
+        <button class="quick-pill-btn" data-type="expense" data-cat="Рестораны" data-amt="650" data-desc="Обед">
+          <span>🍽️</span> <span>Обед 650 ₽</span>
+        </button>
+        <button class="quick-pill-btn" data-type="expense" data-cat="Продукты" data-amt="1200" data-desc="Супермаркет">
+          <span>🛒</span> <span>Продукты 1 200 ₽</span>
+        </button>
       </div>
     </div>
 
@@ -2475,6 +2627,74 @@ function renderMobileBottomBar() {
   `;
 }
 
+function renderPaydayModal() {
+  if (!paydaySplitData) return '';
+  const amt = Number(paydaySplitData.amount) || 0;
+  const savings = Math.round(amt * 0.20);
+  const needs = Math.round(amt * 0.50);
+  const wants = Math.round(amt * 0.30);
+  const primaryGoal = (data.goals || [])[0] || null;
+
+  return `
+    <div id="payday-modal" class="modal-backdrop" style="display: flex;">
+      <div class="modal-card payday-card">
+        <div class="payday-header">
+          <div class="payday-confetti-star">🎉</div>
+          <h3 class="payday-title">Отличное поступление!</h3>
+          <div class="payday-amt-badge num">+${new Intl.NumberFormat('ru-RU').format(amt)} ₽</div>
+          <p class="payday-subtitle">Время защитить доход по формуле <strong>50 / 30 / 20</strong> — «Сначала заплати себе».</p>
+        </div>
+
+        <div class="payday-split-grid">
+          <div class="payday-split-item box-savings">
+            <div class="payday-split-icon">🛡️</div>
+            <div class="payday-split-content">
+              <div class="payday-split-label">20% — Сбережения и цели</div>
+              <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(savings)} ₽</div>
+              <div class="payday-split-hint">Резервная подушка и инвестиции</div>
+            </div>
+          </div>
+
+          <div class="payday-split-item box-needs">
+            <div class="payday-split-icon">🏠</div>
+            <div class="payday-split-content">
+              <div class="payday-split-label">50% — Базовые расходы</div>
+              <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(needs)} ₽</div>
+              <div class="payday-split-hint">Жильё, продукты, счета, обязательства</div>
+            </div>
+          </div>
+
+          <div class="payday-split-item box-wants">
+            <div class="payday-split-icon">✨</div>
+            <div class="payday-split-content">
+              <div class="payday-split-label">30% — Свободный кайф</div>
+              <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(wants)} ₽</div>
+              <div class="payday-split-hint">Рестораны, покупки и радости жизни</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="payday-actions-footer">
+          ${primaryGoal ? `
+            <button class="btn-primary" id="btn-payday-split-goal" data-goal-id="${primaryGoal.id}" data-split-amt="${savings}" style="width: 100%;">
+              ${icon('sparkle', 16)}
+              <span>Отложить 20% (+${new Intl.NumberFormat('ru-RU').format(savings)} ₽) в «${esc(primaryGoal.name)}»</span>
+            </button>
+          ` : `
+            <button class="btn-primary" id="btn-payday-create-goal" style="width: 100%;">
+              ${icon('sparkle', 16)}
+              <span>Создать цель для 20% сбережений</span>
+            </button>
+          `}
+          <button type="button" class="btn-ghost" id="btn-close-payday" style="width: 100%; margin-top: 8px;">
+            Спасибо, распределю самостоятельно
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderApp() {
   const container = document.getElementById('app');
   if (!container) return;
@@ -2502,6 +2722,7 @@ function renderApp() {
       ${renderMobileBottomBar()}
       ${renderModal()}
       ${renderProfileModal()}
+      ${renderPaydayModal()}
     </div>
   `;
 
@@ -3365,6 +3586,9 @@ function bindInteractiveEvents() {
             method: 'POST',
             body: JSON.stringify({ type, category, amount, occurred_on, time: timeVal, created_at, description })
           });
+          if (type === 'income' && amount >= 15000) {
+            paydaySplitData = { amount };
+          }
         }
         const modal = document.getElementById('tx-modal');
         if (modal) modal.style.display = 'none';
@@ -3497,6 +3721,200 @@ function bindInteractiveEvents() {
       }
     };
   });
+
+  // ==========================================================================
+  // PRIVACY MODE TOGGLE & HOTKEY
+  // ==========================================================================
+  const togglePrivacy = () => {
+    privacyMode = !privacyMode;
+    localStorage.setItem('finkaif_privacy', privacyMode ? 'true' : 'false');
+    renderApp();
+  };
+
+  const btnTogglePrivacy = document.getElementById('btn-toggle-privacy');
+  if (btnTogglePrivacy) {
+    btnTogglePrivacy.onclick = e => {
+      e.stopPropagation();
+      togglePrivacy();
+    };
+  }
+
+  const mastheadBalPill = document.getElementById('masthead-balance-pill');
+  if (mastheadBalPill) {
+    mastheadBalPill.onclick = () => togglePrivacy();
+  }
+
+  if (!window.__privacyKeyBound) {
+    window.__privacyKeyBound = true;
+    window.addEventListener('keydown', e => {
+      if ((e.key === 'p' || e.key === 'P' || e.key === 'з' || e.key === 'З') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        togglePrivacy();
+      }
+    });
+  }
+
+  // ==========================================================================
+  // SMART QUICK-INPUT EXPRESS BAR & 1-TAP PILLS
+  // ==========================================================================
+  const quickInput = document.getElementById('quick-express-input');
+  const btnSubmitExpress = document.getElementById('btn-submit-express');
+  const btnClearQuick = document.getElementById('btn-clear-quick');
+  const previewBox = document.getElementById('quick-parse-preview');
+
+  const updateQuickPreview = () => {
+    if (!quickInput || !previewBox) return;
+    const parsed = parseQuickTxInput(quickInput.value);
+    if (btnClearQuick) btnClearQuick.style.display = quickInput.value ? 'inline-flex' : 'none';
+
+    if (parsed && parsed.amount > 0) {
+      previewBox.style.display = 'flex';
+      previewBox.innerHTML = `
+        <span class="preview-pill type ${parsed.type}">${parsed.type === 'income' ? '🟢 Поступление' : '🔴 Расход'}</span>
+        <span class="preview-pill cat">${parsed.icon} ${esc(parsed.category)}</span>
+        <span class="preview-pill amt num">${parsed.type === 'income' ? '+' : '−'}${new Intl.NumberFormat('ru-RU').format(parsed.amount)} ₽</span>
+        <span class="preview-pill date">📅 ${esc(parsed.dateLabel)}</span>
+        <span class="preview-pill desc">💬 «${esc(parsed.description)}»</span>
+      `;
+    } else {
+      previewBox.style.display = 'none';
+      previewBox.innerHTML = '';
+    }
+  };
+
+  if (quickInput) {
+    quickInput.oninput = updateQuickPreview;
+    quickInput.onkeydown = async e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (btnSubmitExpress) btnSubmitExpress.click();
+      }
+    };
+  }
+
+  if (btnClearQuick && quickInput) {
+    btnClearQuick.onclick = () => {
+      quickInput.value = '';
+      updateQuickPreview();
+      quickInput.focus();
+    };
+  }
+
+  if (btnSubmitExpress && quickInput) {
+    btnSubmitExpress.onclick = async () => {
+      const parsed = parseQuickTxInput(quickInput.value);
+      if (!parsed || parsed.amount <= 0) {
+        alert('Введите сумму и категорию (например: «кофе 250» или «такси 450 вчера»)');
+        quickInput.focus();
+        return;
+      }
+
+      try {
+        btnSubmitExpress.disabled = true;
+        btnSubmitExpress.innerText = 'Запись...';
+
+        await api('transactions', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: parsed.type,
+            category: parsed.category,
+            amount: parsed.amount,
+            occurred_on: parsed.occurred_on,
+            description: parsed.description
+          })
+        });
+
+        if (parsed.type === 'income' && parsed.amount >= 15000) {
+          paydaySplitData = { amount: parsed.amount };
+        }
+
+        quickInput.value = '';
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка быстрой записи: ' + err.message);
+      } finally {
+        if (btnSubmitExpress) btnSubmitExpress.disabled = false;
+      }
+    };
+  }
+
+  // 1-Tap Quick-Tap Pills (Монетки)
+  $$('.quick-pill-btn').forEach(pill => {
+    pill.onclick = async () => {
+      const type = pill.getAttribute('data-type') || 'expense';
+      const category = pill.getAttribute('data-cat') || 'Продукты';
+      const amount = Number(pill.getAttribute('data-amt')) || 0;
+      const description = pill.getAttribute('data-desc') || category;
+      const occurred_on = toDateIso(new Date());
+
+      if (amount <= 0) return;
+
+      try {
+        pill.classList.add('saving');
+        await api('transactions', {
+          method: 'POST',
+          body: JSON.stringify({ type, category, amount, occurred_on, description })
+        });
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка быстрой записи: ' + err.message);
+      }
+    };
+  });
+
+  // Pulse Category Cards Click -> Filter Analytics
+  $$('.pulse-cat-card').forEach(card => {
+    card.onclick = () => {
+      const cat = card.getAttribute('data-cat');
+      activeAnalyticsCat = cat;
+      tab = 'analytics';
+      renderApp();
+    };
+  });
+
+  // ==========================================================================
+  // PAYDAY AUTO-SPLITTER MODAL EVENTS
+  // ==========================================================================
+  const btnPaydaySplitGoal = document.getElementById('btn-payday-split-goal');
+  if (btnPaydaySplitGoal) {
+    btnPaydaySplitGoal.onclick = async () => {
+      const goalId = btnPaydaySplitGoal.getAttribute('data-goal-id');
+      const splitAmt = Number(btnPaydaySplitGoal.getAttribute('data-split-amt'));
+      const goal = (data.goals || []).find(g => String(g.id) === String(goalId));
+      if (goal && splitAmt > 0) {
+        try {
+          const newSaved = Number(goal.saved_amount || 0) + splitAmt;
+          await api('goals/' + goalId, {
+            method: 'PUT',
+            body: JSON.stringify({ saved_amount: newSaved })
+          });
+        } catch (e) {
+          console.error('Ошибка пополнения цели:', e);
+        }
+      }
+      paydaySplitData = null;
+      await refreshAllData();
+      renderApp();
+    };
+  }
+
+  const btnPaydayCreateGoal = document.getElementById('btn-payday-create-goal');
+  if (btnPaydayCreateGoal) {
+    btnPaydayCreateGoal.onclick = () => {
+      paydaySplitData = null;
+      tab = 'goals';
+      renderApp();
+    };
+  }
+
+  const btnClosePayday = document.getElementById('btn-close-payday');
+  if (btnClosePayday) {
+    btnClosePayday.onclick = () => {
+      paydaySplitData = null;
+      renderApp();
+    };
+  }
 
   // Budgets: Create / Update
   const budgetForm = document.getElementById('budget-form');
