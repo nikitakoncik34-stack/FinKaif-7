@@ -155,3 +155,24 @@ NEVER jump directly from `PROMPT → CODE`.
     * **Figma**: Native MCP in Antigravity (`figma_get_file`, etc.).
     * **21st-dev**: Magic UI inspiration and component lookup.
     * **Chrome DevTools**: Headless viewport emulation, screenshots, console log inspection.
+
+---
+
+## Rule: PROTOCOL_PRODUCT_ENGINEERING (Протокол «продукт / инженерия / qa / дебаг»)
+
+При любом обращении пользователя, связанном с созданием функциональности, изменением логики, базы данных, API, финансовыми расчётами, тестированием, поиском багов, анализом продукта или при явных триггерах **`продукт `**, **`инженерия `**, **`qa `**, **`дебаг `**:
+
+1. **Активация стека:** Автоматически подключать **Product + Engineering + QA + Debug Stack** согласно [PRODUCT_ENGINEERING_STACK.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/PRODUCT_ENGINEERING_STACK.md) и [PRODUCT_ENGINEERING_LOOP.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/PRODUCT_ENGINEERING_LOOP.md).
+2. **Проверка уровня изменений (Verification Level):**
+   - **Level 1 (Мелкие правки/стили):** crops-self-audit + Playwright snapshot + отсутствие ошибок в консоли.
+   - **Level 2 (Новые фичи/API/флоу):** Discovery (JTBD) ➔ Architecture RFC ➔ Design Stack (если есть UI) ➔ API tests ➔ Playwright User Personas ➔ UX Chaos Monkey ➔ Regression Check.
+   - **Level 3 (Критическая логика/балансы/миграции/AI Core):** Полный 16-шаговый цикл. Обязательный аудит инвариантов [FINANCIAL_INVARIANTS.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/FINANCIAL_INVARIANTS.md), проверка контрактов базы данных, property-based тестирование крайних значений, проверка качества AI ментора по [AI_QUALITY.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/AI_QUALITY.md), состязательный пост-билд селф-аудит и деплой на Railway.
+3. **Бескомпромиссная финансовая строгость:**
+   - Балансы и транзакции никогда не округляются на клиенте приблизительно; все вычисления строго соответствуют [FINANCIAL_INVARIANTS.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/FINANCIAL_INVARIANTS.md).
+   - Любое состояние гонки (race condition) при повторном клике кнопки блокируется на UI и валидируется на сервере.
+4. **Симуляция реальных пользователей и хаоса:**
+   - Перед сдачей функционала запускать симуляцию 7 персон (New, Returning, Power, Confused, Impatient, Mobile, Flaky Network) через Playwright CLI.
+   - Прогонять UX Chaos Monkey: отрицательные числа, ноль, длинные строки, спецсимволы, спам кликами.
+5. **Совместная работа двух стеков (Dual-Stack Synergy):**
+   - Если задача затрагивает и логику, и интерфейс: сначала активируется **Product & Engineering Phase** (смысл, требования, архитектура), затем **Design Stack** (эстетика, GSAP анимации, Vercel гайдлайны), затем **QA & Chaos Phase** (тесты, плейрайт, аудит инвариантов), и в финале — состязательный селф-аудит и деплой на Railway.
+
