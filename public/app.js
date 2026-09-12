@@ -1,3 +1,281 @@
+
+// ==========================================================================
+// FINKAIF 3D INVESTOR AVATAR COLLECTION & NEURAL LIVING CORE
+// ==========================================================================
+const AVATARS_3D = {
+  lion: {
+    id: 'lion',
+    name: 'Obsidian Lion',
+    title: 'Суверенный капитал',
+    color: '#F59E0B',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="lionBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#1E293B"/>
+            <stop offset="100%" stop-color="#090D16"/>
+          </radialGradient>
+          <linearGradient id="lionGold_${size}" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FDE68A"/>
+            <stop offset="40%" stop-color="#F59E0B"/>
+            <stop offset="100%" stop-color="#B45309"/>
+          </linearGradient>
+          <filter id="lionGlow_${size}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#F59E0B" flood-opacity="0.4"/>
+          </filter>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#lionBg_${size})" stroke="#F59E0B" stroke-width="1.5" stroke-opacity="0.5"/>
+        <circle cx="32" cy="32" r="27" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+        <path d="M32 14C23 14 17 21 17 29C17 38 23 48 32 50C41 48 47 38 47 29C47 21 41 14 32 14Z" fill="url(#lionGold_${size})" filter="url(#lionGlow_${size})" opacity="0.9"/>
+        <path d="M32 20L36 28L43 27L38 34L40 41L32 37L24 41L26 34L21 27L28 28L32 20Z" fill="#0F172A"/>
+        <circle cx="28" cy="32" r="2" fill="#FDE68A"/>
+        <circle cx="36" cy="32" r="2" fill="#FDE68A"/>
+        <polygon points="32,36 30,39 34,39" fill="#F59E0B"/>
+      </svg>
+    `
+  },
+  griffin: {
+    id: 'griffin',
+    name: 'Golden Griffin',
+    title: 'Стратегический надзор',
+    color: '#EAB308',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="griffBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#1F242D"/>
+            <stop offset="100%" stop-color="#0A0C10"/>
+          </radialGradient>
+          <linearGradient id="griffGrad_${size}" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FEF08A"/>
+            <stop offset="50%" stop-color="#EAB308"/>
+            <stop offset="100%" stop-color="#854D0E"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#griffBg_${size})" stroke="#EAB308" stroke-width="1.5" stroke-opacity="0.45"/>
+        <path d="M18 36C21 24 30 18 32 18C34 18 43 24 46 36C42 42 36 46 32 46C28 46 22 42 18 36Z" fill="url(#griffGrad_${size})"/>
+        <path d="M14 26C20 28 24 34 26 40C20 40 16 34 14 26Z" fill="#FEF08A" opacity="0.8"/>
+        <path d="M50 26C44 28 40 34 38 40C44 40 48 34 50 26Z" fill="#FEF08A" opacity="0.8"/>
+        <polygon points="32,28 28,35 36,35" fill="#0F172A"/>
+        <polygon points="32,32 30,36 34,36" fill="#FACC15"/>
+      </svg>
+    `
+  },
+  dragon: {
+    id: 'dragon',
+    name: 'Emerald Dragon',
+    title: 'Экспоненциальный рост',
+    color: '#2DD4BF',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="dragBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#132E2B"/>
+            <stop offset="100%" stop-color="#061312"/>
+          </radialGradient>
+          <linearGradient id="dragGrad_${size}" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#5EEAD4"/>
+            <stop offset="50%" stop-color="#2DD4BF"/>
+            <stop offset="100%" stop-color="#0F766E"/>
+          </linearGradient>
+          <filter id="dragGlow_${size}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#2DD4BF" flood-opacity="0.45"/>
+          </filter>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#dragBg_${size})" stroke="#2DD4BF" stroke-width="1.5" stroke-opacity="0.5"/>
+        <path d="M32 15L38 23L47 21L42 29L48 37L39 37L36 47L32 41L28 47L25 37L16 37L22 29L17 21L26 23L32 15Z" fill="url(#dragGrad_${size})" filter="url(#dragGlow_${size})"/>
+        <circle cx="28" cy="31" r="2.5" fill="#042F2E"/>
+        <circle cx="36" cy="31" r="2.5" fill="#042F2E"/>
+        <circle cx="28" cy="31" r="1" fill="#5EEAD4"/>
+        <circle cx="36" cy="31" r="1" fill="#5EEAD4"/>
+      </svg>
+    `
+  },
+  phoenix: {
+    id: 'phoenix',
+    name: 'Quantum Phoenix',
+    title: 'Трансформация и сила',
+    color: '#FB7185',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="phxBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#31131E"/>
+            <stop offset="100%" stop-color="#12050A"/>
+          </radialGradient>
+          <linearGradient id="phxGrad_${size}" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FDA4AF"/>
+            <stop offset="50%" stop-color="#F43F5E"/>
+            <stop offset="100%" stop-color="#881337"/>
+          </linearGradient>
+          <filter id="phxGlow_${size}" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#F43F5E" flood-opacity="0.45"/>
+          </filter>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#phxBg_${size})" stroke="#FB7185" stroke-width="1.5" stroke-opacity="0.5"/>
+        <path d="M32 14C36 22 46 26 48 36C45 44 38 48 32 50C26 48 19 44 16 36C18 26 28 22 32 14Z" fill="url(#phxGrad_${size})" filter="url(#phxGlow_${size})"/>
+        <path d="M32 24C34 29 40 32 40 37C38 42 35 44 32 45C29 44 26 42 24 37C24 32 30 29 32 24Z" fill="#FFF1F2"/>
+      </svg>
+    `
+  },
+  bull: {
+    id: 'bull',
+    name: 'Cyber Bull',
+    title: 'Бычий тренд капитала',
+    color: '#38BDF8',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="bullBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#142638"/>
+            <stop offset="100%" stop-color="#070E17"/>
+          </radialGradient>
+          <linearGradient id="bullGrad_${size}" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#BAE6FD"/>
+            <stop offset="50%" stop-color="#38BDF8"/>
+            <stop offset="100%" stop-color="#0369A1"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#bullBg_${size})" stroke="#38BDF8" stroke-width="1.5" stroke-opacity="0.45"/>
+        <path d="M14 20C18 20 22 25 24 30C20 30 16 26 14 20Z" fill="#BAE6FD"/>
+        <path d="M50 20C46 20 42 25 40 30C44 30 48 26 50 20Z" fill="#BAE6FD"/>
+        <path d="M22 28H42L38 44L32 48L26 44L22 28Z" fill="url(#bullGrad_${size})"/>
+        <circle cx="28" cy="35" r="2" fill="#082F49"/>
+        <circle cx="36" cy="35" r="2" fill="#082F49"/>
+        <circle cx="32" cy="43" r="3" stroke="#BAE6FD" stroke-width="1.5" fill="none"/>
+      </svg>
+    `
+  },
+  lotus: {
+    id: 'lotus',
+    name: 'Cosmic Lotus',
+    title: 'Финансовый дзен',
+    color: '#A855F7',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="lotusBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#28163B"/>
+            <stop offset="100%" stop-color="#0E0617"/>
+          </radialGradient>
+          <linearGradient id="lotusGrad_${size}" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#E9D5FF"/>
+            <stop offset="50%" stop-color="#A855F7"/>
+            <stop offset="100%" stop-color="#6B21A8"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#lotusBg_${size})" stroke="#A855F7" stroke-width="1.5" stroke-opacity="0.45"/>
+        <path d="M32 16C36 24 40 34 32 44C24 34 28 24 32 16Z" fill="url(#lotusGrad_${size})"/>
+        <path d="M32 28C40 28 47 34 44 42C38 45 32 44 32 44C32 44 26 45 20 42C17 34 24 28 32 28Z" fill="#D8B4FE" opacity="0.85"/>
+        <circle cx="32" cy="36" r="3" fill="#FAF5FF"/>
+      </svg>
+    `
+  },
+  falcon: {
+    id: 'falcon',
+    name: 'Titanium Falcon',
+    title: 'Скорость и точность',
+    color: '#34D399',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="falcBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#132E24"/>
+            <stop offset="100%" stop-color="#05130D"/>
+          </radialGradient>
+          <linearGradient id="falcGrad_${size}" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#A7F3D0"/>
+            <stop offset="50%" stop-color="#34D399"/>
+            <stop offset="100%" stop-color="#065F46"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#falcBg_${size})" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.45"/>
+        <path d="M32 16L40 28L48 32L38 38L32 48L26 38L16 32L24 28L32 16Z" fill="url(#falcGrad_${size})"/>
+        <polygon points="32,24 35,32 32,36 29,32" fill="#064E3B"/>
+        <circle cx="32" cy="28" r="1.5" fill="#ECFDF5"/>
+      </svg>
+    `
+  },
+  crown: {
+    id: 'crown',
+    name: 'Diamond Crown',
+    title: 'Капитал FIRE',
+    color: '#FBBF24',
+    svg: (size = 48) => `
+      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
+        <defs>
+          <radialGradient id="crownBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#2E2310"/>
+            <stop offset="100%" stop-color="#120D04"/>
+          </radialGradient>
+          <linearGradient id="crownGrad_${size}" x1="14" y1="16" x2="50" y2="48" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FEF3C7"/>
+            <stop offset="50%" stop-color="#FBBF24"/>
+            <stop offset="100%" stop-color="#B45309"/>
+          </linearGradient>
+        </defs>
+        <circle cx="32" cy="32" r="30" fill="url(#crownBg_${size})" stroke="#FBBF24" stroke-width="1.5" stroke-opacity="0.5"/>
+        <path d="M18 42L16 26L26 32L32 20L38 32L48 26L46 42H18Z" fill="url(#crownGrad_${size})"/>
+        <circle cx="16" cy="24" r="2" fill="#FEF3C7"/>
+        <circle cx="32" cy="18" r="2.5" fill="#FEF3C7"/>
+        <circle cx="48" cy="24" r="2" fill="#FEF3C7"/>
+        <rect x="20" y="39" width="24" height="2" rx="1" fill="#78350F"/>
+      </svg>
+    `
+  }
+};
+
+const EMOJI_TO_3D = {
+  '🦁': 'lion',
+  '🦅': 'griffin',
+  '🐉': 'dragon',
+  '🔥': 'phoenix',
+  '👑': 'crown',
+  '⚡': 'falcon',
+  '💎': 'crown',
+  '🐂': 'bull',
+  '🪷': 'lotus',
+  '🚀': 'phoenix',
+  '🧘': 'lotus',
+  '💼': 'griffin',
+  '🎯': 'falcon',
+  '🏆': 'crown'
+};
+
+function getAvatarHtml(avatarKey, userInitial = 'Н', size = 38) {
+  let key = avatarKey;
+  if (key && EMOJI_TO_3D[key]) {
+    key = EMOJI_TO_3D[key];
+  }
+
+  if (key && AVATARS_3D[key]) {
+    return AVATARS_3D[key].svg(size);
+  }
+
+  if (key && (key.startsWith('data:image/') || key.startsWith('http'))) {
+    return `<img src="${key}" alt="Avatar" class="custom-avatar-img" style="width: ${size}px; height: ${size}px;">`;
+  }
+
+  if (key && key !== 'monogram' && key.length <= 4) {
+    return `<span class="emoji-avatar" style="font-size: ${Math.round(size * 0.55)}px;">${key}</span>`;
+  }
+
+  return `<span class="monogram-avatar" style="width: ${size}px; height: ${size}px; font-size: ${Math.round(size * 0.44)}px;">${userInitial}</span>`;
+}
+
+function renderAssistantOrb(state = 'idle', size = 34) {
+  return `
+    <div class="assistant-living-orb" data-state="${state}" style="width: ${size}px; height: ${size}px;">
+      <div class="orb-ambient-glow"></div>
+      <div class="orb-orbital-ring orb-ring-1"></div>
+      <div class="orb-orbital-ring orb-ring-2"></div>
+      <div class="orb-core">
+        <div class="orb-nucleus"></div>
+      </div>
+    </div>
+  `;
+}
+
 /* ==========================================================================
    FINKAIF OS (v8.1)
    Velvet Slate, Cashmere Jade & Warm Amber
@@ -613,9 +891,7 @@ function renderMasthead() {
   const userName = profile.display_name ? profile.display_name : rawUser;
   const userInitial = rawUser.charAt(0).toUpperCase();
 
-  const avatarDisplay = profile.avatar && profile.avatar !== 'monogram'
-    ? `<span class="emoji-avatar">${profile.avatar}</span>`
-    : `<span class="monogram-avatar">${userInitial}</span>`;
+  const avatarDisplay = getAvatarHtml(profile.avatar, userInitial, 36);
 
   return `
     <header class="masthead">
@@ -625,7 +901,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.17</span>
+          <span class="brand-badge">8.18</span>
         </div>
       </div>
 
@@ -2346,9 +2622,12 @@ function renderAssistantView() {
   return `
     <div class="view-header assistant-view-header">
       <div>
-        <div class="assistant-tag-pill">
-          <span class="pulse-dot"></span>
-          <span>FinKaif Brain 3.0 • Neural Financial Intelligence</span>
+        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 8px;">
+          ${renderAssistantOrb(isAiThinking ? 'thinking' : 'idle', 42)}
+          <div class="assistant-tag-pill" style="margin-bottom: 0;">
+            <span class="pulse-dot"></span>
+            <span>FinKaif Brain 3.0 • Neural Financial Intelligence</span>
+          </div>
         </div>
         <h1 class="view-title">ИИ-Ментор FinKaif</h1>
         <p class="view-subtitle">Персональный финансовый интеллект: сценарии FIRE, сложный процент, аудит утечек и защита капитала.</p>
@@ -2720,7 +2999,7 @@ function renderProfileModal() {
         <!-- Identity Banner -->
         <div class="profile-identity-banner">
           <div class="profile-big-avatar" id="profile-avatar-preview">
-            ${profile.avatar && profile.avatar !== 'monogram' ? profile.avatar : userInitial}
+            ${getAvatarHtml(profile.avatar, userInitial, 70)}
           </div>
           <div class="profile-identity-info">
             <div class="profile-name-title">${esc(userName)}</div>
@@ -2733,18 +3012,34 @@ function renderProfileModal() {
         </div>
 
         <form id="profile-form">
-          <!-- Avatar Choice -->
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label class="form-label">Выберите аватар</label>
-            <div class="avatar-grid">
-              <button type="button" class="avatar-opt-btn ${(!profile.avatar || profile.avatar === 'monogram') ? 'active' : ''}" data-avatar="monogram" title="Монограмма">
-                ${userInitial}
+          <!-- 3D Investor Avatar Collection -->
+          <div class="form-group" style="margin-bottom: 20px;">
+            <div class="avatar-section-title">
+              <label class="form-label" style="margin-bottom: 0;">Коллекция 3D-аватаров инвестора</label>
+              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.18</span>
+            </div>
+            <div class="avatar-grid-3d">
+              ${Object.values(AVATARS_3D).map(av => {
+                const isAct = profile.avatar === av.id || (profile.avatar === '🦁' && av.id === 'lion') || (EMOJI_TO_3D[profile.avatar] === av.id);
+                return `
+                  <button type="button" class="avatar-card-opt ${isAct ? 'active' : ''}" data-avatar="${av.id}">
+                    <div style="width: 40px; height: 40px;">${av.svg(40)}</div>
+                    <span class="avatar-opt-title">${av.name}</span>
+                    <span class="avatar-opt-sub">${av.title}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- Alternative Options: Monogram and Custom Photo Upload -->
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <button type="button" class="btn btn-secondary ${profile.avatar === 'monogram' ? 'active' : ''}" id="btn-avatar-monogram" style="flex: 1; font-size: 11.5px; padding: 7px 10px;">
+                <span>🔤 Монограмма</span>
               </button>
-              ${emojiList.map(em => `
-                <button type="button" class="avatar-opt-btn ${profile.avatar === em ? 'active' : ''}" data-avatar="${em}">
-                  ${em}
-                </button>
-              `).join('')}
+              <label class="btn btn-secondary" style="flex: 1; font-size: 11.5px; padding: 7px 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <span>📷 Загрузить фото</span>
+                <input type="file" id="input-avatar-upload" accept="image/*" style="display: none;">
+              </label>
             </div>
           </div>
 
@@ -3111,20 +3406,66 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Avatar Selection
-  $$('.avatar-opt-btn').forEach(btn => {
+  // 3D Avatar Selection & Custom Upload Handlers
+  const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const userInitial = rawUser.charAt(0).toUpperCase();
+
+  const updateModalAvatarPreview = () => {
+    const preview = document.getElementById('profile-avatar-preview');
+    if (preview) {
+      preview.innerHTML = getAvatarHtml(profile.avatar, userInitial, 70);
+    }
+  };
+
+  $$('.avatar-card-opt').forEach(btn => {
     btn.onclick = () => {
       const av = btn.getAttribute('data-avatar');
       profile.avatar = av;
-      $$('.avatar-opt-btn').forEach(b => b.classList.remove('active'));
+      $$('.avatar-card-opt').forEach(b => b.classList.remove('active'));
+      const monoBtn = document.getElementById('btn-avatar-monogram');
+      if (monoBtn) monoBtn.classList.remove('active');
       btn.classList.add('active');
-      const preview = document.getElementById('profile-avatar-preview');
-      if (preview) {
-        const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
-        preview.innerText = av === 'monogram' ? rawUser.charAt(0).toUpperCase() : av;
-      }
+      updateModalAvatarPreview();
     };
   });
+
+  const btnMono = document.getElementById('btn-avatar-monogram');
+  if (btnMono) {
+    btnMono.onclick = () => {
+      profile.avatar = 'monogram';
+      $$('.avatar-card-opt').forEach(b => b.classList.remove('active'));
+      btnMono.classList.add('active');
+      updateModalAvatarPreview();
+    };
+  }
+
+  const inputUpload = document.getElementById('input-avatar-upload');
+  if (inputUpload) {
+    inputUpload.onchange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 160;
+          canvas.height = 160;
+          const ctx = canvas.getContext('2d');
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 160, 160);
+          profile.avatar = canvas.toDataURL('image/jpeg', 0.85);
+          $$('.avatar-card-opt').forEach(b => b.classList.remove('active'));
+          if (btnMono) btnMono.classList.remove('active');
+          updateModalAvatarPreview();
+        };
+        img.src = re.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+  }
 
   // Currency Selection
   $$('.currency-pill-btn').forEach(btn => {
@@ -4301,93 +4642,95 @@ function bindInteractiveEvents() {
     };
   });
 
-  // Assistant Chat Form & Suggestions
+  // Robust AI Assistant Dispatcher
+  async function submitAssistantQuestion(text) {
+    if (!text || isAiThinking) return;
+    const input = document.getElementById('assistant-input');
+    if (input) input.value = '';
+
+    data.chat.push({ role: 'user', content: text, created_at: new Date().toISOString() });
+    isAiThinking = true;
+    aiThinkingPhase = 0;
+    renderApp();
+
+    const chatBox = document.getElementById('chat-stream-box');
+    if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+
+    document.querySelectorAll('.assistant-living-orb').forEach(orb => orb.setAttribute('data-state', 'thinking'));
+
+    if (aiThinkingInterval) clearInterval(aiThinkingInterval);
+    const phases = [
+      '🔍 Считываю структуру транзакций и баланс...',
+      '⚡ Рассчитываю финансовую скорость (Burn Rate)...',
+      '🔮 Моделирую сценарий сложного процента...',
+      '🧠 Синтезирую персональную стратегию...'
+    ];
+    aiThinkingInterval = setInterval(() => {
+      aiThinkingPhase = (aiThinkingPhase + 1) % phases.length;
+      const phaseEl = document.getElementById('thinking-phase-text');
+      if (phaseEl) {
+        phaseEl.innerText = phases[aiThinkingPhase];
+      }
+    }, 700);
+
+    try {
+      let res;
+      try {
+        res = await api('assistant', {
+          method: 'POST',
+          body: JSON.stringify({ question: text, message: text })
+        });
+      } catch {
+        res = await api('chat', {
+          method: 'POST',
+          body: JSON.stringify({ question: text, message: text })
+        });
+      }
+
+      if (aiThinkingInterval) clearInterval(aiThinkingInterval);
+      isAiThinking = false;
+      const answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
+      data.chat.push({ role: 'assistant', content: answer, created_at: new Date().toISOString() });
+      renderApp();
+
+      document.querySelectorAll('.assistant-living-orb').forEach(orb => orb.setAttribute('data-state', 'responding'));
+      setTimeout(() => {
+        document.querySelectorAll('.assistant-living-orb').forEach(orb => orb.setAttribute('data-state', 'idle'));
+      }, 2500);
+
+      const chatBoxAfter = document.getElementById('chat-stream-box');
+      if (chatBoxAfter) chatBoxAfter.scrollTop = chatBoxAfter.scrollHeight;
+    } catch (err) {
+      if (aiThinkingInterval) clearInterval(aiThinkingInterval);
+      isAiThinking = false;
+      data.chat.push({ role: 'assistant', content: `⚠️ Ошибка: ${err.message}`, created_at: new Date().toISOString() });
+      renderApp();
+    }
+  }
+
   const assistantForm = document.getElementById('assistant-form');
   if (assistantForm) {
-    assistantForm.onsubmit = async e => {
+    assistantForm.onsubmit = e => {
       e.preventDefault();
       const input = document.getElementById('assistant-input');
       const text = input ? input.value.trim() : '';
-      if (!text || isAiThinking) return;
-      if (input) input.value = '';
-
-      // Append user message
-      data.chat.push({ role: 'user', content: text, created_at: new Date().toISOString() });
-      isAiThinking = true;
-      aiThinkingPhase = 0;
-      renderApp();
-
-      const chatBox = document.getElementById('chat-stream-box');
-      if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
-
-      if (aiThinkingInterval) clearInterval(aiThinkingInterval);
-      const phases = [
-        '🔍 Считываю структуру транзакций и баланс...',
-        '⚡ Рассчитываю финансовую скорость (Burn Rate)...',
-        '🔮 Моделирую сценарий сложного процента...',
-        '🧠 Синтезирую персональную стратегию...'
-      ];
-      aiThinkingInterval = setInterval(() => {
-        aiThinkingPhase = (aiThinkingPhase + 1) % phases.length;
-        const phaseEl = document.getElementById('thinking-phase-text');
-        if (phaseEl) {
-          phaseEl.innerText = phases[aiThinkingPhase];
-        }
-      }, 700);
-
-      try {
-        let res;
-        try {
-          res = await api('assistant', {
-            method: 'POST',
-            body: JSON.stringify({ question: text, message: text })
-          });
-        } catch {
-          res = await api('chat', {
-            method: 'POST',
-            body: JSON.stringify({ question: text, message: text })
-          });
-        }
-
-        if (aiThinkingInterval) clearInterval(aiThinkingInterval);
-        isAiThinking = false;
-        const answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
-        data.chat.push({ role: 'assistant', content: answer, created_at: new Date().toISOString() });
-        renderApp();
-        const chatBoxAfter = document.getElementById('chat-stream-box');
-        if (chatBoxAfter) chatBoxAfter.scrollTop = chatBoxAfter.scrollHeight;
-      } catch (err) {
-        if (aiThinkingInterval) clearInterval(aiThinkingInterval);
-        isAiThinking = false;
-        data.chat.push({ role: 'assistant', content: `⚠️ Ошибка: ${err.message}`, created_at: new Date().toISOString() });
-        renderApp();
-      }
+      if (text) submitAssistantQuestion(text);
     };
   }
 
-  // Suggestion Chips
+  // Suggestion Chips with Direct Submission
   $$('.suggestion-chip').forEach(btn => {
     btn.onclick = () => {
       const promptText = btn.getAttribute('data-prompt');
-      const input = document.getElementById('assistant-input');
-      if (input) {
-        input.value = promptText;
-        const form = document.getElementById('assistant-form');
-        if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
-      }
+      if (promptText) submitAssistantQuestion(promptText);
     };
   });
 
-  // Assistant Mode Pills
+  // Assistant Mode Pills with Direct Submission
   $$('.assistant-mode-pill').forEach(pill => {
     pill.onclick = () => {
       const promptText = pill.getAttribute('data-prompt');
-      const input = document.getElementById('assistant-input');
-      if (input) {
-        input.value = promptText;
-        const form = document.getElementById('assistant-form');
-        if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
-      }
+      if (promptText) submitAssistantQuestion(promptText);
     };
   });
 
@@ -4532,7 +4875,7 @@ async function boot() {
       const prof = await api('profile');
       if (prof) {
         profile.display_name = prof.display_name || localStorage.getItem('finkaif_name') || '';
-        profile.avatar = prof.avatar || localStorage.getItem('finkaif_avatar') || '⚡';
+        profile.avatar = localStorage.getItem('finkaif_avatar') || prof.avatar || 'lion';
         if (prof.currency) {
           profile.currency = prof.currency;
           localStorage.setItem('finkaif_currency', prof.currency);
