@@ -23,6 +23,16 @@ let editingTxId = null;
 let profileModalOpen = false;
 let privacyMode = localStorage.getItem('finkaif_privacy') === 'true';
 let paydaySplitData = null;
+let isAiThinking = false;
+let aiThinkingPhase = 0;
+let aiThinkingInterval = null;
+let simState = {
+  open: false,
+  initial: 100000,
+  monthly: 25000,
+  years: 5,
+  rate: 12
+};
 
 let profile = {
   display_name: localStorage.getItem('finkaif_name') || '',
@@ -97,6 +107,61 @@ const formatMarkdown = s => {
     .replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px;">$1</code>')
     .replace(/\n/g, '<br>');
 };
+
+// Rich Action Parser and Markdown formatter for Assistant replies
+const formatAssistantMessage = (raw) => {
+  if (!raw) return '';
+  const actions = [];
+  const cleanText = String(raw).replace(/\[ACTION:([^:]+):([^:]+):([^\]]+)\]/g, (_, actTab, actTarget, actLabel) => {
+    actions.push({ tab: actTab.trim(), target: actTarget.trim(), label: actLabel.trim() });
+    return '';
+  });
+
+  let html = formatMarkdown(cleanText.trim());
+
+  if (actions.length > 0) {
+    const actionsHtml = `
+      <div class="chat-actions-strip">
+        ${actions.map(a => `
+          <button type="button" class="chat-action-btn" data-action-tab="${esc(a.tab)}" data-action-target="${esc(a.target)}">
+            <span class="action-sparkle">✦</span>
+            <span>${esc(a.label)}</span>
+            <span class="action-arrow">→</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+    html += actionsHtml;
+  }
+  return html;
+};
+
+// FinScore Financial Health Index (0-100)
+function calculateFinScore() {
+  const inc = (data.transactions || []).filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount || 0), 0);
+  const exp = (data.transactions || []).filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount || 0), 0);
+  const bal = inc - exp;
+  const monthlyExp = exp > 0 ? exp : 40000;
+  const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (bal > 0 ? 35 : 0);
+  const totalSaved = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
+  const cushion = Math.max(0, bal) + totalSaved * 0.5;
+  const runway = monthlyExp > 0 ? cushion / monthlyExp : 3;
+
+  const sCushion = Math.min(25, Math.round(runway * 6));
+  const sSavings = Math.min(25, Math.max(0, Math.round(savingsRate)));
+  const sBudgets = (data.budgets || []).length > 0 ? 25 : 12;
+  const sCapital = bal >= 0 ? 25 : 5;
+  const score = Math.max(15, Math.min(100, sCushion + sSavings + sBudgets + sCapital));
+
+  let label = 'Устойчивый';
+  let badgeClass = 'jade';
+  if (score >= 85) { label = 'Превосходно'; badgeClass = 'emerald'; }
+  else if (score >= 70) { label = 'Высокий'; badgeClass = 'jade'; }
+  else if (score >= 50) { label = 'Средний'; badgeClass = 'amber'; }
+  else { label = 'Внимание'; badgeClass = 'coral'; }
+
+  return { score, label, badgeClass, runway: runway.toFixed(1), savingsRate };
+}
 
 // Local Date YYYY-MM-DD helper without UTC timezone distortion
 const toDateIso = d => {
@@ -465,7 +530,9 @@ function icon(name, size = 16) {
     flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
     edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>',
     eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>',
-    eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'
+    eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>',
+    copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
+    calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
@@ -553,7 +620,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.16</span>
+          <span class="brand-badge">8.17</span>
         </div>
       </div>
 
@@ -2254,72 +2321,283 @@ function renderGoalsView() {
    CRITICAL RULE: NO "Добрый день" here!
    ========================================================================== */
 function renderAssistantView() {
+  const finScore = calculateFinScore();
+  const thinkingPhases = [
+    '🔍 Считываю структуру транзакций и баланс...',
+    '⚡ Рассчитываю финансовую скорость (Burn Rate)...',
+    '🔮 Моделирую сценарий сложного процента...',
+    '🧠 Синтезирую персональную стратегию...'
+  ];
+
+  // Wealth simulator calculation
+  const months = simState.years * 12;
+  const rMonthly = (simState.rate / 100) / 12;
+  const fvPrincipal = simState.initial * Math.pow(1 + rMonthly, months);
+  const fvAnnuity = simState.monthly * ((Math.pow(1 + rMonthly, months) - 1) / rMonthly);
+  const simTotal = Math.round(fvPrincipal + fvAnnuity);
+  const simContributed = Math.round(simState.initial + simState.monthly * months);
+  const simProfit = Math.max(0, simTotal - simContributed);
+
   return `
-    <div class="view-header">
+    <div class="view-header assistant-view-header">
       <div>
-        <h1 class="view-title">ИИ-ассистент Finkaif</h1>
-        <p class="view-subtitle">Персональный финансовый ментор: советы по распределению доходов, анализу трат и целям.</p>
+        <div class="assistant-tag-pill">
+          <span class="pulse-dot"></span>
+          <span>FinKaif Brain 3.0 • Neural Financial Intelligence</span>
+        </div>
+        <h1 class="view-title">ИИ-Ментор FinKaif</h1>
+        <p class="view-subtitle">Персональный финансовый интеллект: сценарии FIRE, сложный процент, аудит утечек и защита капитала.</p>
+      </div>
+
+      <!-- FinScore Widget Card -->
+      <div class="assistant-finscore-widget">
+        <div class="finscore-circle-wrap">
+          <svg class="finscore-svg" viewBox="0 0 36 36">
+            <path class="finscore-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path class="finscore-fill ${finScore.badgeClass}" stroke-dasharray="${finScore.score}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          </svg>
+          <span class="finscore-num">${finScore.score}</span>
+        </div>
+        <div class="finscore-text-block">
+          <div class="finscore-title-row">
+            <span class="finscore-lbl">Индекс FinScore</span>
+            <span class="finscore-badge ${finScore.badgeClass}">${finScore.label}</span>
+          </div>
+          <div class="finscore-sub">Подушка: ${finScore.runway} мес • Сбережения: ${finScore.savingsRate}%</div>
+        </div>
       </div>
     </div>
 
+    <!-- Assistant Quick Toolbar Strip -->
+    <div class="assistant-toolbar-strip">
+      <div class="assistant-mode-pills">
+        <button class="assistant-mode-pill" data-prompt="Полная экспресс-диагностика FinScore">
+          <span>🩺</span> <span>Аудит FinScore</span>
+        </button>
+        <button class="assistant-mode-pill" data-prompt="Когда я смогу выйти на FIRE (пассивный доход)?">
+          <span>🔥</span> <span>FIRE & Свобода</span>
+        </button>
+        <button class="assistant-mode-pill" data-prompt="Где я теряю больше всего денег и как оптимизировать?">
+          <span>🕵️‍♂️</span> <span>Детектив утечек</span>
+        </button>
+        <button class="assistant-mode-pill" data-prompt="Прогноз капитала через 5 лет со сложным процентом">
+          <span>🔮</span> <span>Прогноз 5 лет</span>
+        </button>
+      </div>
+
+      <div class="assistant-tool-actions">
+        <button class="btn-toggle-sim ${simState.open ? 'active' : ''}" id="btn-toggle-sim">
+          ${icon('calculator', 14)}
+          <span>${simState.open ? 'Скрыть симулятор' : 'Симулятор капитала'}</span>
+        </button>
+        ${data.chat.length > 0 ? `
+          <button class="btn-clear-chat" id="btn-clear-chat" title="Очистить диалог">
+            ${icon('trash', 14)}
+          </button>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- Interactive Wealth Simulator Drawer Card -->
+    ${simState.open ? `
+      <div class="wealth-sim-card" id="wealth-sim-card">
+        <div class="wealth-sim-head">
+          <div class="wealth-sim-title-group">
+            <span class="wealth-sim-icon">⚡</span>
+            <div>
+              <h3 class="wealth-sim-title">Интерактивный симулятор сложного процента</h3>
+              <p class="wealth-sim-desc">Оцените силу непрерывного инвестиционного потока и сложного процента во времени.</p>
+            </div>
+          </div>
+          <div class="wealth-sim-total-badge">
+            <span class="sim-badge-lbl">Ожидаемый капитал:</span>
+            <span class="sim-badge-val num">${money(simTotal)}</span>
+          </div>
+        </div>
+
+        <div class="wealth-sim-grid">
+          <!-- Controls -->
+          <div class="wealth-sim-controls">
+            <div class="sim-control-group">
+              <div class="sim-control-head">
+                <span class="sim-control-label">Стартовый капитал</span>
+                <span class="sim-control-val num" id="lbl-sim-initial">${money(simState.initial)}</span>
+              </div>
+              <input type="range" class="sim-slider" id="sim-input-initial" min="0" max="1000000" step="25000" value="${simState.initial}">
+            </div>
+
+            <div class="sim-control-group">
+              <div class="sim-control-head">
+                <span class="sim-control-label">Ежемесячные инвестиции</span>
+                <span class="sim-control-val num" id="lbl-sim-monthly">${money(simState.monthly)}</span>
+              </div>
+              <input type="range" class="sim-slider" id="sim-input-monthly" min="5000" max="150000" step="5000" value="${simState.monthly}">
+            </div>
+
+            <div class="sim-control-row">
+              <div class="sim-control-group" style="flex: 1;">
+                <div class="sim-control-head">
+                  <span class="sim-control-label">Горизонт (лет)</span>
+                  <span class="sim-control-val num" id="lbl-sim-years">${simState.years} ${simState.years === 1 ? 'год' : (simState.years < 5 ? 'года' : 'лет')}</span>
+                </div>
+                <div class="sim-chips-stream">
+                  ${[1, 3, 5, 10].map(y => `
+                    <button class="sim-chip ${simState.years === y ? 'active' : ''}" data-sim-years="${y}">${y} ${y === 1 ? 'год' : (y < 5 ? 'года' : 'лет')}</button>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="sim-control-group" style="flex: 1;">
+                <div class="sim-control-head">
+                  <span class="sim-control-label">Доходность (% годовых)</span>
+                  <span class="sim-control-val num" id="lbl-sim-rate">${simState.rate}%</span>
+                </div>
+                <div class="sim-chips-stream">
+                  ${[8, 12, 16, 20].map(r => `
+                    <button class="sim-chip ${simState.rate === r ? 'active' : ''}" data-sim-rate="${r}">${r}%</button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Breakdown Box -->
+          <div class="wealth-sim-breakdown">
+            <div class="sim-stat-row">
+              <span class="sim-stat-lbl">Личные вложения:</span>
+              <span class="sim-stat-val num" id="lbl-sim-contrib">${money(simContributed)}</span>
+            </div>
+            <div class="sim-stat-row highlight">
+              <span class="sim-stat-lbl">Чистые проценты:</span>
+              <span class="sim-stat-val num profit" id="lbl-sim-profit">+${money(simProfit)}</span>
+            </div>
+            <div class="sim-progress-bar">
+              <div class="sim-progress-invested" style="width: ${Math.round((simContributed / (simTotal || 1)) * 100)}%;"></div>
+              <div class="sim-progress-profit" style="width: ${Math.round((simProfit / (simTotal || 1)) * 100)}%;"></div>
+            </div>
+            <div class="sim-progress-legend">
+              <span><span class="legend-dot invested"></span> Вложено (${Math.round((simContributed / (simTotal || 1)) * 100)}%)</span>
+              <span><span class="legend-dot profit"></span> Доход от % (${Math.round((simProfit / (simTotal || 1)) * 100)}%)</span>
+            </div>
+            <button class="btn-ask-scenario" id="btn-ask-scenario" data-prompt="Рассчитай подробно инвест-план: стартовый капитал ${simState.initial} руб, пополнение ${simState.monthly} руб в месяц на ${simState.years} лет под ${simState.rate}% годовых">
+              <span>✨</span> <span>Спросить ассистента об этом плане</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    ` : ''}
+
     <div class="assistant-layout">
-      <!-- Quick Prompt Suggestions -->
+      <!-- Quick Prompt Suggestions Sidebar -->
       <div class="assistant-sidebar">
-        <div class="assistant-sidebar-title">ПОПУЛЯРНЫЕ ВОПРОСЫ</div>
+        <div class="assistant-sidebar-title">СТРАТЕГИИ И ВОПРОСЫ</div>
         <div class="assistant-suggestions">
+          <button class="suggestion-chip" data-prompt="Когда я смогу выйти на FIRE (пассивный доход)?">
+            <span class="chip-sparkle">🔥</span>
+            <div>
+              <div class="chip-title">FIRE & Свобода</div>
+              <div class="chip-sub">Срок до пассивного дохода</div>
+            </div>
+          </button>
+          <button class="suggestion-chip" data-prompt="Где я теряю больше всего денег и как оптимизировать?">
+            <span class="chip-sparkle">🕵️‍♂️</span>
+            <div>
+              <div class="chip-title">Детектив утечек</div>
+              <div class="chip-sub">Поиск эмоциональных трат</div>
+            </div>
+          </button>
+          <button class="suggestion-chip" data-prompt="На сколько месяцев мне хватит подушки безопасности?">
+            <span class="chip-sparkle">🛡️</span>
+            <div>
+              <div class="chip-title">Запас прочности (Runway)</div>
+              <div class="chip-sub">Стресс-тест на случай ЧП</div>
+            </div>
+          </button>
+          <button class="suggestion-chip" data-prompt="Прогноз капитала через 5 лет со сложным процентом">
+            <span class="chip-sparkle">🔮</span>
+            <div>
+              <div class="chip-title">Сложный процент</div>
+              <div class="chip-sub">Рост капитала за 1, 3, 5 лет</div>
+            </div>
+          </button>
           <button class="suggestion-chip" data-prompt="Как распределить доход по правилу 50/30/20?">
-            <span class="chip-sparkle">✦</span>
-            <span>Как распределить доход по 50/30/20?</span>
+            <span class="chip-sparkle">⚖️</span>
+            <div>
+              <div class="chip-title">Ритуал 50/30/20</div>
+              <div class="chip-sub">Сначала заплати себе</div>
+            </div>
           </button>
-          <button class="suggestion-chip" data-prompt="Проанализируй мои расходы и дай совет, где оптимизировать траты">
-            <span class="chip-sparkle">✦</span>
-            <span>Где я трачу больше всего и как оптимизировать?</span>
-          </button>
-          <button class="suggestion-chip" data-prompt="Сколько мне нужно откладывать на подушку безопасности?">
-            <span class="chip-sparkle">✦</span>
-            <span>Размер финансовой подушки для моего бюджета</span>
-          </button>
-          <button class="suggestion-chip" data-prompt="Как быстрее закрыть финансовую цель?">
-            <span class="chip-sparkle">✦</span>
-            <span>Стратегия быстрого накопления на цели</span>
+          <button class="suggestion-chip" data-prompt="Полная экспресс-диагностика FinScore">
+            <span class="chip-sparkle">🩺</span>
+            <div>
+              <div class="chip-title">Аудит FinScore</div>
+              <div class="chip-sub">Оценка финансового здоровья</div>
+            </div>
           </button>
         </div>
 
         <div class="assistant-note-card">
-          <div style="font-weight: 600; color: #FFFFFF; font-size: 12px; margin-bottom: 4px;">Безопасность данных</div>
-          <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">Ассистент оперирует только суммами категорий без персональных банковских реквизитов.</div>
+          <div style="font-weight: 700; color: #FFFFFF; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+            <span>🛡️</span> <span>Защита данных</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); line-height: 1.45;">FinKaif оперирует обезличенными суммами категорий без передачи паспортных или банковских данных.</div>
         </div>
       </div>
 
-      <!-- Chat Stream -->
+      <!-- Chat Stream Panel -->
       <div class="assistant-chat-panel">
         <div class="chat-stream" id="chat-stream-box">
           ${data.chat.length > 0 ? data.chat.map(m => `
             <div class="chat-bubble ${m.role}">
               ${m.role === 'assistant' ? `
                 <div class="chat-author">
-                  ${icon('assistant', 13)}
-                  <span>Finkaif Mentor</span>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    ${icon('assistant', 14)}
+                    <span style="font-weight: 700;">FinKaif Mentor 3.0</span>
+                    <span class="assistant-pill-mini">AI</span>
+                  </div>
+                  <button type="button" class="chat-copy-btn" data-text="${esc(m.content)}" title="Скопировать ответ">
+                    ${icon('copy', 13)}
+                  </button>
                 </div>
               ` : ''}
-              <div class="chat-body">${formatMarkdown(m.content)}</div>
+              <div class="chat-body">${m.role === 'assistant' ? formatAssistantMessage(m.content) : formatMarkdown(m.content)}</div>
             </div>
           `).join('') : `
             <div class="chat-empty-state">
-              <div class="chat-empty-icon">
-                ${icon('assistant', 24)}
+              <div class="chat-empty-icon-orb">
+                <div class="orb-core"></div>
+                <div class="orb-ring-1"></div>
+                <div class="orb-ring-2"></div>
               </div>
-              <h3 style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 6px;">Чем могу помочь сегодня?</h3>
-              <p style="font-size: 13px; color: var(--text-secondary); max-width: 420px; margin: 0 auto;">
-                Спросите, сколько откладывать на отпуск, как распределить зарплату или оценить комфортность текущего темпа расходов.
+              <h3 style="font-size: 18px; font-weight: 800; color: #FFFFFF; margin-bottom: 6px;">FinKaif Brain 3.0 готов к работе</h3>
+              <p style="font-size: 13px; color: var(--text-secondary); max-width: 440px; margin: 0 auto; line-height: 1.5;">
+                Задайте вопрос о сроке выхода на FIRE, поиске скрытых утечек денег, моделировании сложного процента или расчете финансовой подушки.
               </p>
             </div>
           `}
+
+          <!-- Holographic Neural Thinking Indicator -->
+          ${isAiThinking ? `
+            <div class="chat-bubble assistant thinking" id="assistant-thinking-bubble">
+              <div class="thinking-header">
+                <div class="thinking-neural-orb">
+                  <div class="orb-core"></div>
+                  <div class="orb-ring-1"></div>
+                  <div class="orb-ring-2"></div>
+                </div>
+                <div class="thinking-label">
+                  <span class="thinking-title">FinKaif Brain 3.0</span>
+                  <span class="thinking-phase-text" id="thinking-phase-text">${thinkingPhases[aiThinkingPhase % thinkingPhases.length]}</span>
+                </div>
+              </div>
+            </div>
+          ` : ''}
         </div>
 
         <form class="chat-input-bar" id="assistant-form">
-          <input id="assistant-input" placeholder="Задайте вопрос о доходах, расходах, целях..." required autocomplete="off">
-          <button type="submit" class="chat-send-btn" title="Отправить">
+          <input id="assistant-input" placeholder="Спросите о FIRE, прогнозе капитала, сокращении трат или 50/30/20..." required autocomplete="off">
+          <button type="submit" class="chat-send-btn" id="chat-send-btn" title="Отправить вопрос">
             ${icon('send', 15)}
           </button>
         </form>
@@ -4024,19 +4302,33 @@ function bindInteractiveEvents() {
     assistantForm.onsubmit = async e => {
       e.preventDefault();
       const input = document.getElementById('assistant-input');
-      const text = input.value.trim();
-      if (!text) return;
-      input.value = '';
+      const text = input ? input.value.trim() : '';
+      if (!text || isAiThinking) return;
+      if (input) input.value = '';
 
       // Append user message
       data.chat.push({ role: 'user', content: text, created_at: new Date().toISOString() });
-      // Temporary typing indicator
-      const tempId = 'thinking-' + Date.now();
-      data.chat.push({ id: tempId, role: 'assistant', content: '⏳ *Анализирую ваши финансовые потоки и баланс...*', created_at: new Date().toISOString() });
+      isAiThinking = true;
+      aiThinkingPhase = 0;
       renderApp();
 
       const chatBox = document.getElementById('chat-stream-box');
       if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+
+      if (aiThinkingInterval) clearInterval(aiThinkingInterval);
+      const phases = [
+        '🔍 Считываю структуру транзакций и баланс...',
+        '⚡ Рассчитываю финансовую скорость (Burn Rate)...',
+        '🔮 Моделирую сценарий сложного процента...',
+        '🧠 Синтезирую персональную стратегию...'
+      ];
+      aiThinkingInterval = setInterval(() => {
+        aiThinkingPhase = (aiThinkingPhase + 1) % phases.length;
+        const phaseEl = document.getElementById('thinking-phase-text');
+        if (phaseEl) {
+          phaseEl.innerText = phases[aiThinkingPhase];
+        }
+      }, 700);
 
       try {
         let res;
@@ -4052,20 +4344,23 @@ function bindInteractiveEvents() {
           });
         }
 
-        data.chat = data.chat.filter(m => m.id !== tempId);
+        if (aiThinkingInterval) clearInterval(aiThinkingInterval);
+        isAiThinking = false;
         const answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
         data.chat.push({ role: 'assistant', content: answer, created_at: new Date().toISOString() });
         renderApp();
         const chatBoxAfter = document.getElementById('chat-stream-box');
         if (chatBoxAfter) chatBoxAfter.scrollTop = chatBoxAfter.scrollHeight;
       } catch (err) {
-        data.chat = data.chat.filter(m => m.id !== tempId);
+        if (aiThinkingInterval) clearInterval(aiThinkingInterval);
+        isAiThinking = false;
         data.chat.push({ role: 'assistant', content: `⚠️ Ошибка: ${err.message}`, created_at: new Date().toISOString() });
         renderApp();
       }
     };
   }
 
+  // Suggestion Chips
   $$('.suggestion-chip').forEach(btn => {
     btn.onclick = () => {
       const promptText = btn.getAttribute('data-prompt');
@@ -4077,6 +4372,113 @@ function bindInteractiveEvents() {
       }
     };
   });
+
+  // Assistant Mode Pills
+  $$('.assistant-mode-pill').forEach(pill => {
+    pill.onclick = () => {
+      const promptText = pill.getAttribute('data-prompt');
+      const input = document.getElementById('assistant-input');
+      if (input) {
+        input.value = promptText;
+        const form = document.getElementById('assistant-form');
+        if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    };
+  });
+
+  // Chat Embedded Direct Action Buttons
+  $$('.chat-action-btn').forEach(btn => {
+    btn.onclick = () => {
+      const actTab = btn.getAttribute('data-action-tab');
+      if (actTab) {
+        tab = actTab;
+        window.location.hash = tab;
+        renderApp();
+      }
+    };
+  });
+
+  // Chat Copy Message
+  $$('.chat-copy-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const text = btn.getAttribute('data-text');
+      if (text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.innerHTML = `${icon('check', 13)}`;
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.innerHTML = `${icon('copy', 13)}`;
+            btn.classList.remove('copied');
+          }, 1500);
+        } catch {}
+      }
+    };
+  });
+
+  // Clear Chat History
+  const btnClearChat = document.getElementById('btn-clear-chat');
+  if (btnClearChat) {
+    btnClearChat.onclick = () => {
+      if (confirm('Очистить историю диалога с ментором?')) {
+        data.chat = [];
+        renderApp();
+      }
+    };
+  }
+
+  // Toggle Wealth Simulator
+  const btnToggleSim = document.getElementById('btn-toggle-sim');
+  if (btnToggleSim) {
+    btnToggleSim.onclick = () => {
+      simState.open = !simState.open;
+      renderApp();
+    };
+  }
+
+  // Wealth Simulator Inputs
+  const simInputInitial = document.getElementById('sim-input-initial');
+  if (simInputInitial) {
+    simInputInitial.oninput = e => {
+      simState.initial = Number(e.target.value);
+      renderApp();
+    };
+  }
+
+  const simInputMonthly = document.getElementById('sim-input-monthly');
+  if (simInputMonthly) {
+    simInputMonthly.oninput = e => {
+      simState.monthly = Number(e.target.value);
+      renderApp();
+    };
+  }
+
+  $$('.sim-chip[data-sim-years]').forEach(chip => {
+    chip.onclick = () => {
+      simState.years = Number(chip.getAttribute('data-sim-years'));
+      renderApp();
+    };
+  });
+
+  $$('.sim-chip[data-sim-rate]').forEach(chip => {
+    chip.onclick = () => {
+      simState.rate = Number(chip.getAttribute('data-sim-rate'));
+      renderApp();
+    };
+  });
+
+  const btnAskScenario = document.getElementById('btn-ask-scenario');
+  if (btnAskScenario) {
+    btnAskScenario.onclick = () => {
+      const promptText = btnAskScenario.getAttribute('data-prompt');
+      const input = document.getElementById('assistant-input');
+      if (input) {
+        input.value = promptText;
+        const form = document.getElementById('assistant-form');
+        if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    };
+  }
 }
 
 /* ==========================================================================
