@@ -3541,4 +3541,407 @@ html, body {
   }
 }
 
+/* ==========================================================================
+   FINKAIF v8.16: PRIVACY MODE, QUICK EXPRESS INPUT & PAYDAY SPLITTER
+   ========================================================================== */
+
+/* Privacy Mode Toggle & Masking */
+.privacy-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: all var(--t-fast);
+}
+
+.privacy-toggle-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.privacy-toggle-btn.active {
+  color: var(--accent-jade);
+  background: rgba(45, 212, 191, 0.12);
+}
+
+#masthead-balance-pill {
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+#masthead-balance-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+/* Quick Express Card */
+.quick-express-card {
+  background: linear-gradient(180deg, rgba(20, 30, 43, 0.85) 0%, rgba(14, 22, 32, 0.95) 100%);
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-express-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(45, 212, 191, 0.6) 50%, transparent 100%);
+}
+
+.quick-express-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.quick-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.quick-input-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--accent-jade);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#quick-express-input {
+  width: 100%;
+  background: rgba(10, 16, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: var(--r-md);
+  padding: 12px 38px 12px 42px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #FFFFFF;
+  outline: none;
+  transition: all var(--t-fast);
+}
+
+#quick-express-input::placeholder {
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+#quick-express-input:focus {
+  border-color: rgba(45, 212, 191, 0.6);
+  background: rgba(10, 16, 23, 0.95);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.15);
+}
+
+.btn-clear-quick {
+  position: absolute;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-muted);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.btn-clear-quick:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+
+.btn-submit-express {
+  background: linear-gradient(135deg, #2DD4BF 0%, #0D9488 100%);
+  border: none;
+  border-radius: var(--r-md);
+  color: #042F2E;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 12px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(45, 212, 191, 0.35);
+  transition: all var(--t-fast);
+}
+
+.btn-submit-express:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(45, 212, 191, 0.5);
+}
+
+.btn-submit-express:active {
+  transform: translateY(0);
+}
+
+/* Quick Parse Preview Bar */
+.quick-parse-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--r-sm);
+  animation: fadeIn 0.2s ease;
+}
+
+.preview-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.preview-pill.type.income {
+  background: rgba(45, 212, 191, 0.15);
+  color: var(--accent-jade);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+}
+
+.preview-pill.type.expense {
+  background: rgba(251, 113, 133, 0.15);
+  color: var(--accent-coral);
+  border: 1px solid rgba(251, 113, 133, 0.3);
+}
+
+.preview-pill.cat {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.preview-pill.amt {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.preview-pill.date {
+  color: var(--text-muted);
+}
+
+.preview-pill.desc {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* 1-Tap Quick Spend Pills (Монетки) */
+.quick-pills-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.quick-pills-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.quick-pill-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.quick-pill-btn:hover {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: rgba(45, 212, 191, 0.35);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.quick-pill-btn:active, .quick-pill-btn.saving {
+  transform: scale(0.96);
+  opacity: 0.7;
+}
+
+/* Payday Auto-Splitter Modal */
+.payday-card {
+  max-width: 520px;
+  width: 90%;
+  background: linear-gradient(180deg, #121A24 0%, #0A1017 100%);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(45, 212, 191, 0.15);
+  animation: scaleInPayday 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes scaleInPayday {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.payday-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.payday-confetti-star {
+  font-size: 40px;
+  margin-bottom: 8px;
+  animation: bouncePayday 1s ease infinite alternate;
+}
+
+@keyframes bouncePayday {
+  from { transform: translateY(0); }
+  to { transform: translateY(-6px); }
+}
+
+.payday-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin-bottom: 6px;
+}
+
+.payday-amt-badge {
+  font-size: 24px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--accent-jade);
+  margin-bottom: 8px;
+}
+
+.payday-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.payday-split-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.payday-split-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform var(--t-fast);
+}
+
+.payday-split-item:hover {
+  transform: translateX(4px);
+}
+
+.payday-split-item.box-savings {
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.12) 0%, rgba(45, 212, 191, 0.03) 100%);
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+.payday-split-item.box-needs {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.payday-split-item.box-wants {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.10) 0%, rgba(245, 158, 11, 0.02) 100%);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.payday-split-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.payday-split-content {
+  flex: 1;
+}
+
+.payday-split-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.payday-split-val {
+  font-size: 16px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #FFFFFF;
+}
+
+.payday-split-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.payday-actions-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .quick-express-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .btn-submit-express {
+    justify-content: center;
+  }
+  .quick-pills-strip {
+    gap: 6px;
+  }
+  .quick-pill-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
+
+
 
