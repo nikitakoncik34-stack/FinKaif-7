@@ -13,6 +13,7 @@ let tab = 'home';
 let mode = 'login';
 let period = '7d';
 let analyticsPeriod = '30d';
+let cashflowChartMode = localStorage.getItem('finkaif_cf_mode') || 'bars';
 let activeAnalyticsCat = null;
 let hoveredAnalyticsCat = null;
 let txFilter = 'all';
@@ -174,6 +175,38 @@ const pluralizeCats = n => {
   if (num1 > 1 && num1 < 5) return 'категории';
   if (num1 === 1) return 'категория';
   return 'категорий';
+};
+
+// Russian pluralization helper for operations
+const pluralizeOps = n => {
+  const num = Math.abs(Number(n) || 0) % 100;
+  const num1 = num % 10;
+  if (num > 10 && num < 20) return 'операций';
+  if (num1 > 1 && num1 < 5) return 'операции';
+  if (num1 === 1) return 'операция';
+  return 'операций';
+};
+
+// Compact currency formatter for axis scales (e.g. 50K ₽, 1.2M ₽)
+const compactMoney = num => {
+  const n = Math.abs(Number(num) || 0);
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M ₽';
+  if (n >= 1000) return Math.round(n / 1000) + 'K ₽';
+  return n + ' ₽';
+};
+
+// Collision-free axis label spacing ensuring last label is always visible
+const isLabelVisible = (idx, total) => {
+  if (total <= 8) return true;
+  if (total <= 16) {
+    if (idx === total - 1) return true;
+    if (idx === total - 2) return false;
+    return idx % 2 === 0;
+  }
+  if (idx === total - 1) return true;
+  if (idx === total - 2 || idx === total - 3) return false;
+  const step = total > 25 ? 5 : 4;
+  return idx % step === 0;
 };
 
 // Monotone Cubic Spline generator (Fritsch-Carlson) for natural, fluid financial curves
@@ -404,7 +437,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.12</span>
+          <span class="brand-badge">8.13</span>
         </div>
       </div>
 
@@ -1057,79 +1090,190 @@ function renderAnalyticsView() {
     momExpDeltaPct = Math.round(((curMonthExp - prevMonthExp) / prevMonthExp) * 100);
   }
 
-  // Build dual cashflow area timeline for all periods
+  // Build smart adaptive dual cashflow timeline
+  const allTxs = data.transactions || [];
+  const sortedTxDates = allTxs
+    .map(t => getTxIso(t))
+    .filter(Boolean)
+    .sort();
+
+  const minTxIso = sortedTxDates.length > 0 ? sortedTxDates[0] : null;
   const cashflowPoints = [];
+  let cfSubtitle = 'Сравнение поступлений и списаний по дням с интерактивным курсором';
 
-  if (analyticsPeriod === 'all') {
-    // 12 monthly points
-    for (let m = 11; m >= 0; m--) {
-      const target = new Date(now.getFullYear(), now.getMonth() - m, 1);
-      const year = target.getFullYear();
-      const monthNum = String(target.getMonth() + 1).padStart(2, '0');
-      const prefix = `${year}-${monthNum}`;
-
-      const dExp = data.transactions
-        .filter(t => t.type === 'expense' && getTxIso(t).startsWith(prefix))
-        .reduce((s, t) => s + Number(t.amount), 0);
-      const dInc = data.transactions
-        .filter(t => t.type === 'income' && getTxIso(t).startsWith(prefix))
-        .reduce((s, t) => s + Number(t.amount), 0);
-
+  if (analyticsPeriod === '7d') {
+    cfSubtitle = 'Сравнение поступлений и списаний по дням за неделю';
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const iso = toDateIso(d);
+      const dExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+      const dInc = allTxs.filter(t => t.type === 'income' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
       cashflowPoints.push({
-        date: prefix,
-        dayLabel: target.toLocaleDateString('ru-RU', { month: 'short' }),
-        fullDate: target.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+        date: iso,
+        dayLabel: d.toLocaleDateString('ru-RU', { weekday: 'short' }),
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' }),
         exp: dExp,
-        inc: dInc
+        inc: dInc,
+        txCount: allTxs.filter(t => getTxIso(t) === iso).length
+      });
+    }
+  } else if (analyticsPeriod === 'month') {
+    const curMonthDays = now.getDate();
+    cfSubtitle = `Сравнение поступлений и списаний по дням за ${now.toLocaleDateString('ru-RU', { month: 'long' })}`;
+    const count = Math.max(7, curMonthDays);
+    for (let i = 1; i <= count; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth(), i);
+      const iso = toDateIso(d);
+      const dExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+      const dInc = allTxs.filter(t => t.type === 'income' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+      cashflowPoints.push({
+        date: iso,
+        dayLabel: `${i} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        exp: dExp,
+        inc: dInc,
+        txCount: allTxs.filter(t => getTxIso(t) === iso).length
+      });
+    }
+  } else if (analyticsPeriod === '30d') {
+    cfSubtitle = 'Сравнение поступлений и списаний по дням за последние 30 дней';
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const iso = toDateIso(d);
+      const dExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+      const dInc = allTxs.filter(t => t.type === 'income' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+      cashflowPoints.push({
+        date: iso,
+        dayLabel: `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        exp: dExp,
+        inc: dInc,
+        txCount: allTxs.filter(t => getTxIso(t) === iso).length
       });
     }
   } else {
-    const chartDays = analyticsPeriod === '7d' ? 7 : (analyticsPeriod === 'month' ? Math.max(7, now.getDate()) : 30);
-    for (let i = chartDays - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const iso = toDateIso(d);
-      const dExp = data.transactions
-        .filter(t => t.type === 'expense' && getTxIso(t) === iso)
-        .reduce((s, t) => s + Number(t.amount), 0);
-      const dInc = data.transactions
-        .filter(t => t.type === 'income' && getTxIso(t) === iso)
-        .reduce((s, t) => s + Number(t.amount), 0);
+    // analyticsPeriod === 'all' (Все время)
+    if (!minTxIso) {
+      cfSubtitle = 'Денежный поток (нет сохранённых операций)';
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        cashflowPoints.push({
+          date: toDateIso(d),
+          dayLabel: d.toLocaleDateString('ru-RU', { weekday: 'short' }),
+          fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+          exp: 0,
+          inc: 0,
+          txCount: 0
+        });
+      }
+    } else {
+      const minDate = new Date(minTxIso);
+      const daysSpan = Math.max(1, Math.round((now.getTime() - minDate.getTime()) / 86400000));
 
-      cashflowPoints.push({
-        date: iso,
-        dayLabel: analyticsPeriod === '7d'
-          ? d.toLocaleDateString('ru-RU', { weekday: 'short' })
-          : `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
-        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
-        exp: dExp,
-        inc: dInc
-      });
+      if (daysSpan <= 35) {
+        const count = Math.max(7, daysSpan + 1);
+        cfSubtitle = 'Сравнение поступлений и списаний по дням за период активности';
+        for (let i = count - 1; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+          const iso = toDateIso(d);
+          const dExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+          const dInc = allTxs.filter(t => t.type === 'income' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
+          cashflowPoints.push({
+            date: iso,
+            dayLabel: `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
+            fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+            exp: dExp,
+            inc: dInc,
+            txCount: allTxs.filter(t => getTxIso(t) === iso).length
+          });
+        }
+      } else if (daysSpan <= 90) {
+        cfSubtitle = 'Сравнение поступлений и списаний по неделям';
+        const numWeeks = Math.min(10, Math.ceil(daysSpan / 7));
+        for (let w = numWeeks - 1; w >= 0; w--) {
+          const wEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7);
+          const wStart = new Date(wEnd.getFullYear(), wEnd.getMonth(), wEnd.getDate() - 6);
+          const isoStart = toDateIso(wStart);
+          const isoEnd = toDateIso(wEnd);
+          const wExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t) >= isoStart && getTxIso(t) <= isoEnd).reduce((s, t) => s + Number(t.amount), 0);
+          const wInc = allTxs.filter(t => t.type === 'income' && getTxIso(t) >= isoStart && getTxIso(t) <= isoEnd).reduce((s, t) => s + Number(t.amount), 0);
+          cashflowPoints.push({
+            date: `${isoStart}..${isoEnd}`,
+            dayLabel: `${wStart.getDate()}–${wEnd.getDate()} ${wEnd.toLocaleDateString('ru-RU', { month: 'short' })}`,
+            fullDate: `Неделя: ${wStart.getDate()} ${wStart.toLocaleDateString('ru-RU', { month: 'short' })} – ${wEnd.getDate()} ${wEnd.toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })}`,
+            exp: wExp,
+            inc: wInc,
+            txCount: allTxs.filter(t => getTxIso(t) >= isoStart && getTxIso(t) <= isoEnd).length
+          });
+        }
+      } else {
+        cfSubtitle = 'Сравнение поступлений и списаний по месяцам';
+        const monthsDiff = (now.getFullYear() - minDate.getFullYear()) * 12 + (now.getMonth() - minDate.getMonth());
+        const numMonths = Math.min(12, Math.max(3, monthsDiff + 1));
+        for (let m = numMonths - 1; m >= 0; m--) {
+          const target = new Date(now.getFullYear(), now.getMonth() - m, 1);
+          const prefix = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`;
+          const dExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t).startsWith(prefix)).reduce((s, t) => s + Number(t.amount), 0);
+          const dInc = allTxs.filter(t => t.type === 'income' && getTxIso(t).startsWith(prefix)).reduce((s, t) => s + Number(t.amount), 0);
+          cashflowPoints.push({
+            date: prefix,
+            dayLabel: target.toLocaleDateString('ru-RU', { month: 'short' }),
+            fullDate: target.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+            exp: dExp,
+            inc: dInc,
+            txCount: allTxs.filter(t => getTxIso(t).startsWith(prefix)).length
+          });
+        }
+      }
     }
   }
 
+  const cfTotalInc = cashflowPoints.reduce((s, p) => s + p.inc, 0);
+  const cfTotalExp = cashflowPoints.reduce((s, p) => s + p.exp, 0);
+  const cfNet = cfTotalInc - cfTotalExp;
   const cfMax = Math.max(1000, ...cashflowPoints.map(p => Math.max(p.exp, p.inc)));
+
   const cfW = 760;
-  const cfH = 150;
-  const baselineY = 120;
+  const cfH = 175;
+  const baselineY = 136;
   const plotH = 96;
-  const padX = 24;
+  const padX = 28;
   const usableW = cfW - 2 * padX;
+  const N = cashflowPoints.length;
+  const slotW = usableW / (N || 1);
+  const barW = Math.min(14, Math.max(4, Math.floor((slotW - 6) / 2)));
 
   const cfCoords = cashflowPoints.map((p, idx) => {
+    const slotCenter = padX + (idx + 0.5) * slotW;
     const x = Math.round(padX + (idx / (cashflowPoints.length - 1 || 1)) * usableW);
     const yInc = Math.round(baselineY - (p.inc / cfMax) * plotH);
     const yExp = Math.round(baselineY - (p.exp / cfMax) * plotH);
-    return { x, yInc, yExp, idx, ...p };
+    const hInc = p.inc > 0 ? Math.max(3, Math.round((p.inc / cfMax) * plotH)) : 0;
+    const hExp = p.exp > 0 ? Math.max(3, Math.round((p.exp / cfMax) * plotH)) : 0;
+    return {
+      x,
+      yInc,
+      yExp,
+      hInc,
+      hExp,
+      slotCenter,
+      slotX: padX + idx * slotW,
+      slotW,
+      barW,
+      idx,
+      ...p
+    };
   });
 
   window.__cfPoints = cfCoords;
+  window.__cfMode = cashflowChartMode;
 
-  const incPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yInc })));
+  const incPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yInc, balance: p.inc })));
   const incArea = cfCoords.length > 0
     ? `${incPath} L ${cfCoords[cfCoords.length - 1].x},${baselineY} L ${cfCoords[0].x},${baselineY} Z`
     : '';
 
-  const expPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yExp })));
+  const expPath = pointsToSmoothPath(cfCoords.map(p => ({ x: p.x, y: p.yExp, balance: p.exp })));
   const expArea = cfCoords.length > 0
     ? `${expPath} L ${cfCoords[cfCoords.length - 1].x},${baselineY} L ${cfCoords[0].x},${baselineY} Z`
     : '';
@@ -1280,82 +1424,166 @@ function renderAnalyticsView() {
         </div>
       </div>
 
-      <!-- Cashflow Wave Dual Curve -->
+      <!-- Cashflow Card (Adaptive Bars & Smooth Wave) -->
       <div class="analytics-card cashflow-card">
         <div class="card-title-row">
           <div>
             <h3 class="card-title">Денежный поток (Cashflow)</h3>
-            <p class="card-desc">Сравнение поступлений и списаний по дням с интерактивным курсором</p>
+            <p class="card-desc">${cfSubtitle}</p>
           </div>
-          <div class="cashflow-legend-pills">
-            <span class="cf-pill inc"><span class="cf-dot" style="background: #2DD4BF;"></span> Доходы</span>
-            <span class="cf-pill exp"><span class="cf-dot" style="background: #F59E0B;"></span> Расходы</span>
+          <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+            <div class="cashflow-legend-pills">
+              <span class="cf-pill inc"><span class="cf-dot" style="background: #2DD4BF;"></span> Доходы</span>
+              <span class="cf-pill exp"><span class="cf-dot" style="background: #F59E0B;"></span> Расходы</span>
+            </div>
+            <div class="cf-view-toggle">
+              <button class="cf-toggle-btn ${cashflowChartMode === 'bars' ? 'active' : ''}" data-cfmode="bars" title="Столбчатая диаграмма потока">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                Столбцы
+              </button>
+              <button class="cf-toggle-btn ${cashflowChartMode === 'wave' ? 'active' : ''}" data-cfmode="wave" title="Плавная волна потока">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 13c3-8 7-8 10 0s7 8 10 0"/></svg>
+                Волна
+              </button>
+            </div>
           </div>
         </div>
 
+        <!-- KPI Header Summary Strip -->
+        <div class="cf-header-stats">
+          <div class="cf-stat-chip inc">
+            <span class="cf-stat-label">Поступления:</span>
+            <span class="cf-stat-val">+${money(cfTotalInc)}</span>
+          </div>
+          <div class="cf-stat-chip exp">
+            <span class="cf-stat-label">Списания:</span>
+            <span class="cf-stat-val">−${money(cfTotalExp)}</span>
+          </div>
+          <div class="cf-stat-chip ${cfNet >= 0 ? 'net-pos' : 'net-neg'}">
+            <span class="cf-stat-label">Чистый итог:</span>
+            <span class="cf-stat-val">${cfNet >= 0 ? '+' : '−'}${money(Math.abs(cfNet))}</span>
+            <span class="cf-stat-badge ${cfNet >= 0 ? 'jade' : 'coral'}">${cfNet >= 0 ? 'Профицит' : 'Дефицит'}</span>
+          </div>
+          ${cfTotalInc > 0 ? `
+            <div class="cf-stat-chip" style="margin-left: auto;">
+              <span class="cf-stat-label">Удержание дохода:</span>
+              <span class="cf-stat-val" style="color: ${cfNet >= 0 ? 'var(--accent-jade)' : 'var(--accent-coral)'};">${Math.round((cfNet / cfTotalInc) * 100)}%</span>
+            </div>
+          ` : ''}
+        </div>
+
         <div class="cashflow-chart-box" id="cf-chart-wrap">
-          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" id="cf-chart-svg" style="width: 100%; height: 160px; overflow: visible;">
+          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" id="cf-chart-svg" style="width: 100%; height: 175px; overflow: visible;">
             <defs>
               <linearGradient id="cfIncGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.25"/>
+                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.30"/>
                 <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
               </linearGradient>
               <linearGradient id="cfExpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.22"/>
+                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.25"/>
                 <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"/>
+              </linearGradient>
+              <linearGradient id="cfBarIncGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#34D399"/>
+                <stop offset="100%" stop-color="#0D9488"/>
+              </linearGradient>
+              <linearGradient id="cfBarExpGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#FBBF24"/>
+                <stop offset="100%" stop-color="#D97706"/>
               </linearGradient>
             </defs>
 
-            <!-- Guide Line at baseline -->
-            <line x1="${padX}" y1="${baselineY}" x2="${cfW - padX}" y2="${baselineY}" stroke="rgba(255,255,255,0.08)" stroke-dasharray="3 3"/>
+            <!-- Guide Scale Lines -->
+            <line x1="${padX}" y1="${baselineY - plotH}" x2="${cfW - padX}" y2="${baselineY - plotH}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3 3"/>
+            <text x="${cfW - padX}" y="${baselineY - plotH - 3}" font-size="9" fill="#64748B" text-anchor="end" font-family="inherit">${compactMoney(cfMax)}</text>
 
-            <!-- Income Wave Area & Stroke -->
-            ${incArea ? `<path d="${incArea}" fill="url(#cfIncGrad)" />` : ''}
-            ${incPath ? `<path d="${incPath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />` : ''}
+            <line x1="${padX}" y1="${baselineY - Math.round(plotH * 0.5)}" x2="${cfW - padX}" y2="${baselineY - Math.round(plotH * 0.5)}" stroke="rgba(255,255,255,0.04)" stroke-dasharray="3 3"/>
+            <text x="${cfW - padX}" y="${baselineY - Math.round(plotH * 0.5) - 3}" font-size="9" fill="#64748B" text-anchor="end" font-family="inherit">${compactMoney(Math.round(cfMax * 0.5))}</text>
 
-            <!-- Expense Wave Area & Stroke -->
-            ${expArea ? `<path d="${expArea}" fill="url(#cfExpGrad)" />` : ''}
-            ${expPath ? `<path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />` : ''}
+            <!-- Baseline at y=0 -->
+            <line x1="${padX}" y1="${baselineY}" x2="${cfW - padX}" y2="${baselineY}" stroke="rgba(255,255,255,0.12)"/>
+            <text x="${padX - 6}" y="${baselineY + 3}" font-size="9" fill="#64748B" text-anchor="end" font-family="inherit">0</text>
 
-            <!-- Dynamic Scrubber Guide Elements -->
-            <line id="cf-scrubber-line" class="cf-scrubber-line" x1="0" y1="0" x2="0" y2="${baselineY}" />
-            <circle id="cf-scrubber-inc" class="cf-scrubber-dot inc" cx="0" cy="0" r="5" />
-            <circle id="cf-scrubber-exp" class="cf-scrubber-dot exp" cx="0" cy="0" r="5" />
+            ${cashflowChartMode === 'bars' ? `
+              <!-- Bars Mode -->
+              <rect id="cf-slot-highlight" class="cf-slot-highlight" x="0" y="8" width="${slotW}" height="${baselineY - 8 + 2}" rx="4" fill="rgba(255,255,255,0.04)" opacity="0"/>
 
-            <!-- Interactive Dots & Clean Labels -->
-            ${cfCoords.map((pt, idx) => {
-              const showLabel = cfCoords.length <= 8
-                || (cfCoords.length <= 15 && idx % 2 === 0)
-                || (cfCoords.length > 15 && (idx % 5 === 0 || idx === cfCoords.length - 1));
+              ${cfCoords.map((pt, idx) => {
+                const hasInc = pt.inc > 0;
+                const hasExp = pt.exp > 0;
+                const isBoth = hasInc && hasExp;
+                const bW = pt.barW;
 
-              return `
-                ${pt.inc > 0 ? `<circle class="cf-pt inc" cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2" data-idx="${idx}" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
-                ${pt.exp > 0 ? `<circle class="cf-pt exp" cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2" data-idx="${idx}" data-date="${esc(pt.fullDate || pt.dayLabel)}" data-inc="${pt.inc}" data-exp="${pt.exp}" />` : ''}
-                ${showLabel ? `<text x="${pt.x}" y="${cfH - 4}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
-              `;
-            }).join('')}
+                const incX = isBoth ? pt.slotCenter - bW - 1 : pt.slotCenter - bW / 2;
+                const expX = isBoth ? pt.slotCenter + 1 : pt.slotCenter - bW / 2;
+                const showLabel = isLabelVisible(idx, N);
 
-            <rect id="cf-chart-overlay" class="cf-chart-overlay" x="0" y="0" width="${cfW}" height="${cfH}" fill="transparent" />
+                return `
+                  ${hasInc ? `<rect class="cf-bar inc" x="${incX}" y="${baselineY - pt.hInc}" width="${bW}" height="${pt.hInc}" rx="3" fill="url(#cfBarIncGrad)" data-idx="${idx}" />` : ''}
+                  ${hasExp ? `<rect class="cf-bar exp" x="${expX}" y="${baselineY - pt.hExp}" width="${bW}" height="${pt.hExp}" rx="3" fill="url(#cfBarExpGrad)" data-idx="${idx}" />` : ''}
+                  ${!hasInc && !hasExp ? `<circle cx="${pt.slotCenter}" cy="${baselineY}" r="1.5" fill="rgba(255,255,255,0.12)" />` : ''}
+                  ${showLabel ? `<text x="${pt.slotCenter}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
+                `;
+              }).join('')}
+
+              <rect id="cf-chart-overlay" class="cf-chart-overlay" x="0" y="0" width="${cfW}" height="${cfH}" fill="transparent" />
+            ` : `
+              <!-- Wave Mode -->
+              ${incArea ? `<path d="${incArea}" fill="url(#cfIncGrad)" />` : ''}
+              ${incPath ? `<path d="${incPath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />` : ''}
+
+              ${expArea ? `<path d="${expArea}" fill="url(#cfExpGrad)" />` : ''}
+              ${expPath ? `<path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />` : ''}
+
+              <!-- Dynamic Scrubber Elements -->
+              <line id="cf-scrubber-line" class="cf-scrubber-line" x1="0" y1="8" x2="0" y2="${baselineY}" />
+              <circle id="cf-scrubber-inc" class="cf-scrubber-dot inc" cx="0" cy="0" r="5" />
+              <circle id="cf-scrubber-exp" class="cf-scrubber-dot exp" cx="0" cy="0" r="5" />
+
+              ${cfCoords.map((pt, idx) => {
+                const showLabel = isLabelVisible(idx, N);
+                return `
+                  ${pt.inc > 0 ? `<circle class="cf-pt inc" cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2" data-idx="${idx}" />` : ''}
+                  ${pt.exp > 0 ? `<circle class="cf-pt exp" cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2" data-idx="${idx}" />` : ''}
+                  ${showLabel ? `<text x="${pt.x}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
+                `;
+              }).join('')}
+
+              <rect id="cf-chart-overlay" class="cf-chart-overlay" x="0" y="0" width="${cfW}" height="${cfH}" fill="transparent" />
+            `}
           </svg>
           <div id="cf-chart-tooltip" class="chart-tooltip"></div>
         </div>
 
-        <!-- Month-over-Month Bar -->
+        <!-- Month-over-Month & Cashflow Insight Bar -->
         <div class="mom-strip">
           <div class="mom-col">
-            <div class="mom-lbl">Динамика расходов к прошлому месяцу:</div>
+            <div class="mom-lbl">Динамика и статус денежного потока:</div>
             <div class="mom-stat">
               ${prevMonthExp > 0 ? `
                 <span class="badge-tag ${momExpDeltaPct <= 0 ? 'jade' : 'coral'}">
                   ${momExpDeltaPct <= 0 ? '−' : '+'}${Math.abs(momExpDeltaPct)}%
-                  ${momExpDeltaPct <= 0 ? ' (Экономия)' : ' (Рост трат)'}
+                  ${momExpDeltaPct <= 0 ? ' (Экономия трат)' : ' (Рост трат)'}
                 </span>
-                <span style="color: var(--text-muted); font-size: 12px; margin-left: 8px;">
-                  Текущий месяц: ${money(curMonthExp)} vs прошлый: ${money(prevMonthExp)}
+                <span class="mom-note">
+                  Текущий месяц: <strong>${money(curMonthExp)}</strong> vs прошлый: <strong>${money(prevMonthExp)}</strong>
                 </span>
               ` : `
-                <span style="color: var(--text-muted); font-size: 12px;">Недостаточно данных за предыдущий месяц для сравнения.</span>
+                <span class="badge-tag ${cfNet >= 0 ? 'jade' : 'coral'}">
+                  ${cfNet >= 0 ? 'Профицит денежного потока' : 'Дефицит денежного потока'}
+                </span>
+                <span class="mom-note">
+                  ${cfTotalInc > 0
+                    ? `Удержано ${Math.max(0, Math.round((cfNet / cfTotalInc) * 100))}% всех поступлений в чистый остаток.`
+                    : 'Списания за период составили ' + money(cfTotalExp) + '. Сравнение с прошлым месяцем появится в следующем периоде.'}
+                </span>
               `}
+            </div>
+          </div>
+          <div class="mom-meta-col">
+            <div class="mom-mini-stat">
+              <span class="mom-mini-lbl">Средний расход:</span>
+              <span class="mom-mini-val num">${money(dailyVelocity)}/день</span>
             </div>
           </div>
         </div>
@@ -2610,17 +2838,31 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Cashflow Dual Wave Dynamic Scrubber & Tooltip
+  // Cashflow Dual Mode (Bars & Wave) Dynamic Scrubber & Tooltip
   const cfWrap = document.getElementById('cf-chart-wrap');
   const cfTooltip = document.getElementById('cf-chart-tooltip');
   const cfLine = document.getElementById('cf-scrubber-line');
   const cfDotInc = document.getElementById('cf-scrubber-inc');
   const cfDotExp = document.getElementById('cf-scrubber-exp');
+  const cfSlotHighlight = document.getElementById('cf-slot-highlight');
+
+  // Mode switcher buttons
+  $$('.cf-toggle-btn').forEach(btn => {
+    btn.onclick = () => {
+      const newMode = btn.getAttribute('data-cfmode');
+      if (newMode && newMode !== cashflowChartMode) {
+        cashflowChartMode = newMode;
+        localStorage.setItem('finkaif_cf_mode', newMode);
+        renderApp();
+      }
+    };
+  });
 
   if (cfWrap && cfTooltip && window.__cfPoints && window.__cfPoints.length > 0) {
     const cfPts = window.__cfPoints;
     const cfW = 760;
-    const cfH = 150;
+    const cfH = 175;
+    const isBars = window.__cfMode === 'bars';
 
     cfWrap.onmousemove = e => {
       const rect = cfWrap.getBoundingClientRect();
@@ -2629,28 +2871,35 @@ function bindInteractiveEvents() {
       const targetSvgX = mouseX * scaleX;
 
       let closest = cfPts[0];
-      let minDx = Math.abs(cfPts[0].x - targetSvgX);
+      let minDx = Math.abs((isBars ? cfPts[0].slotCenter : cfPts[0].x) - targetSvgX);
       for (let i = 1; i < cfPts.length; i++) {
-        const dx = Math.abs(cfPts[i].x - targetSvgX);
+        const ptX = isBars ? cfPts[i].slotCenter : cfPts[i].x;
+        const dx = Math.abs(ptX - targetSvgX);
         if (dx < minDx) {
           minDx = dx;
           closest = cfPts[i];
         }
       }
 
-      if (cfLine) {
+      if (isBars && cfSlotHighlight) {
+        cfSlotHighlight.setAttribute('x', closest.slotX);
+        cfSlotHighlight.setAttribute('width', closest.slotW);
+        cfSlotHighlight.style.opacity = '1';
+      }
+
+      if (!isBars && cfLine) {
         cfLine.setAttribute('x1', closest.x);
         cfLine.setAttribute('x2', closest.x);
         cfLine.style.opacity = '1';
       }
 
-      if (cfDotInc) {
+      if (!isBars && cfDotInc) {
         cfDotInc.setAttribute('cx', closest.x);
         cfDotInc.setAttribute('cy', closest.yInc);
         cfDotInc.style.opacity = closest.inc > 0 ? '1' : '0.35';
       }
 
-      if (cfDotExp) {
+      if (!isBars && cfDotExp) {
         cfDotExp.setAttribute('cx', closest.x);
         cfDotExp.setAttribute('cy', closest.yExp);
         cfDotExp.style.opacity = closest.exp > 0 ? '1' : '0.35';
@@ -2659,25 +2908,45 @@ function bindInteractiveEvents() {
       const dNet = closest.inc - closest.exp;
       cfTooltip.innerHTML = `
         <div class="chart-tooltip-title">${esc(closest.fullDate || closest.dayLabel)}</div>
-        <div style="display: flex; gap: 10px; margin-top: 2px;">
-          <span style="color: var(--accent-jade); font-weight: 700;">+${money(closest.inc)}</span>
-          <span style="color: var(--accent-amber); font-weight: 700;">−${money(closest.exp)}</span>
+        <div style="display: flex; gap: 14px; margin-top: 5px;">
+          <div>
+            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Поступления</div>
+            <div style="color: var(--accent-jade); font-weight: 700; font-family: var(--font-mono);">+${money(closest.inc)}</div>
+          </div>
+          <div>
+            <div style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Списания</div>
+            <div style="color: var(--accent-amber); font-weight: 700; font-family: var(--font-mono);">−${money(closest.exp)}</div>
+          </div>
         </div>
-        <div style="font-size: 11px; color: ${dNet >= 0 ? 'var(--accent-jade)' : 'var(--accent-coral)'}; margin-top: 3px;">
-          Чистый поток: ${dNet >= 0 ? '+' : ''}${money(dNet)}
+        <div style="margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 11px; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+          <span style="color: var(--text-muted);">Чистый итог:</span>
+          <span style="font-weight: 700; font-family: var(--font-mono); color: ${dNet >= 0 ? 'var(--accent-jade)' : 'var(--accent-coral)'};">
+            ${dNet >= 0 ? '+' : '−'}${money(Math.abs(dNet))}
+          </span>
         </div>
+        ${closest.txCount > 0 ? `<div style="font-size: 10px; color: var(--text-muted); margin-top: 3px;">${closest.txCount} ${pluralizeOps(closest.txCount)}</div>` : ''}
       `;
 
-      const pxX = (closest.x / cfW) * rect.width;
-      const minY = Math.min(closest.yInc, closest.yExp);
-      const pxY = (minY / cfH) * rect.height;
+      const anchorX = isBars ? closest.slotCenter : closest.x;
+      const pxX = (anchorX / cfW) * rect.width;
+      const anchorY = isBars ? (136 - Math.max(closest.hInc, closest.hExp, 25)) : Math.min(closest.yInc, closest.yExp);
+      const pxY = (anchorY / cfH) * rect.height;
 
-      cfTooltip.style.left = `${pxX}px`;
-      cfTooltip.style.top = `${pxY}px`;
+      const tipW = 180;
+      let leftPos = pxX;
+      if (leftPos + tipW / 2 > rect.width) {
+        leftPos = rect.width - tipW / 2 - 8;
+      } else if (leftPos - tipW / 2 < 0) {
+        leftPos = tipW / 2 + 8;
+      }
+
+      cfTooltip.style.left = `${leftPos}px`;
+      cfTooltip.style.top = `${Math.max(6, pxY - 10)}px`;
       cfTooltip.classList.add('visible');
     };
 
     cfWrap.onmouseleave = () => {
+      if (cfSlotHighlight) cfSlotHighlight.style.opacity = '0';
       if (cfLine) cfLine.style.opacity = '0';
       if (cfDotInc) cfDotInc.style.opacity = '0';
       if (cfDotExp) cfDotExp.style.opacity = '0';
