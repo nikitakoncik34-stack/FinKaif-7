@@ -437,7 +437,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.13</span>
+          <span class="brand-badge">8.14</span>
         </div>
       </div>
 
@@ -1234,10 +1234,10 @@ function renderAnalyticsView() {
   const cfMax = Math.max(1000, ...cashflowPoints.map(p => Math.max(p.exp, p.inc)));
 
   const cfW = 760;
-  const cfH = 175;
-  const baselineY = 136;
-  const plotH = 96;
-  const padX = 28;
+  const cfH = 210;
+  const baselineY = 172;
+  const plotH = 138;
+  const padX = 32;
   const usableW = cfW - 2 * padX;
   const N = cashflowPoints.length;
   const slotW = usableW / (N || 1);
@@ -1473,14 +1473,27 @@ function renderAnalyticsView() {
         </div>
 
         <div class="cashflow-chart-box" id="cf-chart-wrap">
-          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" id="cf-chart-svg" style="width: 100%; height: 175px; overflow: visible;">
+          <!-- HTML-based Zero-distortion Scale Badges on the right -->
+          <div class="cf-scale-track">
+            <div class="cf-scale-badge" style="top: ${((baselineY - plotH) / cfH * 100).toFixed(1)}%;">
+              ${compactMoney(cfMax)}
+            </div>
+            <div class="cf-scale-badge" style="top: ${((baselineY - Math.round(plotH * 0.5)) / cfH * 100).toFixed(1)}%;">
+              ${compactMoney(Math.round(cfMax * 0.5))}
+            </div>
+            <div class="cf-scale-badge zero" style="top: ${(baselineY / cfH * 100).toFixed(1)}%;">
+              0 ₽
+            </div>
+          </div>
+
+          <svg viewBox="0 0 ${cfW} ${cfH}" preserveAspectRatio="none" id="cf-chart-svg" style="width: 100%; height: 210px; overflow: visible;">
             <defs>
               <linearGradient id="cfIncGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.30"/>
+                <stop offset="0%" stop-color="#2DD4BF" stop-opacity="0.32"/>
                 <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.0"/>
               </linearGradient>
               <linearGradient id="cfExpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.25"/>
+                <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.26"/>
                 <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.0"/>
               </linearGradient>
               <linearGradient id="cfBarIncGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1495,14 +1508,10 @@ function renderAnalyticsView() {
 
             <!-- Guide Scale Lines -->
             <line x1="${padX}" y1="${baselineY - plotH}" x2="${cfW - padX}" y2="${baselineY - plotH}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3 3"/>
-            <text x="${cfW - padX}" y="${baselineY - plotH - 3}" font-size="9" fill="#64748B" text-anchor="end" font-family="inherit">${compactMoney(cfMax)}</text>
-
             <line x1="${padX}" y1="${baselineY - Math.round(plotH * 0.5)}" x2="${cfW - padX}" y2="${baselineY - Math.round(plotH * 0.5)}" stroke="rgba(255,255,255,0.04)" stroke-dasharray="3 3"/>
-            <text x="${cfW - padX}" y="${baselineY - Math.round(plotH * 0.5) - 3}" font-size="9" fill="#64748B" text-anchor="end" font-family="inherit">${compactMoney(Math.round(cfMax * 0.5))}</text>
 
             <!-- Baseline at y=0 -->
-            <line x1="${padX}" y1="${baselineY}" x2="${cfW - padX}" y2="${baselineY}" stroke="rgba(255,255,255,0.12)"/>
-            <text x="${padX - 6}" y="${baselineY + 3}" font-size="9" fill="#64748B" text-anchor="end" font-family="inherit">0</text>
+            <line x1="${padX}" y1="${baselineY}" x2="${cfW - padX}" y2="${baselineY}" stroke="rgba(255,255,255,0.14)"/>
 
             ${cashflowChartMode === 'bars' ? `
               <!-- Bars Mode -->
@@ -1516,42 +1525,90 @@ function renderAnalyticsView() {
 
                 const incX = isBoth ? pt.slotCenter - bW - 1 : pt.slotCenter - bW / 2;
                 const expX = isBoth ? pt.slotCenter + 1 : pt.slotCenter - bW / 2;
-                const showLabel = isLabelVisible(idx, N);
 
                 return `
                   ${hasInc ? `<rect class="cf-bar inc" x="${incX}" y="${baselineY - pt.hInc}" width="${bW}" height="${pt.hInc}" rx="3" fill="url(#cfBarIncGrad)" data-idx="${idx}" />` : ''}
                   ${hasExp ? `<rect class="cf-bar exp" x="${expX}" y="${baselineY - pt.hExp}" width="${bW}" height="${pt.hExp}" rx="3" fill="url(#cfBarExpGrad)" data-idx="${idx}" />` : ''}
                   ${!hasInc && !hasExp ? `<circle cx="${pt.slotCenter}" cy="${baselineY}" r="1.5" fill="rgba(255,255,255,0.12)" />` : ''}
-                  ${showLabel ? `<text x="${pt.slotCenter}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
                 `;
               }).join('')}
 
               <rect id="cf-chart-overlay" class="cf-chart-overlay" x="0" y="0" width="${cfW}" height="${cfH}" fill="transparent" />
             ` : `
-              <!-- Wave Mode -->
+              <!-- Wave Mode (Taller, graceful 138px amplitude) -->
               ${incArea ? `<path d="${incArea}" fill="url(#cfIncGrad)" />` : ''}
               ${incPath ? `<path d="${incPath}" fill="none" stroke="#2DD4BF" stroke-width="2.5" stroke-linecap="round" />` : ''}
 
               ${expArea ? `<path d="${expArea}" fill="url(#cfExpGrad)" />` : ''}
               ${expPath ? `<path d="${expPath}" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-linecap="round" />` : ''}
 
-              <!-- Dynamic Scrubber Elements -->
+              <!-- Dynamic Scrubber Laser Line -->
               <line id="cf-scrubber-line" class="cf-scrubber-line" x1="0" y1="8" x2="0" y2="${baselineY}" />
-              <circle id="cf-scrubber-inc" class="cf-scrubber-dot inc" cx="0" cy="0" r="5" />
-              <circle id="cf-scrubber-exp" class="cf-scrubber-dot exp" cx="0" cy="0" r="5" />
-
-              ${cfCoords.map((pt, idx) => {
-                const showLabel = isLabelVisible(idx, N);
-                return `
-                  ${pt.inc > 0 ? `<circle class="cf-pt inc" cx="${pt.x}" cy="${pt.yInc}" r="3.5" fill="#141A23" stroke="#2DD4BF" stroke-width="2" data-idx="${idx}" />` : ''}
-                  ${pt.exp > 0 ? `<circle class="cf-pt exp" cx="${pt.x}" cy="${pt.yExp}" r="3.5" fill="#141A23" stroke="#F59E0B" stroke-width="2" data-idx="${idx}" />` : ''}
-                  ${showLabel ? `<text x="${pt.x}" y="${cfH - 6}" font-size="10" fill="#64748B" text-anchor="middle" font-family="inherit">${pt.dayLabel}</text>` : ''}
-                `;
-              }).join('')}
 
               <rect id="cf-chart-overlay" class="cf-chart-overlay" x="0" y="0" width="${cfW}" height="${cfH}" fill="transparent" />
             `}
           </svg>
+
+          <!-- HTML 100% Round Wave Peak Dots (Zero SVG oval distortion) -->
+          ${cashflowChartMode === 'wave' ? cfCoords.filter(pt => pt.inc > 0 || pt.exp > 0).map(pt => {
+            const leftPct = ((pt.x / cfW) * 100).toFixed(2);
+            const incTopPct = ((pt.yInc / cfH) * 100).toFixed(2);
+            const expTopPct = ((pt.yExp / cfH) * 100).toFixed(2);
+            return `
+              ${pt.inc > 0 ? `
+                <div class="cf-activity-dot inc" style="left: ${leftPct}%; top: ${incTopPct}%;" data-idx="${pt.idx}">
+                  <div class="cf-dot-core"></div>
+                </div>
+              ` : ''}
+              ${pt.exp > 0 ? `
+                <div class="cf-activity-dot exp" style="left: ${leftPct}%; top: ${expTopPct}%;" data-idx="${pt.idx}">
+                  <div class="cf-dot-core"></div>
+                </div>
+              ` : ''}
+            `;
+          }).join('') : ''}
+
+          <!-- HTML 100% Round Scrubber Beacons -->
+          <div id="cf-html-beacon-inc" class="cf-scrubber-beacon inc">
+            <div class="beacon-core"></div>
+          </div>
+          <div id="cf-html-beacon-exp" class="cf-scrubber-beacon exp">
+            <div class="beacon-core"></div>
+          </div>
+
+          <!-- HTML-based Axis Strip (Число и месяц с идеальными пропорциями шрифта, никакого сжатия!) -->
+          <div class="cf-axis-strip">
+            ${cfCoords.map((pt, idx) => {
+              const show = isLabelVisible(idx, N);
+              if (!show) return '';
+              const isLatest = (idx === N - 1);
+              const leftPct = (((cashflowChartMode === 'bars' ? pt.slotCenter : pt.x) / cfW) * 100).toFixed(2);
+
+              let dayNum = '';
+              let monthStr = '';
+              if (pt.date && pt.date.includes('-')) {
+                const parts = pt.date.split('-');
+                dayNum = String(parseInt(parts[2], 10));
+                const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                monthStr = d.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', '');
+              } else if (pt.dayLabel) {
+                const tokens = pt.dayLabel.trim().split(/\s+/);
+                dayNum = tokens[0];
+                monthStr = (tokens[1] || '').replace('.', '');
+              }
+
+              return `
+                <div class="cf-axis-item ${isLatest ? 'is-latest' : ''}" data-idx="${idx}" style="left: ${leftPct}%;">
+                  <div class="cf-axis-tick"></div>
+                  <div class="cf-axis-badge">
+                    <span class="cf-axis-day">${dayNum}</span>
+                    ${monthStr ? `<span class="cf-axis-month">${monthStr}</span>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
           <div id="cf-chart-tooltip" class="chart-tooltip"></div>
         </div>
 
@@ -2861,8 +2918,10 @@ function bindInteractiveEvents() {
   if (cfWrap && cfTooltip && window.__cfPoints && window.__cfPoints.length > 0) {
     const cfPts = window.__cfPoints;
     const cfW = 760;
-    const cfH = 175;
+    const cfH = 210;
     const isBars = window.__cfMode === 'bars';
+    const cfBeaconInc = document.getElementById('cf-html-beacon-inc');
+    const cfBeaconExp = document.getElementById('cf-html-beacon-exp');
 
     cfWrap.onmousemove = e => {
       const rect = cfWrap.getBoundingClientRect();
@@ -2881,6 +2940,11 @@ function bindInteractiveEvents() {
         }
       }
 
+      // Highlight active date on HTML axis strip
+      document.querySelectorAll('.cf-axis-item').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-idx') === String(closest.idx));
+      });
+
       if (isBars && cfSlotHighlight) {
         cfSlotHighlight.setAttribute('x', closest.slotX);
         cfSlotHighlight.setAttribute('width', closest.slotW);
@@ -2893,16 +2957,16 @@ function bindInteractiveEvents() {
         cfLine.style.opacity = '1';
       }
 
-      if (!isBars && cfDotInc) {
-        cfDotInc.setAttribute('cx', closest.x);
-        cfDotInc.setAttribute('cy', closest.yInc);
-        cfDotInc.style.opacity = closest.inc > 0 ? '1' : '0.35';
+      if (!isBars && cfBeaconInc) {
+        cfBeaconInc.style.left = `${(closest.x / cfW) * 100}%`;
+        cfBeaconInc.style.top = `${(closest.yInc / cfH) * 100}%`;
+        cfBeaconInc.style.opacity = closest.inc > 0 ? '1' : '0.4';
       }
 
-      if (!isBars && cfDotExp) {
-        cfDotExp.setAttribute('cx', closest.x);
-        cfDotExp.setAttribute('cy', closest.yExp);
-        cfDotExp.style.opacity = closest.exp > 0 ? '1' : '0.35';
+      if (!isBars && cfBeaconExp) {
+        cfBeaconExp.style.left = `${(closest.x / cfW) * 100}%`;
+        cfBeaconExp.style.top = `${(closest.yExp / cfH) * 100}%`;
+        cfBeaconExp.style.opacity = closest.exp > 0 ? '1' : '0.4';
       }
 
       const dNet = closest.inc - closest.exp;
@@ -2929,7 +2993,7 @@ function bindInteractiveEvents() {
 
       const anchorX = isBars ? closest.slotCenter : closest.x;
       const pxX = (anchorX / cfW) * rect.width;
-      const anchorY = isBars ? (136 - Math.max(closest.hInc, closest.hExp, 25)) : Math.min(closest.yInc, closest.yExp);
+      const anchorY = isBars ? (172 - Math.max(closest.hInc, closest.hExp, 25)) : Math.min(closest.yInc, closest.yExp);
       const pxY = (anchorY / cfH) * rect.height;
 
       const tipW = 180;
@@ -2946,10 +3010,11 @@ function bindInteractiveEvents() {
     };
 
     cfWrap.onmouseleave = () => {
+      document.querySelectorAll('.cf-axis-item').forEach(el => el.classList.remove('active'));
       if (cfSlotHighlight) cfSlotHighlight.style.opacity = '0';
       if (cfLine) cfLine.style.opacity = '0';
-      if (cfDotInc) cfDotInc.style.opacity = '0';
-      if (cfDotExp) cfDotExp.style.opacity = '0';
+      if (cfBeaconInc) cfBeaconInc.style.opacity = '0';
+      if (cfBeaconExp) cfBeaconExp.style.opacity = '0';
       cfTooltip.classList.remove('visible');
     };
   }
