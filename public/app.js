@@ -19,6 +19,7 @@ let hoveredAnalyticsCat = null;
 let txFilter = 'all';
 let txSearch = '';
 let modalType = 'expense';
+let editingTxId = null;
 let profileModalOpen = false;
 
 let profile = {
@@ -349,7 +350,8 @@ function icon(name, size = 16) {
     settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
     check: '<polyline points="20 6 9 17 4 12"></polyline>',
     wallet: '<path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"></path><path d="M16 13a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"></path>',
-    flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>'
+    flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
@@ -437,7 +439,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.14</span>
+          <span class="brand-badge">8.15</span>
         </div>
       </div>
 
@@ -1811,7 +1813,7 @@ function renderTxCard(t) {
   const catIcon = getCategoryIcon(t.category);
 
   return `
-    <div class="tx-card" data-id="${t.id}">
+    <div class="tx-card tx-row-clickable" data-id="${t.id}" title="Нажмите для редактирования операции">
       <div class="tx-left">
         <div class="tx-icon-box ${isInc ? 'inc' : 'exp'}">
           ${catIcon}
@@ -1827,6 +1829,9 @@ function renderTxCard(t) {
           ${isInc ? '+' : '−'}${money(t.amount)}
         </div>
         <div class="tx-actions">
+          <button class="tx-edit-btn" data-id="${t.id}" title="Редактировать запись">
+            ${icon('edit', 13)}
+          </button>
           <button class="tx-delete-btn" data-id="${t.id}" title="Удалить запись">
             ${icon('trash', 13)}
           </button>
@@ -2238,9 +2243,15 @@ function renderModal() {
             <input class="form-input" id="form-desc" placeholder="Например: Супермаркет, заказ...">
           </div>
 
-          <button type="submit" class="btn-submit">
+          <button type="submit" class="btn-submit" id="tx-modal-submit-btn">
             Сохранить операцию
           </button>
+          <div id="tx-modal-delete-wrap" style="display: none; margin-top: 14px; text-align: center;">
+            <button type="button" class="btn-ghost-danger" id="btn-modal-delete-tx">
+              ${icon('trash', 14)}
+              <span>Удалить эту операцию</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -2386,6 +2397,84 @@ function renderAuthScreen() {
 /* ==========================================================================
    MAIN RENDER ORCHESTRATION
    ========================================================================== */
+function renderMobileBottomBar() {
+  const moreTabs = ['budgets', 'goals', 'assistant'];
+  const isMoreActive = moreTabs.includes(tab);
+
+  return `
+    <nav class="mobile-bottom-bar" role="navigation" aria-label="Мобильная навигация">
+      <button class="mobile-nav-btn ${tab === 'home' ? 'active' : ''}" data-tab="home">
+        <span class="mobile-nav-icon">${icon('overview', 20)}</span>
+        <span class="mobile-nav-label">Обзор</span>
+      </button>
+
+      <button class="mobile-nav-btn ${tab === 'analytics' ? 'active' : ''}" data-tab="analytics">
+        <span class="mobile-nav-icon">${icon('analytics', 20)}</span>
+        <span class="mobile-nav-label">Аналитика</span>
+      </button>
+
+      <div class="mobile-fab-wrap">
+        <button class="mobile-fab-btn" id="mobile-fab-add" title="Быстрая запись операции">
+          ${icon('plus', 22)}
+        </button>
+      </div>
+
+      <button class="mobile-nav-btn ${tab === 'transactions' ? 'active' : ''}" data-tab="transactions">
+        <span class="mobile-nav-icon">${icon('transactions', 20)}</span>
+        <span class="mobile-nav-label">Операции</span>
+      </button>
+
+      <button class="mobile-nav-btn ${isMoreActive ? 'active' : ''}" id="mobile-more-btn">
+        <span class="mobile-nav-icon">
+          ${tab === 'budgets' ? icon('budgets', 20) : tab === 'goals' ? icon('goals', 20) : tab === 'assistant' ? icon('assistant', 20) : icon('settings', 20)}
+        </span>
+        <span class="mobile-nav-label">${tab === 'budgets' ? 'Бюджеты' : tab === 'goals' ? 'Цели' : tab === 'assistant' ? 'ИИ' : 'Ещё'}</span>
+      </button>
+    </nav>
+
+    <!-- Mobile More Drawer Sheet -->
+    <div id="mobile-more-sheet" class="mobile-sheet-backdrop" style="display: none;">
+      <div class="mobile-sheet-card">
+        <div class="mobile-sheet-handle"></div>
+        <div class="mobile-sheet-header">
+          <span class="mobile-sheet-title">Разделы и сервисы</span>
+          <button class="btn-icon" id="btn-close-mobile-sheet">${icon('close', 16)}</button>
+        </div>
+        <div class="mobile-sheet-grid">
+          <button class="mobile-sheet-item ${tab === 'budgets' ? 'active' : ''}" data-tab="budgets">
+            <div class="mobile-sheet-item-icon">${icon('budgets', 20)}</div>
+            <div class="mobile-sheet-item-info">
+              <span class="mobile-sheet-item-name">Лимиты бюджета</span>
+              <span class="mobile-sheet-item-sub">Контроль месячных расходов</span>
+            </div>
+          </button>
+          <button class="mobile-sheet-item ${tab === 'goals' ? 'active' : ''}" data-tab="goals">
+            <div class="mobile-sheet-item-icon">${icon('goals', 20)}</div>
+            <div class="mobile-sheet-item-info">
+              <span class="mobile-sheet-item-name">Финансовые цели</span>
+              <span class="mobile-sheet-item-sub">Копилки и резервный капитал</span>
+            </div>
+          </button>
+          <button class="mobile-sheet-item ${tab === 'assistant' ? 'active' : ''}" data-tab="assistant">
+            <div class="mobile-sheet-item-icon">${icon('assistant', 20)}</div>
+            <div class="mobile-sheet-item-info">
+              <span class="mobile-sheet-item-name">ИИ-Ментор FinKaif</span>
+              <span class="mobile-sheet-item-sub">Советы по распределению средств</span>
+            </div>
+          </button>
+          <button class="mobile-sheet-item" id="mobile-sheet-profile-btn">
+            <div class="mobile-sheet-item-icon">⚙️</div>
+            <div class="mobile-sheet-item-info">
+              <span class="mobile-sheet-item-name">Профиль и настройки</span>
+              <span class="mobile-sheet-item-sub">Аватар, валюта, аккаунт</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderApp() {
   const container = document.getElementById('app');
   if (!container) return;
@@ -2410,6 +2499,7 @@ function renderApp() {
       <main>
         ${viewHtml}
       </main>
+      ${renderMobileBottomBar()}
       ${renderModal()}
       ${renderProfileModal()}
     </div>
@@ -3100,21 +3190,64 @@ function bindInteractiveEvents() {
     }
   };
 
-  const openTxModal = (type = 'expense') => {
+  const openTxModal = (txOrType = 'expense') => {
     const modal = document.getElementById('tx-modal');
-    if (modal) {
-      modal.style.display = 'flex';
-      const typeSelect = document.getElementById('form-type');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    const modalTitle = modal.querySelector('.modal-title');
+    const submitBtn = document.getElementById('tx-modal-submit-btn') || modal.querySelector('.btn-submit');
+    const deleteBtnWrap = document.getElementById('tx-modal-delete-wrap');
+    const typeSelect = document.getElementById('form-type');
+    const catInput = document.getElementById('form-category');
+    const amtInput = document.getElementById('form-amount');
+    const dateInput = document.getElementById('form-date');
+    const timeInput = document.getElementById('form-time');
+    const descInput = document.getElementById('form-desc');
+
+    if (typeof txOrType === 'object' && txOrType !== null) {
+      // EDIT MODE
+      editingTxId = txOrType.id;
+      if (modalTitle) {
+        modalTitle.innerHTML = `Редактирование операции <span class="tx-badge-editing">Изменение</span>`;
+      }
+      if (typeSelect) typeSelect.value = txOrType.type || 'expense';
+      if (catInput) catInput.value = txOrType.category || '';
+      if (amtInput) amtInput.value = txOrType.amount || '';
+      if (dateInput) dateInput.value = getTxIso(txOrType);
+      if (timeInput) timeInput.value = formatTxTime(txOrType);
+      if (descInput) descInput.value = txOrType.description || '';
+      if (submitBtn) submitBtn.innerText = 'Сохранить изменения';
+      if (deleteBtnWrap) deleteBtnWrap.style.display = 'block';
+
+      $$('.cat-chip').forEach(c => {
+        if (c.getAttribute('data-cat') === txOrType.category) c.classList.add('selected');
+        else c.classList.remove('selected');
+      });
+    } else {
+      // CREATE MODE
+      editingTxId = null;
+      const type = typeof txOrType === 'string' ? txOrType : 'expense';
+      if (modalTitle) modalTitle.innerText = 'Новая операция';
       if (typeSelect) typeSelect.value = type;
-      const dateInput = document.getElementById('form-date');
+      if (catInput) catInput.value = type === 'income' ? 'Зарплата' : 'Продукты';
+      if (amtInput) amtInput.value = '';
       if (dateInput) dateInput.value = toDateIso(new Date());
-      const timeInput = document.getElementById('form-time');
       if (timeInput) {
         const d = new Date();
         timeInput.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       }
-      updateModalBudgetAlert();
+      if (descInput) descInput.value = '';
+      if (submitBtn) submitBtn.innerText = 'Сохранить операцию';
+      if (deleteBtnWrap) deleteBtnWrap.style.display = 'none';
+
+      $$('.cat-chip').forEach(c => {
+        const chipCat = c.getAttribute('data-cat');
+        if (chipCat === (type === 'income' ? 'Зарплата' : 'Продукты')) c.classList.add('selected');
+        else c.classList.remove('selected');
+      });
     }
+    updateModalBudgetAlert();
   };
 
   if (btnQuickNew) btnQuickNew.onclick = () => openTxModal('expense');
@@ -3128,6 +3261,27 @@ function bindInteractiveEvents() {
     btnCloseModal.onclick = () => {
       const modal = document.getElementById('tx-modal');
       if (modal) modal.style.display = 'none';
+      editingTxId = null;
+    };
+  }
+
+  // Delete Transaction from inside modal
+  const btnModalDelete = document.getElementById('btn-modal-delete-tx');
+  if (btnModalDelete) {
+    btnModalDelete.onclick = async () => {
+      if (!editingTxId) return;
+      if (confirm('Вы уверены, что хотите удалить эту операцию?')) {
+        try {
+          await api('transactions/' + editingTxId, { method: 'DELETE' });
+          const modal = document.getElementById('tx-modal');
+          if (modal) modal.style.display = 'none';
+          editingTxId = null;
+          await refreshAllData();
+          renderApp();
+        } catch (err) {
+          alert('Ошибка удаления: ' + err.message);
+        }
+      }
     };
   }
 
@@ -3154,7 +3308,7 @@ function bindInteractiveEvents() {
   if (modalAmtInput) modalAmtInput.oninput = updateModalBudgetAlert;
   if (modalTypeSelect) modalTypeSelect.onchange = updateModalBudgetAlert;
 
-  // Modal Form Submit (Create Transaction with Budget Protection)
+  // Modal Form Submit (Create or Update Transaction with Budget Protection)
   const txModalForm = document.getElementById('tx-modal-form');
   if (txModalForm) {
     txModalForm.onsubmit = async e => {
@@ -3180,37 +3334,45 @@ function bindInteractiveEvents() {
         return;
       }
 
-      // Budget Enforcement Protection
+      // Budget Enforcement Protection (for new expense or changed expense)
       if (type === 'expense') {
         const budget = (data.budgets || []).find(b => b.category.toLowerCase() === category.toLowerCase());
         if (budget) {
           const now = new Date();
           const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
           const spentThisMonth = (data.transactions || [])
-            .filter(t => t.type === 'expense' && (t.category || '').toLowerCase() === category.toLowerCase() && getTxIso(t) >= curMonthStart)
+            .filter(t => t.type === 'expense' && (t.category || '').toLowerCase() === category.toLowerCase() && getTxIso(t) >= curMonthStart && (!editingTxId || String(t.id) !== String(editingTxId)))
             .reduce((s, t) => s + Number(t.amount), 0);
 
           const lim = Number(budget.limit_amount);
           const newTotal = spentThisMonth + amount;
           if (newTotal > lim) {
             const overspend = newTotal - lim;
-            const ok = confirm(`⚠️ Внимание! Превышение лимита бюджета!\n\nКатегория «${category}» имеет установленный лимит ${money(lim)} в месяц.\nУже израсходовано в этом месяце: ${money(spentThisMonth)}.\n\nС добавлением этой записи (${money(amount)}) расходы превысят лимит на ${money(overspend)}!\n\nВы точно хотите зафиксировать этот расход сверх лимита?`);
+            const ok = confirm(`⚠️ Внимание! Превышение лимита бюджета!\n\nКатегория «${category}» имеет установленный лимит ${money(lim)} в месяц.\nУже израсходовано в этом месяце: ${money(spentThisMonth)}.\n\nС сохранением этой записи (${money(amount)}) расходы превысят лимит на ${money(overspend)}!\n\nВы точно хотите зафиксировать этот расход сверх лимита?`);
             if (!ok) return;
           }
         }
       }
 
       try {
-        await api('transactions', {
-          method: 'POST',
-          body: JSON.stringify({ type, category, amount, occurred_on, time: timeVal, created_at, description })
-        });
+        if (editingTxId) {
+          await api('transactions/' + editingTxId, {
+            method: 'PUT',
+            body: JSON.stringify({ type, category, amount, occurred_on, time: timeVal, created_at, description })
+          });
+        } else {
+          await api('transactions', {
+            method: 'POST',
+            body: JSON.stringify({ type, category, amount, occurred_on, time: timeVal, created_at, description })
+          });
+        }
         const modal = document.getElementById('tx-modal');
         if (modal) modal.style.display = 'none';
+        editingTxId = null;
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка добавления операции: ' + err.message);
+        alert('Ошибка сохранения операции: ' + err.message);
       }
     };
   }
@@ -3255,7 +3417,71 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Delete Transaction
+  // Click on Transaction Card to Edit
+  $$('.tx-card').forEach(card => {
+    card.onclick = e => {
+      if (e.target.closest('.tx-delete-btn')) return;
+      const id = card.getAttribute('data-id');
+      const tx = data.transactions.find(t => String(t.id) === String(id));
+      if (tx) {
+        openTxModal(tx);
+      }
+    };
+  });
+
+  // Mobile Bottom Bar Navigation
+  $$('.mobile-nav-btn[data-tab]').forEach(btn => {
+    btn.onclick = () => {
+      tab = btn.getAttribute('data-tab');
+      renderApp();
+    };
+  });
+
+  const mobileFabAdd = document.getElementById('mobile-fab-add');
+  if (mobileFabAdd) {
+    mobileFabAdd.onclick = () => openTxModal('expense');
+  }
+
+  const mobileMoreBtn = document.getElementById('mobile-more-btn');
+  const mobileSheet = document.getElementById('mobile-more-sheet');
+  const btnCloseSheet = document.getElementById('btn-close-mobile-sheet');
+
+  if (mobileMoreBtn && mobileSheet) {
+    mobileMoreBtn.onclick = () => {
+      mobileSheet.style.display = 'flex';
+    };
+  }
+
+  if (btnCloseSheet && mobileSheet) {
+    btnCloseSheet.onclick = () => {
+      mobileSheet.style.display = 'none';
+    };
+  }
+
+  if (mobileSheet) {
+    mobileSheet.onclick = e => {
+      if (e.target === mobileSheet) mobileSheet.style.display = 'none';
+    };
+  }
+
+  $$('.mobile-sheet-item[data-tab]').forEach(btn => {
+    btn.onclick = () => {
+      tab = btn.getAttribute('data-tab');
+      if (mobileSheet) mobileSheet.style.display = 'none';
+      renderApp();
+    };
+  });
+
+  const mobileSheetProfile = document.getElementById('mobile-sheet-profile-btn');
+  if (mobileSheetProfile) {
+    mobileSheetProfile.onclick = () => {
+      if (mobileSheet) mobileSheet.style.display = 'none';
+      profileModalOpen = true;
+      renderApp();
+    };
+  }
+
+  // Delete Transaction button
   $$('.tx-delete-btn').forEach(btn => {
     btn.onclick = async e => {
       e.stopPropagation();
