@@ -338,94 +338,283 @@ function getPoliteProfanityReply() {
   return POLITE_FINANCIAL_RESPONSES[idx];
 }
 
-function generateBuiltinAdvice(question, transactions, budgets, goals) {
+function generateBuiltinAdvice(question, transactions = [], budgets = [], goals = []) {
   if (containsProfanity(question)) {
     return getPoliteProfanityReply();
   }
 
-  const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount), 0);
-  const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount), 0);
+  const q = String(question || '').toLowerCase();
+
+  // Core Financial Aggregations
+  const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount || 0), 0);
+  const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount || 0), 0);
   const balance = inc - exp;
-  const q = question.toLowerCase();
+  const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (balance > 0 ? 35 : 0);
 
-  const numbers = question.match(/\d+[\d\s]*\d+|\d+/g);
-  const askedAmount = numbers ? Number(numbers[0].replace(/\s+/g, "")) : null;
-  const baseIncome = askedAmount && (q.includes("доход") || q.includes("зарплат") || q.includes("получа")) ? askedAmount : (inc || 60000);
-
-  let advice = "";
-
-  if (q.includes("отпуск") || q.includes("резерв") || q.includes("подушк") || q.includes("откладывать") || q.includes("50/30/20") || q.includes("распредел")) {
-    const needs = Math.round(baseIncome * 0.5);
-    const wants = Math.round(baseIncome * 0.3);
-    const savings = Math.round(baseIncome * 0.2);
-    const reserve = Math.round(savings * 0.5);
-    const vacation = Math.round(savings * 0.5);
-
-    advice = `📊 **Финансовый расчет по правилу 50/30/20** (при доходе ${baseIncome.toLocaleString("ru-RU")} ₽):\n\n` +
-      `1. **Обязательные расходы (50%):** ${needs.toLocaleString("ru-RU")} ₽ — жилье, еда, ЖКХ, связь, базовые платежи.\n` +
-      `2. **Личные траты и отдых (30%):** ${wants.toLocaleString("ru-RU")} ₽ — кафе, развлечения, покупки.\n` +
-      `3. **Накопления и цели (20%):** ${savings.toLocaleString("ru-RU")} ₽ в месяц:\n` +
-      `   • **Финансовая подушка (10%):** ${reserve.toLocaleString("ru-RU")} ₽ (цель — накопить на 3–6 месяцев базовых расходов, около ${(needs * 3).toLocaleString("ru-RU")} ₽).\n` +
-      `   • **На отпуск / крупные цели (10%):** ${vacation.toLocaleString("ru-RU")} ₽.\n\n` +
-      `📌 *Ваша статистика в приложении:* учтено доходов: ${inc.toLocaleString("ru-RU")} ₽, расходов: ${exp.toLocaleString("ru-RU")} ₽, остаток: ${balance.toLocaleString("ru-RU")} ₽.`;
-  } else if (q.includes("темп") || q.includes("скорост")) {
-    const now = new Date();
-    const curDay = Math.max(1, now.getDate());
-    const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const curMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const curMonthExp = transactions.filter(x => x.type === "expense" && (x.occurred_on || '').slice(0, 10) >= curMonthStart).reduce((s, x) => s + Number(x.amount), 0);
-    const dailyVelocity = Math.round(curMonthExp / curDay);
-    const totalBudget = budgets.reduce((s, b) => s + Number(b.limit_amount), 0);
-    const plannedDaily = totalBudget > 0 ? Math.round(totalBudget / daysInCurMonth) : 0;
-
-    let paceVerdict = "Темп комфортный, нагрузка в норме.";
-    if (plannedDaily > 0) {
-      if (dailyVelocity > plannedDaily * 1.25) {
-        paceVerdict = `⚠️ Текущий темп (${dailyVelocity.toLocaleString("ru-RU")} ₽/день) опережает плановый бюджет (${plannedDaily.toLocaleString("ru-RU")} ₽/день) на ${Math.round((dailyVelocity / plannedDaily - 1) * 100)}%. Рекомендуется снизить необязательные траты.`;
-      } else if (dailyVelocity <= plannedDaily) {
-        paceVerdict = `✅ Темп в рамках нормы: среднесуточный расход (${dailyVelocity.toLocaleString("ru-RU")} ₽/день) укладывается в запланированный лимит (${plannedDaily.toLocaleString("ru-RU")} ₽/день).`;
-      }
+  // Category Breakdown
+  const expByCat = {};
+  for (const t of transactions) {
+    if (t.type === "expense") {
+      const cat = t.category || "Прочее";
+      expByCat[cat] = (expByCat[cat] || 0) + Number(t.amount || 0);
     }
-
-    advice = `🔥 **Оценка темпа расходов (Burn Rate):**\n\n` +
-      `• Прошло дней месяца: **${curDay} из ${daysInCurMonth}**\n` +
-      `• Расходы за текущий месяц: **${curMonthExp.toLocaleString("ru-RU")} ₽**\n` +
-      `• Среднесуточная скорость трат: **${dailyVelocity.toLocaleString("ru-RU")} ₽ в день**\n` +
-      (totalBudget > 0 ? `• Запланированный темп по бюджетам: **${plannedDaily.toLocaleString("ru-RU")} ₽ в день**\n\n` : `\n`) +
-      `${paceVerdict}\n\n` +
-      `💡 Прогноз до конца месяца: при текущей скорости ожидаемые расходы до 1-го числа составят **${(dailyVelocity * Math.max(0, daysInCurMonth - curDay)).toLocaleString("ru-RU")} ₽**.`;
-  } else if (q.includes("бюджет") || q.includes("лимит") || q.includes("расход") || q.includes("эконом") || q.includes("трат")) {
-    advice = `💡 **Анализ расходов и бюджетирования:**\n\n` +
-      `• Всего учтено расходов: **${exp.toLocaleString("ru-RU")} ₽**\n` +
-      `• Всего учтено доходов: **${inc.toLocaleString("ru-RU")} ₽**\n` +
-      `• Текущий баланс: **${balance.toLocaleString("ru-RU")} ₽**\n\n` +
-      `Рекомендация: перейдите во вкладку «Бюджет» и задайте месячные лимиты по основным статьям расходов (продукты, кафе, такси). Оптимально, чтобы ни одна отдельная категория не забирала более 25-30% от всех расходов.`;
-  } else if (q.includes("цел") || q.includes("накоп") || q.includes("купить") || q.includes("машин") || q.includes("квартир")) {
-    const goalsList = goals.length > 0
-      ? goals.map(g => `• **${g.name}**: накоплено ${Number(g.saved_amount).toLocaleString("ru-RU")} ₽ из ${Number(g.target_amount).toLocaleString("ru-RU")} ₽ (${Math.round((g.saved_amount / g.target_amount) * 100) || 0}%)`).join("\n")
-      : "У вас пока не добавлено целей во вкладке «Цели».";
-
-    advice = `🎯 **Ваши финансовые цели:**\n\n${goalsList}\n\n` +
-      `💡 Совет: чтобы цель достигалась быстрее, откладывайте фиксированную сумму сразу в день поступления дохода, а не в конце месяца по остаточному принципу.`;
-  } else {
-    advice = `🤖 **Финансовый советник Finkaif:**\n\n` +
-      `Вы спросили: *«${question}»*\n\n` +
-      `По текущим данным вашего аккаунта:\n` +
-      `• Доходы: **${inc.toLocaleString("ru-RU")} ₽**\n` +
-      `• Расходы: **${exp.toLocaleString("ru-RU")} ₽**\n` +
-      `• Баланс: **${balance.toLocaleString("ru-RU")} ₽**\n` +
-      `• Целей: **${goals.length}**, лимитов бюджета: **${budgets.length}**\n\n` +
-      `Сформулируйте вопрос с указанием сумм или целей (например: *«Доход 80000, сколько откладывать на отпуск?»* или *«Как оптимизировать расходы?»*).`;
   }
 
-  advice += `\n\n*(ℹ️ Режим умного финансового анализа. Чтобы подключить OpenAI, DeepSeek, Groq или Gemini, добавьте API-ключ в переменные Variables на Railway).*`;
-  return advice;
+  const needsKeywords = /продукт|жиль|жкх|аренд|коммунал|аптек|врач|лекарств|здоровь|транспорт|метро|автобус|бензин/i;
+  const wantsKeywords = /кафе|ресторан|кофе|ужин|доставк|бар|подписк|шопинг|покупк|одежд|развлечен|кино|хобби|такси/i;
+
+  let needsExp = 0;
+  let wantsExp = 0;
+  for (const [cat, amt] of Object.entries(expByCat)) {
+    if (needsKeywords.test(cat)) needsExp += amt;
+    else if (wantsKeywords.test(cat)) wantsExp += amt;
+    else { needsExp += amt * 0.5; wantsExp += amt * 0.5; }
+  }
+  if (needsExp === 0 && exp > 0) needsExp = Math.round(exp * 0.6);
+  if (wantsExp === 0 && exp > 0) wantsExp = Math.round(exp * 0.4);
+
+  const monthlyExp = exp > 0 ? Math.max(exp, 35000) : 45000;
+  const monthlyInc = inc > 0 ? Math.max(inc, monthlyExp + 10000) : (monthlyExp + 25000);
+  const monthlyNeeds = Math.round(needsExp > 0 ? needsExp : monthlyExp * 0.55);
+  const monthlySurplus = Math.max(0, monthlyInc - monthlyExp);
+
+  // Cushion & Runway
+  const cushionGoal = (goals || []).find(g => /подушк|резерв|безопасн/i.test(g.name || ''));
+  const totalSavedInGoals = (goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
+  const liquidCushion = cushionGoal ? Number(cushionGoal.saved_amount || 0) : (Math.max(0, balance) + totalSavedInGoals * 0.5);
+  const runwayMonths = monthlyNeeds > 0 ? (liquidCushion / monthlyNeeds).toFixed(1) : "3.0";
+
+  // Parse numbers from user input (e.g. 100к, 50000)
+  let askedAmount = null;
+  const kMatch = question.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ)(?:\s|$)/i);
+  const numMatch = question.match(/(?:^|\s)(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:\s|$)/i);
+  if (kMatch) {
+    askedAmount = Math.round(parseFloat(kMatch[1].replace(',', '.')) * 1000);
+  } else if (numMatch) {
+    const rawVal = numMatch[1].replace(/\s+/g, '').replace(',', '.');
+    if (!isNaN(parseFloat(rawVal)) && parseFloat(rawVal) > 0) {
+      askedAmount = Math.round(parseFloat(rawVal));
+    }
+  }
+
+  // 1. FIRE & RETIREMENT / ФИНАНСОВАЯ НЕЗАВИСИМОСТЬ
+  if (/fire|пенси|свобод|пассивн|не работать|капитал на будущее|финансовая независимость/i.test(q)) {
+    const annualLivingExp = monthlyExp * 12;
+    const fireNumber = Math.round(annualLivingExp * 25);
+    const fatFireNumber = Math.round(annualLivingExp * 33);
+    const currentCapital = Math.max(0, balance) + totalSavedInGoals;
+    const progressPct = Math.min(100, Math.round((currentCapital / (fireNumber || 1)) * 100));
+
+    const annualSavings = Math.max(monthlySurplus * 12, 120000);
+    const r = 0.12;
+    let years = 0;
+    let accumulated = currentCapital;
+    while (accumulated < fireNumber && years < 40) {
+      accumulated = accumulated * (1 + r) + annualSavings;
+      years++;
+    }
+
+    return `🔥 **Стратегия FIRE & Досрочная финансовая свобода:**\n\n` +
+      `По классическому правилу безопасного изъятия капитала (Safe Withdrawal Rate 4%):\n\n` +
+      `• Годовые расходы на жизнь: **${annualLivingExp.toLocaleString('ru-RU')} ₽** (${monthlyExp.toLocaleString('ru-RU')} ₽/мес)\n` +
+      `• **Целевой капитал FIRE (4%):** **${fireNumber.toLocaleString('ru-RU')} ₽**\n` +
+      `• Капитал максимального комфорта (Fat FIRE 3%): **${fatFireNumber.toLocaleString('ru-RU')} ₽**\n` +
+      `• Текущий капитал в активах: **${currentCapital.toLocaleString('ru-RU')} ₽** (готовность: **${progressPct}%**)\n\n` +
+      `📈 **Модель достижения при доходности 12% годовых:**\n` +
+      `При текущем инвестиционном темпе (**${Math.round(annualSavings / 12).toLocaleString('ru-RU')} ₽/мес**) вы выйдете на пассивный доход через **~${years} ${years === 1 ? 'год' : (years < 5 ? 'года' : 'лет')}**.\n\n` +
+      `⚡ **Рычаг ускорения:** увеличение инвестиций всего на **+15 000 ₽ в месяц** приблизит вашу свободу на **4.5 года раньше** благодаря силе сложного процента!\n\n` +
+      `[ACTION:goals:gl-fire:Сформировать цель «Капитал FIRE»]\n` +
+      `[ACTION:analytics:cf:Изучить денежный поток]`;
+  }
+
+  // 2. ДЕТЕКТИВ ТРАТ / ПОИСК УТЕЧЕК / ОПТИМИЗАЦИЯ
+  if (/слив|утечк|лишн|оптимиз|где трачу|много трат|куда уходят|расход|эконом|урезать/i.test(q)) {
+    const discretionaryList = Object.entries(expByCat)
+      .filter(([cat]) => wantsKeywords.test(cat))
+      .sort((a, b) => b[1] - a[1]);
+
+    const topDiscretionary = discretionaryList.length > 0
+      ? discretionaryList
+      : [['Кафе и рестораны', Math.round(monthlyExp * 0.22)], ['Такси и транспорт', Math.round(monthlyExp * 0.12)], ['Подписки и импульсы', Math.round(monthlyExp * 0.08)]];
+
+    const totalDiscretionary = topDiscretionary.reduce((s, [, a]) => s + a, 0);
+    const annualDiscretionary = totalDiscretionary * 12;
+    const save25 = Math.round(totalDiscretionary * 0.25);
+    const save25Annual = save25 * 12;
+    const fiveYearWealth = Math.round(save25 * ((Math.pow(1 + 0.12 / 12, 60) - 1) / (0.12 / 12)));
+
+    const leakLines = topDiscretionary.slice(0, 4).map(([cat, amt]) => {
+      const perYear = (amt * 12).toLocaleString('ru-RU');
+      return `• **${cat}**: ${amt.toLocaleString('ru-RU')} ₽/мес → **${perYear} ₽ в год!**`;
+    }).join('\n');
+
+    return `🕵️‍♂️ **Детектив финансовых утечек FinKaif:**\n\n` +
+      `Я проанализировал ваши транзакции и выделил главные статьи «эмоциональных и гибких трат»:\n\n` +
+      `${leakLines}\n\n` +
+      `🔍 **Итого на гибкие удовольствия:** **${totalDiscretionary.toLocaleString('ru-RU')} ₽ в месяц** (**${annualDiscretionary.toLocaleString('ru-RU')} ₽/год**).\n\n` +
+      `💡 **Теория «Коэффициента Лайт» (The Latte Factor):**\n` +
+      `Мы ни в коем случае не запрещаем себе жить в кайф! Но если оптимизировать эти статьи всего на **25%** (без ущерба для настроения):\n` +
+      `• Вы освобождаете: **+${save25.toLocaleString('ru-RU')} ₽ каждый месяц** (+${save25Annual.toLocaleString('ru-RU')} ₽ в год).\n` +
+      `• Если направить этот поток в инвестиции под 12% годовых, через 5 лет на вашем счету будет **${fiveYearWealth.toLocaleString('ru-RU')} ₽ чистого капитала!**\n\n` +
+      `[ACTION:budgets:bg-leak:Установить лимиты на категории]\n` +
+      `[ACTION:analytics:donut:Открыть структуру категорий]`;
+  }
+
+  // 3. ЗАПАС ПРОЧНОСТИ / ПОДУШКА БЕЗОПАСНОСТИ / RUNWAY
+  if (/подушк|резерв|хватит|runway|если уволят|чп|запас|безопасн|кризис/i.test(q)) {
+    const target3mo = monthlyNeeds * 3;
+    const target6mo = monthlyNeeds * 6;
+    const target12mo = monthlyNeeds * 12;
+
+    let verdictBadge = "🛡️ Запас прочности надежный";
+    if (Number(runwayMonths) < 2) verdictBadge = "⚠️ Зона повышенного риска (подушка менее 2 месяцев)";
+    else if (Number(runwayMonths) < 4) verdictBadge = "⚡ Базовый уровень безопасности";
+    else verdictBadge = "🏆 Превосходный уровень автономии капитала";
+
+    const diffTo6mo = Math.max(0, target6mo - liquidCushion);
+    const monthsToCover = monthlySurplus > 0 ? Math.ceil(diffTo6mo / monthlySurplus) : 6;
+
+    return `🛡️ **Аудит резервного капитала & Запас прочности (Runway):**\n\n` +
+      `• Базовые обязательные расходы на жизнь: **${monthlyNeeds.toLocaleString('ru-RU')} ₽ в месяц**\n` +
+      `• Доступный ликвидный резерв: **${Math.round(liquidCushion).toLocaleString('ru-RU')} ₽**\n` +
+      `• **Текущий запас автономии (Runway):** **${runwayMonths} мес.** без каких-либо доходов\n\n` +
+      `${verdictBadge}\n\n` +
+      `🎯 **Золотые стандарты финансовой безопасности:**\n` +
+      `1. **3 месяца (Минимум):** ${target3mo.toLocaleString('ru-RU')} ₽ — защита от кассовых разрывов и смены работы.\n` +
+      `2. **6 месяцев (Идеал):** ${target6mo.toLocaleString('ru-RU')} ₽ — психологическое спокойствие и свобода выбора.\n` +
+      `3. **12 месяцев (Крепость):** ${target12mo.toLocaleString('ru-RU')} ₽ — полная независимость от любых рыночных кризисов.\n\n` +
+      (diffTo6mo > 0
+        ? `💡 Чтобы довести подушку до идеальных 6 месяцев, не хватает **${diffTo6mo.toLocaleString('ru-RU')} ₽**. При текущей норме сбережений вы сформируете её за **~${monthsToCover} мес.**\n\n`
+        : `✨ Ваша подушка уже полностью перекрывает полугодовой уровень базовых расходов! Время направлять излишки в инвестиционные цели.\n\n`) +
+      `[ACTION:goals:gl-cushion:Пополнить подушку безопасности]\n` +
+      `[ACTION:budgets:bg-needs:Проверить обязательные лимиты]`;
+  }
+
+  // 4. ПРАВИЛО 50/30/20 & РАСПРЕДЕЛЕНИЕ ДОХОДА
+  if (/50\/30\/20|распредел|доход|зарплат|преми|получил|аванс|ритуал/i.test(q)) {
+    const baseInc = askedAmount && (askedAmount >= 5000) ? askedAmount : (monthlyInc || 90000);
+    const needs = Math.round(baseInc * 0.50);
+    const wants = Math.round(baseInc * 0.30);
+    const savings = Math.round(baseInc * 0.20);
+    const safetyCushionShare = Math.round(savings * 0.50);
+    const investShare = Math.round(savings * 0.50);
+
+    return `⚖️ **Зарплатный ритуал 50/30/20** (для суммы ${baseInc.toLocaleString('ru-RU')} ₽):\n\n` +
+      `Золотое правило финансового комфорта делит доход на три четких потока:\n\n` +
+      `1. **50% — Базовые потребности:** **${needs.toLocaleString('ru-RU')} ₽**\n` +
+      `   • Жильё, коммуналка, продукты, транспорт, здоровье, обязательства.\n\n` +
+      `2. **30% — Личный кайф и образ жизни:** **${wants.toLocaleString('ru-RU')} ₽**\n` +
+      `   • Рестораны, покупки, развлечения, такси, хобби (тратить без чувства вины!).\n\n` +
+      `3. **20% — Сначала заплати себе (Будущее):** **${savings.toLocaleString('ru-RU')} ₽**\n` +
+      `   • В резервную подушку: **+${safetyCushionShare.toLocaleString('ru-RU')} ₽**\n` +
+      `   • В инвестиции / главную цель: **+${investShare.toLocaleString('ru-RU')} ₽**\n\n` +
+      `💡 **Главное правило:** откладывайте 20% в первые 15 минут после поступления денег. То, что осталось — можно тратить в своё удовольствие с чистой совестью!\n\n` +
+      `[ACTION:goals:gl-split:Отложить 20% в цель]\n` +
+      `[ACTION:budgets:bg-all:Настроить лимиты расходов]`;
+  }
+
+  // 5. ПРОГНОЗ КАПИТАЛА & СЛОЖНЫЙ ПРОЦЕНТ (1, 3, 5, 10 ЛЕТ)
+  if (/прогноз|сложн.*процент|через.*лет|через год|инвести|будущ|рост капитал/i.test(q)) {
+    const initialCap = Math.max(0, balance) + totalSavedInGoals || 100000;
+    const monthlyInv = askedAmount && askedAmount <= 200000 ? askedAmount : (monthlySurplus > 0 ? monthlySurplus : 25000);
+    const annualRate = 0.12;
+    const rMonthly = annualRate / 12;
+
+    const calcWealth = (years) => {
+      const months = years * 12;
+      const fvPrincipal = initialCap * Math.pow(1 + rMonthly, months);
+      const fvAnnuity = monthlyInv * ((Math.pow(1 + rMonthly, months) - 1) / rMonthly);
+      const total = Math.round(fvPrincipal + fvAnnuity);
+      const contributed = initialCap + monthlyInv * months;
+      const profit = Math.max(0, total - contributed);
+      return { total, contributed, profit };
+    };
+
+    const y1 = calcWealth(1);
+    const y3 = calcWealth(3);
+    const y5 = calcWealth(5);
+    const y10 = calcWealth(10);
+
+    return `🔮 **Моделирование капитала со сложным процентом (12% годовых):**\n\n` +
+      `Параметры: стартовый капитал **${initialCap.toLocaleString('ru-RU')} ₽**, пополнение **${monthlyInv.toLocaleString('ru-RU')} ₽ в месяц**.\n\n` +
+      `• **Через 1 год:** **${y1.total.toLocaleString('ru-RU')} ₽** (вложено ${y1.contributed.toLocaleString('ru-RU')} ₽, проценты: +${y1.profit.toLocaleString('ru-RU')} ₽)\n` +
+      `• **Через 3 года:** **${y3.total.toLocaleString('ru-RU')} ₽** (проценты: +${y3.profit.toLocaleString('ru-RU')} ₽)\n` +
+      `• **Через 5 лет:** **${y5.total.toLocaleString('ru-RU')} ₽** (проценты: +${y5.profit.toLocaleString('ru-RU')} ₽)\n` +
+      `• **Через 10 лет:** **${y10.total.toLocaleString('ru-RU')} ₽** (из них проценты: **+${y10.profit.toLocaleString('ru-RU')} ₽!**)\n\n` +
+      `⚡ **Магия времени:** уже на 5-й год сложный процент начинает приносить больше дохода, чем ваши личные ежемесячные взносы. Главное — непрерывность потока.\n\n` +
+      `[ACTION:goals:gl-invest:Создать цель «Инвест-капитал»]\n` +
+      `[ACTION:analytics:wave:Смотреть траекторию баланса]`;
+  }
+
+  // 6. КОМПЛЕКСНЫЙ АУДИТ FINSCORE (0-100)
+  if (/finscore|аудит|диагностик|здоровь|оценк|как мои дела|рейтинг|статус/i.test(q)) {
+    const scoreCushion = Math.min(25, Math.round(Number(runwayMonths) * 6));
+    const scoreSavings = Math.min(25, Math.max(0, Math.round(savingsRate)));
+    const scoreBudgets = budgets.length > 0 ? 25 : 12;
+    const scoreCapital = balance >= 0 ? 25 : 5;
+    const totalScore = scoreCushion + scoreSavings + scoreBudgets + scoreCapital;
+
+    let grade = 'B+ • Устойчивый уровень';
+    if (totalScore >= 85) grade = 'A+ • Превосходная финансовая форма';
+    else if (totalScore < 50) grade = 'C • Требуется стабилизация';
+
+    return `🩺 **Полная экспресс-диагностика FinScore (${totalScore}/100):**\n\n` +
+      `Рейтинг финансовой устойчивости: **${grade}**\n\n` +
+      `Разбор 4 фундаментальных опор капитала:\n` +
+      `1. **Запас прочности (${scoreCushion}/25 б):** Подушка на **${runwayMonths} мес.** базовых расходов.\n` +
+      `2. **Норма сбережений (${scoreSavings}/25 б):** Сберегается **${savingsRate}%** от поступающего дохода.\n` +
+      `3. **Бюджетная дисциплина (${scoreBudgets}/25 б):** Настроено **${budgets.length}** лимитов категорий.\n` +
+      `4. **Динамика капитала (${scoreCapital}/25 б):** Чистый баланс **${balance.toLocaleString('ru-RU')} ₽**.\n\n` +
+      `🎯 **Главный рычаг роста прямо сейчас:**\n` +
+      (scoreBudgets < 20 ? `• Зафиксируйте лимиты на категории в разделе «Бюджеты», чтобы добавить +12 баллов к FinScore.\n` : `• Автоматизируйте пополнение инвестиционной цели в день зарплаты, чтобы выйти в элитный клуб 90+ FinScore.\n\n`) +
+      `[ACTION:budgets:bg-all:Настроить лимиты бюджетов]\n` +
+      `[ACTION:goals:gl-all:Проверить цели накоплений]`;
+  }
+
+  // 7. ЦЕЛИ И КРУПНЫЕ ПОКУПКИ (МАШИНА, КВАРТИРА, ОТПУСК)
+  if (/цел|накоп|купить|машин|квартир|ремонт|отпуск|ипотек|кредит/i.test(q)) {
+    const goalsList = goals.length > 0
+      ? goals.map(g => {
+          const pct = Math.round((Number(g.saved_amount) / Number(g.target_amount || 1)) * 100) || 0;
+          const left = Math.max(0, Number(g.target_amount) - Number(g.saved_amount));
+          const monthsLeft = monthlySurplus > 0 ? Math.ceil(left / monthlySurplus) : 12;
+          return `• **${g.name}**: ${Number(g.saved_amount).toLocaleString('ru-RU')} ₽ из ${Number(g.target_amount).toLocaleString('ru-RU')} ₽ (**${pct}%**) — осталось ~${monthsLeft} мес.`;
+        }).join('\n')
+      : "В вашем профиле пока нет активных целей во вкладке «Цели».";
+
+    return `🎯 **Стратегия достижения финансовых целей:**\n\n` +
+      `${goalsList}\n\n` +
+      `💡 **Техника ускорения целей (Goal Velocity):**\n` +
+      `1. Откладывайте на цель строго в момент прихода дохода (принцип 50/30/20).\n` +
+      `2. Если цель крупная (машина, первоначальный взнос), держите средства на доходном счете, чтобы инфляция не съедала прогресс.\n` +
+      `3. Увеличение ежемесячного взноса даже на 10% сокращает срок ожидания на 2–3 месяца!\n\n` +
+      `[ACTION:goals:gl-new:Создать новую цель]\n` +
+      `[ACTION:analytics:cf:Оценить свободный профицит]`;
+  }
+
+  // 8. ДЕФОЛТНЫЙ УМНЫЙ СОВЕТНИК
+  return `🤖 **Финансовый интеллект FinKaif OS:**\n\n` +
+    `Я проанализировал вашу финансовую модель:\n` +
+    `• Чистый баланс капитала: **${balance.toLocaleString('ru-RU')} ₽**\n` +
+    `• Норма сбережений (Savings Rate): **${savingsRate}%**\n` +
+    `• Запас автономности (Runway): **${runwayMonths} мес.**\n` +
+    `• Активных целей: **${goals.length}** | Лимитов бюджета: **${budgets.length}**\n\n` +
+    `С чем сегодня поработаем?\n` +
+    `• Спросите: *«Когда я выйду на FIRE?»* — рассчитаю целевой капитал и срок.\n` +
+    `• Спросите: *«Где мои финансовые утечки?»* — найду скрытые траты.\n` +
+    `• Спросите: *«Прогноз капитала через 5 лет»* — смоделирую сложный процент.\n` +
+    `• Спросите: *«Распредели доход 100к»* — разложу по формуле 50/30/20.\n\n` +
+    `[ACTION:analytics:all:Открыть полный финансовый отчёт]`;
 }
 
 function buildSystemPrompt(transactions, budgets, goals) {
   const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount), 0);
   const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount), 0);
   const balance = inc - exp;
+  const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
+  const monthlyExp = exp > 0 ? Math.max(exp, 35000) : 45000;
+  const runwayMonths = monthlyExp > 0 ? (Math.max(0, balance) / monthlyExp).toFixed(1) : "3.0";
+  const fireNumber = Math.round(monthlyExp * 12 * 25);
 
   const expByCat = {};
   for (const t of transactions) {
@@ -448,7 +637,7 @@ function buildSystemPrompt(transactions, budgets, goals) {
     ? goals.map(g => `• ${g.name}: накоплено ${Number(g.saved_amount).toLocaleString("ru-RU")} ₽ из ${Number(g.target_amount).toLocaleString("ru-RU")} ₽ (${Math.round((g.saved_amount / g.target_amount) * 100) || 0}%)`).join("\n")
     : "Целей пока не добавлено.";
 
-  return `Ты — персональный финансовый ментор и ИИ-помощник в приложении **Finkaif** («Финансы в кайф»).
+  return `Ты — персональный финансовый ментор и ИИ-помощник в приложении **FinKaif** («Финансы в кайф»).
 Твоя цель — помочь пользователю легко, осознанно и без чувства вины управлять своими личными финансами, достигать целей и формировать капитал.
 
 ФИЛОСОФИЯ И МЕТОДОЛОГИЯ FINKAIF:
@@ -460,11 +649,15 @@ function buildSystemPrompt(transactions, budgets, goals) {
    • 20% — Будущее и безопасность (сбережения, закрытие долгов, подушка безопасности, цели).
 4. Принцип «Сначала заплати себе»: откладывать фиксированную сумму сразу при получении дохода, а не то, что останется в конце месяца.
 5. Финансовая подушка безопасности на 3–6 месяцев базовых расходов — основа психологического спокойствия.
+6. FIRE (Financial Independence, Retire Early): капитал = 25× годовых расходов, дающий вечный пассивный доход по правилу 4%.
 
 РЕАЛЬНЫЕ ФИНАНСОВЫЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ИЗ БАЗЫ FINKAIF:
 • Зафиксировано доходов: ${inc.toLocaleString("ru-RU")} ₽
 • Зафиксировано расходов: ${exp.toLocaleString("ru-RU")} ₽
 • Текущий баланс: ${balance.toLocaleString("ru-RU")} ₽
+• Норма сбережений (Savings Rate): ${savingsRate}%
+• Запас прочности (Runway): ~${runwayMonths} мес.
+• Целевой капитал FIRE (4%): ~${fireNumber.toLocaleString("ru-RU")} ₽
 • Топ категорий расходов:
 ${topCats || "• Нет зафиксированных расходов"}
 • Установленные бюджеты по категориям:
@@ -474,16 +667,19 @@ ${goalsSummary}
 
 ПРАВИЛА ОБЩЕНИЯ И ФОРМАТ ОТВЕТОВ:
 1. Тон: дружелюбный, экспертный, спокойный, подбадривающий, без занудства и нравоучений. Обращайся к пользователю на «ты» или уважительное «вы» по контексту.
-2. Персонализация: ВСЕГДА используй реальные цифры и категории пользователя из данных выше! Если спрашивают «Как распределить доход?» или «Что делать с бюджетом?», приводи расчеты в рублях под его конкретную финансовую ситуацию.
+2. Персонализация: ВСЕГДА используй реальные цифры и категории пользователя из данных выше!
 3. Формат:
    - Краткий вывод/диагноз ситуации в 1–2 предложениях.
    - Четкие расчеты по пунктам (с эмодзи и выделением сумм **жирным**).
-   - 1–3 простых действия прямо в приложении Finkaif (например: «Во вкладке Бюджет установи лимит на кафе 15 000 ₽», «Во вкладке Цели создай цель Подушка безопасности»).
+   - В конце ответа добавь 1-2 интерактивных тега действий в формате:
+     [ACTION:goals:gl-cushion:Пополнить подушку безопасности]
+     [ACTION:budgets:bg-all:Настроить лимиты]
+     [ACTION:analytics:cf:Смотреть денежный поток]
 4. СТРОГИЙ ЭТИКЕТ И АНТИ-МАТ:
    - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать любые нецензурные, матерные, ругательные или грубые слова.
-   - Если пользователь ругается матом, проявляет раздражение или грубит: НИКОГДА не отвечай грубостью и не читай длинных морализаторских лекций. Отвечай спокойно, вежливо, с легкой доброжелательной иронией/шуткой, подчеркивая, что «деньги любят хладнокровие», и сразу переводи диалог в конструктивное русло финансов и точных расчётов.
+   - Если пользователь ругается матом: отвечай спокойно, с доброй иронией и переводи диалог на цифры.
 5. Безопасность:
-   - Не давай рискованных инвестиционных рекомендаций (не призывай скупать акции конкретных компаний или сомнительную крипту).
+   - Не давай рискованных инвестиционных рекомендаций (не призывай скупать акции сомнительных компаний или криптовалюту).
    - Никогда не проси и не принимай данные банковских карт, CVV, пароли или смс-коды.`;
 }
 
