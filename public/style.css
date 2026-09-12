@@ -1998,6 +1998,7 @@ html, body {
 
 .cashflow-legend-pills {
   display: flex;
+  align-items: center;
   gap: 12px;
 }
 
@@ -2016,9 +2017,127 @@ html, body {
   border-radius: 50%;
 }
 
+.cf-header-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.cf-stat-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+}
+
+.cf-stat-label {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.cf-stat-val {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.cf-stat-chip.inc .cf-stat-val {
+  color: var(--accent-jade);
+}
+
+.cf-stat-chip.exp .cf-stat-val {
+  color: var(--accent-amber);
+}
+
+.cf-stat-chip.net-pos .cf-stat-val {
+  color: var(--accent-jade);
+}
+
+.cf-stat-chip.net-neg .cf-stat-val {
+  color: var(--accent-coral);
+}
+
+.cf-stat-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cf-stat-badge.jade {
+  background: rgba(45, 212, 191, 0.15);
+  color: var(--accent-jade);
+}
+
+.cf-stat-badge.coral {
+  background: rgba(251, 113, 133, 0.15);
+  color: var(--accent-coral);
+}
+
+.cf-view-toggle {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  gap: 2px;
+}
+
+.cf-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cf-toggle-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cf-toggle-btn.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
 .cashflow-chart-box {
   margin: 14px 0;
   position: relative;
+}
+
+.cf-slot-highlight {
+  transition: opacity 0.15s ease, x 0.1s ease, width 0.1s ease;
+  pointer-events: none;
+}
+
+.cf-bar {
+  transition: opacity 0.15s ease, transform 0.2s ease;
+}
+
+.cf-bar.inc {
+  filter: drop-shadow(0 2px 4px rgba(45, 212, 191, 0.25));
+}
+
+.cf-bar.exp {
+  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.25));
 }
 
 .mom-strip {
@@ -2027,6 +2146,8 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .mom-lbl {
@@ -2039,7 +2160,40 @@ html, body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+}
+
+.mom-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mom-note strong {
+  color: var(--text-primary);
+}
+
+.mom-meta-col {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mom-mini-stat {
+  text-align: right;
+  font-size: 12px;
+}
+
+.mom-mini-lbl {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mom-mini-val {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* Profile Modal & Identity */
