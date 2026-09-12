@@ -101,11 +101,16 @@ const esc = s =>
 
 const formatMarkdown = s => {
   if (!s) return '';
-  return esc(s)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px;">$1</code>')
-    .replace(/\n/g, '<br>');
+  let str = esc(s);
+  // Bold **text**
+  str = str.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic *text* (single asterisk, avoid capturing bullet lines)
+  str = str.replace(/(^|[^\*])\*([^\*\s\n][^\*\n]*?)\*([^\*]|$)/g, '$1<em>$2</em>$3');
+  // Code
+  str = str.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px;">$1</code>');
+  // Newlines
+  str = str.replace(/\n/g, '<br>');
+  return str;
 };
 
 // Rich Action Parser and Markdown formatter for Assistant replies
