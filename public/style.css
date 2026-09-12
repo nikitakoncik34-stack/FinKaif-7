@@ -2119,8 +2119,205 @@ html, body {
 }
 
 .cashflow-chart-box {
-  margin: 14px 0;
+  margin: 14px 0 6px 0;
   position: relative;
+}
+
+#cf-chart-svg {
+  width: 100%;
+  height: 210px;
+  overflow: visible;
+  display: block;
+}
+
+/* HTML-based date axis for Cashflow (Zero aspect ratio distortion) */
+.cf-axis-strip {
+  position: relative;
+  width: 100%;
+  height: 35px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cf-axis-item {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+  pointer-events: none;
+  transition: all 0.15s ease;
+}
+
+.cf-axis-tick {
+  width: 1px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  margin-bottom: 3px;
+  transition: all 0.15s ease;
+}
+
+.cf-axis-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  padding: 2px 5px;
+  border-radius: var(--r-xs);
+  transition: all 0.15s ease;
+}
+
+.cf-axis-day {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  color: #94A3B8;
+  line-height: 1;
+}
+
+.cf-axis-month {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: lowercase;
+  line-height: 1;
+}
+
+/* Latest/Today Badge */
+.cf-axis-item.is-latest .cf-axis-tick {
+  background: var(--accent-jade);
+  height: 6px;
+}
+
+.cf-axis-item.is-latest .cf-axis-badge {
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: var(--r-pill);
+  padding: 2px 7px;
+}
+
+.cf-axis-item.is-latest .cf-axis-day {
+  color: #FFFFFF;
+  font-weight: 800;
+}
+
+.cf-axis-item.is-latest .cf-axis-month {
+  color: var(--accent-jade);
+  font-weight: 700;
+}
+
+/* Active Hover Highlight */
+.cf-axis-item.active .cf-axis-tick {
+  background: #FFFFFF;
+  height: 6px;
+}
+
+.cf-axis-item.active .cf-axis-badge {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.cf-axis-item.active .cf-axis-day {
+  color: #FFFFFF;
+}
+
+.cf-axis-item.active .cf-axis-month {
+  color: #CBD5E1;
+}
+
+/* HTML-based Scale Labels on right */
+.cf-scale-track {
+  position: absolute;
+  top: 0;
+  bottom: 35px;
+  right: 14px;
+  width: 50px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cf-scale-badge {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #64748B;
+  background: rgba(20, 26, 35, 0.7);
+  padding: 1px 5px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  line-height: 1;
+}
+
+.cf-scale-badge.zero {
+  color: #475569;
+}
+
+/* HTML 100% Round Wave Dots */
+.cf-activity-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cf-activity-dot .cf-dot-core {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid #141A23;
+  transition: transform 0.15s ease;
+}
+
+.cf-activity-dot.inc .cf-dot-core {
+  background: #2DD4BF;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.8);
+}
+
+.cf-activity-dot.exp .cf-dot-core {
+  background: #F59E0B;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+}
+
+/* HTML Scrubber Beacons */
+.cf-scrubber-beacon {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 6;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cf-scrubber-beacon .beacon-core {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid #141A23;
+}
+
+.cf-scrubber-beacon.inc .beacon-core {
+  background: #2DD4BF;
+  box-shadow: 0 0 8px #2DD4BF;
+}
+
+.cf-scrubber-beacon.exp .beacon-core {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
 }
 
 .cf-slot-highlight {
