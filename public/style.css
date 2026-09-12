@@ -1011,7 +1011,7 @@ html, body {
 .progress-fill {
   height: 100%;
   border-radius: var(--r-pill);
-  transition: width 0.5s var(--ease);
+  transition: opacity 0.3s var(--ease);
 }
 
 .budget-meta-row {
@@ -1044,14 +1044,9 @@ html, body {
   overflow: hidden;
 }
 
-.goal-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--accent-amber), var(--accent-jade));
+/* Goal card luxury depth (anti-slop, no pseudo-stripe) */
+.goal-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .goal-card:hover {
@@ -1834,7 +1829,7 @@ html, body {
 
 .donut-segment {
   cursor: pointer;
-  transition: stroke-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease, filter 0.22s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease, filter 0.22s ease; transform-origin: center;
 }
 
 .donut-segment:hover, .donut-segment.focused {
@@ -1999,7 +1994,7 @@ html, body {
 .donut-progress-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.4s ease;
+  transition: opacity 0.3s ease;
 }
 
 /* Cashflow Card */
@@ -2332,7 +2327,7 @@ html, body {
 }
 
 .cf-slot-highlight {
-  transition: opacity 0.15s ease, x 0.1s ease, width 0.1s ease;
+  transition: opacity 0.15s ease;
   pointer-events: none;
 }
 
@@ -2624,7 +2619,7 @@ html, body {
   height: 100%;
   background: linear-gradient(90deg, var(--accent-jade) 0%, #0D9488 100%);
   border-radius: 9999px;
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.3s var(--ease);
 }
 
 .progress-bar-fill.warning {
@@ -2749,7 +2744,7 @@ html, body {
    ========================================================================== */
 .home-chart-pt, .cf-pt {
   cursor: pointer;
-  transition: r 0.18s cubic-bezier(0.16, 1, 0.3, 1), stroke-width 0.18s ease;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease; transform-box: fill-box; transform-origin: center;
 }
 
 .home-chart-pt:hover, .cf-pt:hover {
@@ -3822,12 +3817,19 @@ html, body {
 .payday-confetti-star {
   font-size: 40px;
   margin-bottom: 8px;
-  animation: bouncePayday 1s ease infinite alternate;
+  animation: floatPayday 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite alternate;
 }
 
-@keyframes bouncePayday {
-  from { transform: translateY(0); }
-  to { transform: translateY(-6px); }
+@keyframes floatPayday {
+  from {
+    transform: translateY(0) scale(1);
+    opacity: 0.92;
+  }
+  to {
+    transform: translateY(-4px) scale(1.03);
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.55));
+  }
 }
 
 .payday-title {
@@ -4396,13 +4398,13 @@ html, body {
 
 .sim-progress-invested {
   background: rgba(255, 255, 255, 0.4);
-  transition: width 0.3s var(--ease);
+  transition: opacity 0.3s var(--ease);
 }
 
 .sim-progress-profit {
   background: var(--accent-emerald);
   box-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
-  transition: width 0.3s var(--ease);
+  transition: opacity 0.3s var(--ease);
 }
 
 .sim-progress-legend {
@@ -4715,4 +4717,329 @@ html, body {
   .chat-bubble {
     max-width: 92%;
   }
+}
+
+
+/* ==========================================================================
+   PREMIUM 3D AVATAR SYSTEM & NEURAL LIVING CORE (FinKaif Design 8.18)
+   ========================================================================== */
+
+/* User Header & Profile Avatar */
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #090D16;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  transition: border-color var(--dur-normal) var(--ease), box-shadow var(--dur-normal) var(--ease), transform var(--dur-normal) var(--ease);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.user-avatar:hover {
+  border-color: var(--accent-jade);
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.45);
+  transform: scale(1.05);
+}
+
+.avatar-svg-3d {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: block;
+}
+
+.custom-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.monogram-avatar {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* Profile Modal 3D Grid */
+.profile-big-avatar {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.6), 0 0 20px rgba(45, 212, 191, 0.25);
+  border: 2px solid rgba(45, 212, 191, 0.5);
+  background: #090D16;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  transition: transform var(--dur-normal) var(--ease);
+}
+
+.profile-big-avatar:hover {
+  transform: scale(1.04);
+}
+
+.avatar-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.avatar-grid-3d {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+
+@media (max-width: 540px) {
+  .avatar-grid-3d {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.avatar-card-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all var(--dur-normal) var(--ease);
+  position: relative;
+  outline: none;
+}
+
+.avatar-card-opt:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
+}
+
+.avatar-card-opt.active {
+  background: rgba(45, 212, 191, 0.12);
+  border-color: var(--accent-jade);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.avatar-opt-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.avatar-card-opt.active .avatar-opt-title {
+  color: #FFFFFF;
+}
+
+.avatar-opt-sub {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.avatar-upload-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  margin-top: 10px;
+  cursor: pointer;
+  transition: all var(--dur-normal) var(--ease);
+}
+
+.avatar-upload-zone:hover {
+  border-color: var(--accent-jade);
+  background: rgba(45, 212, 191, 0.06);
+}
+
+.avatar-upload-label {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar-upload-btn-text {
+  font-size: 11px;
+  color: var(--accent-jade);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   NEURAL LIVING CORE (AI ASSISTANT KINETIC ORB)
+   ========================================================================== */
+.assistant-living-orb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  user-select: none;
+  perspective: 600px;
+}
+
+.orb-ambient-glow {
+  position: absolute;
+  inset: -25%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.45) 0%, rgba(59, 130, 246, 0.2) 50%, transparent 75%);
+  filter: blur(8px);
+  opacity: 0.75;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: orbGlowBreathe 3.5s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.orb-orbital-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed rgba(45, 212, 191, 0.45);
+  pointer-events: none;
+  transition: all 0.4s ease;
+}
+
+.orb-ring-1 {
+  transform: rotateX(65deg) rotateZ(0deg);
+  animation: orbRingSpin1 8s linear infinite;
+  border-top-color: #FDE68A;
+  border-right-color: transparent;
+}
+
+.orb-ring-2 {
+  transform: rotateY(65deg) rotateZ(45deg);
+  animation: orbRingSpin2 10s linear infinite reverse;
+  border-right-color: #38BDF8;
+  border-bottom-color: transparent;
+}
+
+.orb-core {
+  position: relative;
+  width: 68%;
+  height: 68%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #5EEAD4 0%, #0D9488 45%, #042F2E 100%);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.6), inset -2px -2px 6px rgba(0, 0, 0, 0.8), inset 2px 2px 4px rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: orbPulse 3.5s ease-in-out infinite alternate;
+}
+
+.orb-nucleus {
+  width: 40%;
+  height: 40%;
+  border-radius: 50%;
+  background: #FFFFFF;
+  opacity: 0.85;
+  filter: blur(1.5px);
+  animation: orbNucleusGlow 2.5s ease-in-out infinite alternate;
+}
+
+/* Orb States */
+.assistant-living-orb[data-state="thinking"] .orb-ambient-glow {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.65) 0%, rgba(217, 119, 6, 0.3) 50%, transparent 75%);
+  animation: orbThinkingGlow 0.8s ease-in-out infinite alternate;
+}
+
+.assistant-living-orb[data-state="thinking"] .orb-core {
+  background: radial-gradient(circle at 35% 30%, #FDE68A 0%, #D97706 45%, #451A03 100%);
+  box-shadow: 0 0 22px rgba(245, 158, 11, 0.85), inset -2px -2px 6px rgba(0, 0, 0, 0.8), inset 2px 2px 4px rgba(255, 255, 255, 0.6);
+  transform: scale(0.9);
+}
+
+.assistant-living-orb[data-state="thinking"] .orb-ring-1 {
+  animation-duration: 1.5s;
+  border-color: rgba(245, 158, 11, 0.85);
+}
+
+.assistant-living-orb[data-state="thinking"] .orb-ring-2 {
+  animation-duration: 2s;
+  border-color: rgba(253, 230, 138, 0.85);
+}
+
+.assistant-living-orb[data-state="responding"] .orb-core {
+  transform: scale(1.1);
+  box-shadow: 0 0 24px rgba(52, 211, 153, 0.9), inset 2px 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+.assistant-living-orb[data-state="responding"] .orb-ambient-glow {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+@keyframes orbGlowBreathe {
+  from { transform: scale(0.92); opacity: 0.5; }
+  to { transform: scale(1.08); opacity: 0.85; }
+}
+
+@keyframes orbPulse {
+  from { transform: scale(0.96); }
+  to { transform: scale(1.04); }
+}
+
+@keyframes orbRingSpin1 {
+  from { transform: rotateX(65deg) rotateZ(0deg); }
+  to { transform: rotateX(65deg) rotateZ(360deg); }
+}
+
+@keyframes orbRingSpin2 {
+  from { transform: rotateY(65deg) rotateZ(45deg); }
+  to { transform: rotateY(65deg) rotateZ(405deg); }
+}
+
+@keyframes orbThinkingGlow {
+  from { transform: scale(0.85); opacity: 0.6; }
+  to { transform: scale(1.25); opacity: 1; filter: blur(8px); }
+}
+
+@keyframes orbNucleusGlow {
+  from { opacity: 0.5; transform: scale(0.8); }
+  to { opacity: 0.95; transform: scale(1.2); }
+}
+
+/* Goals Smart Timeline Badge */
+.goal-eta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-jade);
+  background: rgba(45, 212, 191, 0.1);
+  border: 1px solid rgba(45, 212, 191, 0.25);
+  padding: 3px 8px;
+  border-radius: 9999px;
+  margin-top: 4px;
 }
