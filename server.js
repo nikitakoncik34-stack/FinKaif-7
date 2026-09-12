@@ -197,6 +197,40 @@ app.post("/api/transactions", auth, async (req, res) => {
   }
 });
 
+app.put("/api/transactions/:id", auth, async (req, res) => {
+  try {
+    const x = req.body;
+    if (!["income", "expense"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
+      return res.status(400).json({ error: "Проверьте тип, категорию и сумму операции." });
+    }
+    const createdAt = x.created_at ? new Date(x.created_at) : null;
+    const r = await db.query(
+      `update transactions set 
+        type=$1, 
+        category=$2, 
+        description=$3, 
+        amount=$4, 
+        occurred_on=$5, 
+        created_at=coalesce($6, created_at)
+       where id=$7 and user_id=$8 returning *`,
+      [
+        x.type,
+        String(x.category).trim(),
+        String(x.description || "").trim(),
+        Number(x.amount),
+        x.occurred_on || new Date().toISOString().slice(0, 10),
+        createdAt && !isNaN(createdAt.getTime()) ? createdAt : null,
+        req.params.id,
+        req.user.id
+      ]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: "Операция не найдена." });
+    res.json(r.rows[0]);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 app.post("/api/budgets", auth, async (req, res) => {
   try {
     const x = req.body;
