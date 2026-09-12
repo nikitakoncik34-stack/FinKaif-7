@@ -721,8 +721,11 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
     },
     contents,
     generationConfig: {
-      temperature: 0.5,
-      maxOutputTokens: 1500
+      temperature: 0.6,
+      maxOutputTokens: 8192,
+      thinkingConfig: {
+        thinkingBudget: 0
+      }
     }
   };
 
@@ -737,7 +740,18 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
     throw new Error(data.error?.message || "Ошибка Gemini API");
   }
 
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "Не удалось получить ответ от Gemini.";
+  const candidate = data.candidates?.[0];
+  if (!candidate) {
+    throw new Error("Пустой ответ от Gemini");
+  }
+
+  const parts = candidate.content?.parts || [];
+  const fullText = parts.map(p => p.text || "").join("").trim();
+  if (!fullText) {
+    throw new Error("Пустой текст ответа Gemini");
+  }
+
+  return fullText;
 }
 
 const assistantHandler = async (req, res) => {
@@ -819,6 +833,7 @@ const assistantHandler = async (req, res) => {
         const r = await client.chat.completions.create({
           model,
           temperature: 0.5,
+          max_tokens: 4000,
           messages
         });
         answer = r.choices[0]?.message?.content || "Не удалось получить ответ от нейросети.";
