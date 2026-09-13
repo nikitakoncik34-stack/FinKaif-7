@@ -97,6 +97,8 @@ let data = {
   goals: [],
   chat: []
 };
+window.data = data;
+window.renderApp = renderApp;
 
 /* ==========================================================================
    API CLIENT
@@ -1358,59 +1360,57 @@ function renderAnalyticsView() {
   // Daily Burn Rate (Velocity)
   const dailyVelocity = Math.round(pExp / (daysCount || 1));
 
-  // Current balance
+  // Current balance across all recorded transactions
   const totalInc = data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
   const totalExp = data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
   const currentBalance = totalInc - totalExp;
 
-  // Runway & Month-End Projection Calculation
+  // Calendar month dates & expenses
+  const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
+  const curMonthExp = data.transactions
+    .filter(t => t.type === 'expense' && getTxIso(t) >= curMonthStart)
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const curMonthInc = data.transactions
+    .filter(t => t.type === 'income' && getTxIso(t) >= curMonthStart)
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  // Month-End Projection Calculation
   const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const daysRemainingInMonth = Math.max(0, daysInCurMonth - now.getDate());
   const dailyIncomeRate = Math.round(pInc / (daysCount || 1));
-  const netDailyFlow = (pInc > 0 ? dailyIncomeRate : 0) - dailyVelocity;
-  const projectedMonthEnd = currentBalance + (netDailyFlow * daysRemainingInMonth);
 
-  // Benchmarking Spending Pace
-  const totalBudgetLimit = (data.budgets || []).reduce((s, b) => s + Number(b.limit_amount), 0);
-  const plannedDailyBudget = totalBudgetLimit > 0 ? Math.round(totalBudgetLimit / daysInCurMonth) : 0;
+  // Expected remaining expenses till end of month based on daily velocity
+  const expectedRemainingExp = Math.round(dailyVelocity * daysRemainingInMonth);
+  // Conservative projected balance at month end: current balance minus expected remaining spend
+  const projectedBalance = currentBalance - expectedRemainingExp;
+  const projectedMonthExp = curMonthExp + expectedRemainingExp;
 
+  // Spending Pace Assessment (Burn Rate Status)
   let burnStatus = 'safe';
   let burnText = 'Комфортный темп';
 
   if (dailyVelocity === 0) {
     burnStatus = 'safe';
     burnText = 'Расходов нет (0 ₽/день)';
-  } else if (plannedDailyBudget > 0) {
-    // Compare actual pace against monthly budget pace
-    const paceRatio = dailyVelocity / plannedDailyBudget;
-    if (paceRatio <= 0.9) {
-      burnStatus = 'safe';
-      burnText = `Экономный темп (−${Math.round((1 - paceRatio) * 100)}% от лимита)`;
-    } else if (paceRatio <= 1.1) {
-      burnStatus = 'safe';
-      burnText = 'В графике бюджета';
-    } else if (paceRatio <= 1.35) {
-      burnStatus = 'warn';
-      burnText = `Умеренное опережение (+${Math.round((paceRatio - 1) * 100)}%)`;
-    } else {
-      burnStatus = 'alert';
-      burnText = `Высокий темп (+${Math.round((paceRatio - 1) * 100)}% от лимита)`;
-    }
   } else if (dailyIncomeRate > 0) {
-    // Compare actual spend against daily income
+    // Primary benchmark: spend velocity relative to incoming daily flow
     const incRatio = dailyVelocity / dailyIncomeRate;
-    if (incRatio <= 0.7) {
+    const incPct = Math.round(incRatio * 100);
+    if (incRatio <= 0.45) {
       burnStatus = 'safe';
-      burnText = `Комфортный (${Math.round(incRatio * 100)}% дохода)`;
+      burnText = `Экономный темп (${incPct}% дохода)`;
+    } else if (incRatio <= 0.75) {
+      burnStatus = 'safe';
+      burnText = `Комфортный (${incPct}% дохода)`;
     } else if (incRatio <= 1.0) {
       burnStatus = 'warn';
-      burnText = `Умеренный (${Math.round(incRatio * 100)}% дохода)`;
+      burnText = `Плотный (${incPct}% дохода)`;
     } else {
       burnStatus = 'alert';
-      burnText = `Превышает доход (+${Math.round((incRatio - 1) * 100)}%)`;
+      burnText = `Превышает доход (+${incPct - 100}%)`;
     }
   } else if (currentBalance > 0) {
-    // Compare against capital reserve
+    // Runway-based evaluation when no income recorded in period
     const runwayDays = Math.round(currentBalance / (dailyVelocity || 1));
     if (runwayDays >= 90) {
       burnStatus = 'safe';
@@ -1480,13 +1480,9 @@ function renderAnalyticsView() {
   const targetDonut = activeAnalyticsCat ? donutSlices.find(s => s.cat === activeAnalyticsCat) : null;
 
   // Month-over-Month calculation
-  const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
   const prevMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
   const prevMonthSameDay = toDateIso(new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()));
 
-  const curMonthExp = data.transactions
-    .filter(t => t.type === 'expense' && getTxIso(t) >= curMonthStart)
-    .reduce((s, t) => s + Number(t.amount), 0);
   const prevMonthExp = data.transactions
     .filter(t => t.type === 'expense' && getTxIso(t) >= prevMonthStart && getTxIso(t) <= prevMonthSameDay)
     .reduce((s, t) => s + Number(t.amount), 0);
@@ -1705,45 +1701,135 @@ function renderAnalyticsView() {
     </div>
 
     <!-- 4 Key Analytics Metrics -->
+    <!-- 4 Key Analytics Metrics -->
     <div class="analytics-metrics-strip">
-      <div class="analytics-metric-card">
+      <div class="analytics-metric-card" id="card-net-cashflow">
         <div class="metric-topline">
-          <span class="metric-label">Чистый денежный поток</span>
+          <div class="metric-label-wrap">
+            <span class="metric-label">Чистый денежный поток</span>
+            <button type="button" class="metric-info-btn" data-tooltip-id="tt-net-cashflow" aria-label="Подробнее о денежном потоке">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+          </div>
           <span class="metric-icon ${pNet >= 0 ? 'inc' : 'exp'}">${icon(pNet >= 0 ? 'trendUp' : 'trendDown', 15)}</span>
         </div>
         <div class="metric-value num ${pNet >= 0 ? 'inc' : 'exp'}">${pNet >= 0 ? '+' : '−'}${money(Math.abs(pNet))}</div>
         <div class="metric-footnote">
           ${pSavingsRate > 0 ? `<span class="badge-tag jade">${pSavingsRate}% сохранено</span>` : 'Баланс периода'}
         </div>
+
+        <div class="metric-popover" id="tt-net-cashflow">
+          <div class="metric-popover-header">
+            <span class="popover-title">📈 Чистый денежный поток</span>
+            <button type="button" class="popover-close" data-close="tt-net-cashflow">✕</button>
+          </div>
+          <p class="popover-desc">Разница между всеми поступлениями и списаниями за выбранный период (Доходы − Расходы).</p>
+          <div class="popover-breakdown">
+            <div class="p-row"><span>Поступления:</span> <strong class="inc">+${money(pInc)}</strong></div>
+            <div class="p-row"><span>Списания:</span> <strong class="exp">−${money(pExp)}</strong></div>
+            <div class="p-row highlight"><span>Чистый итог:</span> <strong class="${pNet >= 0 ? 'inc' : 'exp'}">${pNet >= 0 ? '+' : '−'}${money(Math.abs(pNet))}</strong></div>
+            ${pSavingsRate > 0 ? `<div class="p-row"><span>Норма сбережений:</span> <strong class="jade-text">${pSavingsRate}% сохранено в капитал</strong></div>` : ''}
+          </div>
+          <div class="popover-hint">
+            💡 Показывает, сколько свободных денег оседает в вашем капитале после всех трат периода.
+          </div>
+        </div>
       </div>
 
-      <div class="analytics-metric-card">
+      <div class="analytics-metric-card" id="card-burn-rate">
         <div class="metric-topline">
-          <span class="metric-label">Темп трат (Burn Rate)</span>
+          <div class="metric-label-wrap">
+            <span class="metric-label">Темп трат (Burn Rate)</span>
+            <button type="button" class="metric-info-btn" data-tooltip-id="tt-burn-rate" aria-label="Подробнее о темпе трат">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+          </div>
           <span class="metric-icon exp">${icon('flame', 15)}</span>
         </div>
         <div class="metric-value num exp">${money(dailyVelocity)} <span class="metric-unit">/ день</span></div>
         <div class="metric-footnote">
           <span class="badge-tag ${burnStatus === 'safe' ? 'jade' : (burnStatus === 'warn' ? 'amber' : 'coral')}">${burnText}</span>
         </div>
+
+        <div class="metric-popover" id="tt-burn-rate">
+          <div class="metric-popover-header">
+            <span class="popover-title">🔥 Темп трат (Burn Rate)</span>
+            <button type="button" class="popover-close" data-close="tt-burn-rate">✕</button>
+          </div>
+          <p class="popover-desc">Среднесуточный расход за выбранный период (${daysCount} дн.). Показывает скорость выбытия денег и помогает вовремя заметить перерасход.</p>
+          <div class="popover-breakdown">
+            <div class="p-row"><span>Всего расходов:</span> <strong>${money(pExp)} (${daysCount} дн.)</strong></div>
+            <div class="p-row"><span>Скорость списаний:</span> <strong class="exp">${money(dailyVelocity)} / день</strong></div>
+            ${dailyIncomeRate > 0 ? `
+              <div class="p-row"><span>Средний доход:</span> <strong class="inc">${money(dailyIncomeRate)} / день</strong></div>
+              <div class="p-row highlight"><span>Доля в доходах:</span> <strong class="${burnStatus === 'safe' ? 'jade-text' : (burnStatus === 'warn' ? 'amber-text' : 'coral-text')}">${Math.round((dailyVelocity / dailyIncomeRate) * 100)}% (${burnStatus === 'safe' ? 'отличный показатель' : (burnStatus === 'warn' ? 'умеренная нагрузка' : 'перерасход')})</strong></div>
+            ` : ''}
+          </div>
+          <div class="popover-hint">
+            💡 Показывает скорость сгорания денег в сутки. При текущем темпе ${dailyIncomeRate > 0 ? `вы сохраняете ${Math.max(0, 100 - Math.round((dailyVelocity / dailyIncomeRate) * 100))}% всех поступлений` : 'контролируйте запас капитала'}.
+          </div>
+        </div>
       </div>
 
-      <div class="analytics-metric-card">
+      <div class="analytics-metric-card" id="card-month-projection">
         <div class="metric-topline">
-          <span class="metric-label">Прогноз на конец месяца</span>
+          <div class="metric-label-wrap">
+            <span class="metric-label">Остаток на конец месяца</span>
+            <button type="button" class="metric-info-btn" data-tooltip-id="tt-month-projection" aria-label="Подробнее о прогнозе остатка">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+          </div>
           <span class="metric-icon inc">${icon('wallet', 15)}</span>
         </div>
-        <div class="metric-value num ${projectedMonthEnd >= 0 ? 'inc' : 'exp'}">${money(projectedMonthEnd)}</div>
-        <div class="metric-footnote">${daysRemainingInMonth} дн. до конца месяца • расход ${money(dailyVelocity)}/день${dailyIncomeRate > 0 ? `, доход ${money(dailyIncomeRate)}/день` : ''}</div>
+        <div class="metric-value num ${projectedBalance >= 0 ? 'inc' : 'exp'}">${money(projectedBalance)}</div>
+        <div class="metric-footnote">${daysRemainingInMonth > 0 ? `${daysRemainingInMonth} дн. до конца мес • траты ~${money(expectedRemainingExp)}` : 'Итог месяца зафиксирован'}</div>
+
+        <div class="metric-popover" id="tt-month-projection">
+          <div class="metric-popover-header">
+            <span class="popover-title">💼 Остаток на конец месяца</span>
+            <button type="button" class="popover-close" data-close="tt-month-projection">✕</button>
+          </div>
+          <p class="popover-desc">Ожидаемый баланс средств на ваших счетах к концу текущего месяца при сохранении текущей скорости трат (${money(dailyVelocity)}/день).</p>
+          <div class="popover-breakdown">
+            <div class="p-row"><span>Текущий баланс:</span> <strong>${money(currentBalance)}</strong></div>
+            <div class="p-row"><span>Ожидаемые траты (${daysRemainingInMonth} дн.):</span> <strong class="exp">−${money(expectedRemainingExp)}</strong></div>
+            <div class="p-row highlight"><span>Ожидаемый остаток:</span> <strong class="${projectedBalance >= 0 ? 'inc' : 'exp'}">${money(projectedBalance)}</strong></div>
+            <div class="p-row"><span>Всего расходов за месяц:</span> <strong>~${money(projectedMonthExp)}</strong></div>
+          </div>
+          <div class="popover-hint">
+            🛡 Консервативный расчет: намеренно не прибавляет гипотетические доходы, чтобы показать гарантированный финансовый остаток.
+          </div>
+        </div>
       </div>
 
-      <div class="analytics-metric-card">
+      <div class="analytics-metric-card" id="card-financial-rank">
         <div class="metric-topline">
-          <span class="metric-label">Финансовый статус</span>
+          <div class="metric-label-wrap">
+            <span class="metric-label">Финансовый статус</span>
+            <button type="button" class="metric-info-btn" data-tooltip-id="tt-financial-status" aria-label="Подробнее о статусе">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+          </div>
           <span class="metric-icon inc">${userRank.badge}</span>
         </div>
         <div class="metric-value rank-text">${userRank.title}</div>
         <div class="metric-footnote">${userRank.desc}</div>
+
+        <div class="metric-popover" id="tt-financial-status">
+          <div class="metric-popover-header">
+            <span class="popover-title">👑 Финансовый статус</span>
+            <button type="button" class="popover-close" data-close="tt-financial-status">✕</button>
+          </div>
+          <p class="popover-desc">Ваш инвестиционный ранг по методологии FinKaif OS. Растет по мере накопления капитала и достижения целей.</p>
+          <div class="popover-breakdown">
+            <div class="p-row"><span>Текущий ранг:</span> <strong>${userRank.title}</strong></div>
+            <div class="p-row"><span>Свободный капитал:</span> <strong class="inc">${money(currentBalance)}</strong></div>
+            <div class="p-row"><span>Уровень капитала:</span> <strong>${userRank.desc}</strong></div>
+          </div>
+          <div class="popover-hint">
+            🏆 Пополняйте цели и контролируйте расходы, чтобы повышать свой статус в системе.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -5025,6 +5111,86 @@ async function boot() {
 
   renderApp();
 }
+
+// Analytics Metric Popovers (Tooltips & Explanations)
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.metric-info-btn');
+  const closeBtn = e.target.closest('.popover-close');
+
+  if (btn) {
+    e.stopPropagation();
+    const id = btn.getAttribute('data-tooltip-id');
+    const targetPopover = document.getElementById(id);
+    const parentCard = btn.closest('.analytics-metric-card');
+    const wasPinned = targetPopover?.classList.contains('pinned');
+
+    // Close all pinned and hover popovers
+    document.querySelectorAll('.metric-popover.pinned, .metric-popover.hover-open').forEach(p => {
+      p.classList.remove('pinned');
+      p.classList.remove('hover-open');
+    });
+    document.querySelectorAll('.metric-info-btn.active').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.analytics-metric-card.popover-active').forEach(c => c.classList.remove('popover-active'));
+
+    if (!wasPinned && targetPopover) {
+      targetPopover.classList.add('pinned');
+      btn.classList.add('active');
+      if (parentCard) parentCard.classList.add('popover-active');
+    }
+    return;
+  }
+
+  if (closeBtn) {
+    e.stopPropagation();
+    const id = closeBtn.getAttribute('data-close');
+    const targetPopover = document.getElementById(id);
+    if (targetPopover) {
+      targetPopover.classList.remove('pinned');
+      targetPopover.classList.remove('hover-open');
+      const card = targetPopover.closest('.analytics-metric-card');
+      if (card) card.classList.remove('popover-active');
+    }
+    document.querySelector(`.metric-info-btn[data-tooltip-id="${id}"]`)?.classList.remove('active');
+    return;
+  }
+
+  // Clicking outside closes pinned and hover popovers
+  if (!e.target.closest('.metric-popover')) {
+    document.querySelectorAll('.metric-popover.pinned, .metric-popover.hover-open').forEach(p => {
+      p.classList.remove('pinned');
+      p.classList.remove('hover-open');
+    });
+    document.querySelectorAll('.metric-info-btn.active').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.analytics-metric-card.popover-active').forEach(c => c.classList.remove('popover-active'));
+  }
+});
+
+// Desktop Hover interactions
+document.addEventListener('mouseover', (e) => {
+  const btn = e.target.closest('.metric-info-btn');
+  if (btn) {
+    const id = btn.getAttribute('data-tooltip-id');
+    const targetPopover = document.getElementById(id);
+    const parentCard = btn.closest('.analytics-metric-card');
+    if (targetPopover && !targetPopover.classList.contains('pinned')) {
+      targetPopover.classList.add('hover-open');
+      btn.classList.add('active');
+      if (parentCard) parentCard.classList.add('popover-active');
+    }
+  }
+});
+
+document.addEventListener('mouseout', (e) => {
+  const card = e.target.closest('.analytics-metric-card');
+  if (card && (!e.relatedTarget || !card.contains(e.relatedTarget))) {
+    // Only close if not pinned by explicit click
+    card.querySelectorAll('.metric-popover.hover-open').forEach(p => p.classList.remove('hover-open'));
+    if (!card.querySelector('.metric-popover.pinned')) {
+      card.querySelectorAll('.metric-info-btn.active').forEach(b => b.classList.remove('active'));
+      card.classList.remove('popover-active');
+    }
+  }
+});
 
 window.addEventListener('hashchange', syncHash);
 window.addEventListener('DOMContentLoaded', boot);
