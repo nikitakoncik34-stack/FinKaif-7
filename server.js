@@ -189,7 +189,7 @@ app.post("/api/transactions", auth, async (req, res) => {
     const createdAt = x.created_at ? new Date(x.created_at) : new Date();
     const r = await db.query(
       "insert into transactions(user_id,type,category,description,amount,occurred_on,created_at) values($1,$2,$3,$4,$5,$6,$7) returning *",
-      [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Number(x.amount), x.occurred_on || new Date().toISOString().slice(0, 10), isNaN(createdAt.getTime()) ? new Date() : createdAt]
+      [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Math.round(Number(x.amount) * 100) / 100, x.occurred_on || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })(), isNaN(createdAt.getTime()) ? new Date() : createdAt]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -608,79 +608,179 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
 }
 
 function buildSystemPrompt(transactions, budgets, goals) {
-  const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount), 0);
-  const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount), 0);
-  const balance = inc - exp;
+  const safeSum = (arr) => arr.reduce((s, x) => s + Math.round(Number(x.amount) * 100), 0) / 100;
+
+  const inc = safeSum(transactions.filter(x => x.type === "income"));
+  const exp = safeSum(transactions.filter(x => x.type === "expense"));
+  const balance = Math.round((inc - exp) * 100) / 100;
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
   const monthlyExp = exp > 0 ? Math.max(exp, 35000) : 45000;
-  const runwayMonths = monthlyExp > 0 ? (Math.max(0, balance) / monthlyExp).toFixed(1) : "3.0";
+  const runwayMonths = monthlyExp > 0 ? (Math.max(0, balance) / monthlyExp).toFixed(1) : "0.0";
   const fireNumber = Math.round(monthlyExp * 12 * 25);
 
+  // --- Per-category breakdown ---
   const expByCat = {};
+  const incByCat = {};
   for (const t of transactions) {
-    if (t.type === "expense") {
-      expByCat[t.category] = (expByCat[t.category] || 0) + Number(t.amount);
+    if (t.type === "expense") expByCat[t.category] = (expByCat[t.category] || 0) + Number(t.amount);
+    if (t.type === "income") incByCat[t.category] = (incByCat[t.category] || 0) + Number(t.amount);
+  }
+
+  const topExpCats = Object.entries(expByCat)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([cat, amt]) => {
+      const pct = exp > 0 ? Math.round((amt / exp) * 100) : 0;
+      return `• ${cat}: ${Math.round(amt).toLocaleString("ru-RU")} ₽ (${pct}% от расходов)`;
+    }).join("\n");
+
+  // --- Monthly breakdown (current vs previous month) ---
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth(); // 0-indexed
+  const prevMonth = curMonth === 0 ? 11 : curMonth - 1;
+  const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+  const curMonthStr = `${curYear}-${String(curMonth + 1).padStart(2, "0")}`;
+  const prevMonthStr = `${prevYear}-${String(prevMonth + 1).padStart(2, "0")}`;
+
+  const curTxs = transactions.filter(t => String(t.occurred_on || "").startsWith(curMonthStr));
+  const prevTxs = transactions.filter(t => String(t.occurred_on || "").startsWith(prevMonthStr));
+
+  const curInc = safeSum(curTxs.filter(t => t.type === "income"));
+  const curExp = safeSum(curTxs.filter(t => t.type === "expense"));
+  const prevInc = safeSum(prevTxs.filter(t => t.type === "income"));
+  const prevExp = safeSum(prevTxs.filter(t => t.type === "expense"));
+  const curSavRate = curInc > 0 ? Math.round(((curInc - curExp) / curInc) * 100) : 0;
+  const prevSavRate = prevInc > 0 ? Math.round(((prevInc - prevExp) / prevInc) * 100) : 0;
+
+  // --- Category trends (current vs previous month) ---
+  const curExpByCat = {};
+  const prevExpByCat = {};
+  for (const t of curTxs) if (t.type === "expense") curExpByCat[t.category] = (curExpByCat[t.category] || 0) + Number(t.amount);
+  for (const t of prevTxs) if (t.type === "expense") prevExpByCat[t.category] = (prevExpByCat[t.category] || 0) + Number(t.amount);
+
+  const anomalies = [];
+  for (const [cat, curAmt] of Object.entries(curExpByCat)) {
+    const prevAmt = prevExpByCat[cat] || 0;
+    if (prevAmt > 0) {
+      const change = Math.round(((curAmt - prevAmt) / prevAmt) * 100);
+      if (change >= 50) anomalies.push(`⬆️ ${cat}: +${change}% vs прошлый месяц (${Math.round(prevAmt).toLocaleString("ru-RU")} → ${Math.round(curAmt).toLocaleString("ru-RU")} ₽)`);
+      else if (change <= -40) anomalies.push(`⬇️ ${cat}: ${change}% vs прошлый месяц (хорошая экономия)`);
+    } else if (curAmt > 2000 && prevAmt === 0) {
+      anomalies.push(`🆕 Новая статья расходов: ${cat} — ${Math.round(curAmt).toLocaleString("ru-RU")} ₽ (раньше не было)`);
     }
   }
 
-  const topCats = Object.entries(expByCat)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([cat, amt]) => `• ${cat}: ${Math.round(amt).toLocaleString("ru-RU")} ₽`)
-    .join("\n");
+  // --- Daily burn rate & month-end projection ---
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+  const daysLeft = daysInMonth - dayOfMonth;
+  const dailyBurnCur = dayOfMonth > 0 ? Math.round(curExp / dayOfMonth) : 0;
+  const projectedMonthExp = Math.round(dailyBurnCur * daysInMonth);
 
-  const budgetsSummary = budgets.length > 0
-    ? budgets.map(b => `• ${b.category}: лимит ${Number(b.limit_amount).toLocaleString("ru-RU")} ₽`).join("\n")
-    : "Лимиты бюджета пока не настроены.";
+  // --- Budget vs actual ---
+  const budgetStatus = budgets.length > 0
+    ? budgets.map(b => {
+        const spent = curExpByCat[b.category] || 0;
+        const limit = Number(b.limit_amount);
+        const pct = Math.round((spent / limit) * 100);
+        const status = pct >= 100 ? "❌ ПРЕВЫШЕН" : pct >= 85 ? "⚠️ Почти исчерпан" : "✅ В норме";
+        return `• ${b.category}: потрачено ${Math.round(spent).toLocaleString("ru-RU")} ₽ из ${Math.round(limit).toLocaleString("ru-RU")} ₽ (${pct}%) — ${status}`;
+      }).join("\n")
+    : "Лимиты бюджета не настроены (рекомендуется добавить в разделе «Бюджеты»).";
 
+  // --- Goals summary ---
   const goalsSummary = goals.length > 0
-    ? goals.map(g => `• ${g.name}: накоплено ${Number(g.saved_amount).toLocaleString("ru-RU")} ₽ из ${Number(g.target_amount).toLocaleString("ru-RU")} ₽ (${Math.round((g.saved_amount / g.target_amount) * 100) || 0}%)`).join("\n")
-    : "Целей пока не добавлено.";
+    ? goals.map(g => {
+        const pct = Math.round((Number(g.saved_amount) / (Number(g.target_amount) || 1)) * 100);
+        const left = Math.max(0, Number(g.target_amount) - Number(g.saved_amount));
+        return `• ${g.name}: накоплено ${Number(g.saved_amount).toLocaleString("ru-RU")} ₽ из ${Number(g.target_amount).toLocaleString("ru-RU")} ₽ (${pct}%), осталось ${left.toLocaleString("ru-RU")} ₽`;
+      }).join("\n")
+    : "Финансовых целей пока не добавлено.";
 
-  return `Ты — персональный финансовый ментор и ИИ-помощник в приложении **FinKaif** («Финансы в кайф»).
-Твоя цель — помочь пользователю легко, осознанно и без чувства вины управлять своими личными финансами, достигать целей и формировать капитал.
+  // --- Top income sources ---
+  const topIncomeSources = Object.entries(incByCat)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([cat, amt]) => `• ${cat}: ${Math.round(amt).toLocaleString("ru-RU")} ₽`)
+    .join("\n") || "• Доходы пока не зафиксированы";
 
-ФИЛОСОФИЯ И МЕТОДОЛОГИЯ FINKAIF:
-1. «Финансы в кайф» — управление деньгами не должно быть унылой экономией на спичках и страданиями. Это инструмент свободы, уверенности и спокойствия.
-2. Не запрещать себе жить, а выделять бюджет: на радости, хобби и комфорт обязательно закладывается процент от дохода.
-3. Правило 50/30/20 как базовый маяк:
-   • 50% — Базовые потребности (жилье, еда, ЖКХ, связь, обязательные платежи).
-   • 30% — Личные желания, комфорт и образ жизни (кафе, покупки, подарки, развлечения).
-   • 20% — Будущее и безопасность (сбережения, закрытие долгов, подушка безопасности, цели).
-4. Принцип «Сначала заплати себе»: откладывать фиксированную сумму сразу при получении дохода, а не то, что останется в конце месяца.
-5. Финансовая подушка безопасности на 3–6 месяцев базовых расходов — основа психологического спокойствия.
-6. FIRE (Financial Independence, Retire Early): капитал = 25× годовых расходов, дающий вечный пассивный доход по правилу 4%.
+  const monthName = (m) => ["январе","феврале","марте","апреле","мае","июне","июле","августе","сентябре","октябре","ноябре","декабре"][m];
 
-РЕАЛЬНЫЕ ФИНАНСОВЫЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ ИЗ БАЗЫ FINKAIF:
-• Зафиксировано доходов: ${inc.toLocaleString("ru-RU")} ₽
-• Зафиксировано расходов: ${exp.toLocaleString("ru-RU")} ₽
-• Текущий баланс: ${balance.toLocaleString("ru-RU")} ₽
+  return `Ты — **FinKaif Brain 3.0**, персональный CFO-ментор и финансовый интеллект встроенный в приложение FinKaif («Финансы в кайф»).
+
+ТВОЯ РОЛЬ: Ты — личный финансовый советник на уровне Chief Financial Officer. Ты видишь всю финансовую картину пользователя, замечаешь паттерны, аномалии, риски и возможности. Ты говоришь честно, конкретно и по-дружески — без занудства и без общих фраз.
+
+═══════════════════════════════════════
+📊 РЕАЛЬНЫЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ (БАЗА FINKAIF)
+═══════════════════════════════════════
+
+ОБЩАЯ КАРТИНА:
+• Всего доходов зафиксировано: ${inc.toLocaleString("ru-RU")} ₽
+• Всего расходов зафиксировано: ${exp.toLocaleString("ru-RU")} ₽
+• Чистый баланс: ${balance.toLocaleString("ru-RU")} ₽
 • Норма сбережений (Savings Rate): ${savingsRate}%
-• Запас прочности (Runway): ~${runwayMonths} мес.
-• Целевой капитал FIRE (4%): ~${fireNumber.toLocaleString("ru-RU")} ₽
-• Топ категорий расходов:
-${topCats || "• Нет зафиксированных расходов"}
-• Установленные бюджеты по категориям:
-${budgetsSummary}
-• Финансовые цели:
+• Runway (автономия без дохода): ${runwayMonths} мес.
+• Целевой капитал FIRE (4% SWR): ${fireNumber.toLocaleString("ru-RU")} ₽
+
+ТЕКУЩИЙ МЕСЯЦ (${monthName(curMonth)}):
+• Доходы: ${curInc.toLocaleString("ru-RU")} ₽
+• Расходы: ${curExp.toLocaleString("ru-RU")} ₽
+• Норма сбережений этого месяца: ${curSavRate}%
+• Темп трат (${dayOfMonth} дн.): ${dailyBurnCur.toLocaleString("ru-RU")} ₽/день
+• Прогноз расходов к концу месяца: ~${projectedMonthExp.toLocaleString("ru-RU")} ₽
+• Осталось дней до конца месяца: ${daysLeft}
+
+ПРОШЛЫЙ МЕСЯЦ (${monthName(prevMonth)}):
+• Доходы: ${prevInc.toLocaleString("ru-RU")} ₽
+• Расходы: ${prevExp.toLocaleString("ru-RU")} ₽
+• Норма сбережений: ${prevSavRate}%
+
+${curInc > 0 || prevInc > 0 ? `ДИНАМИКА МЕСЯЦ К МЕСЯЦУ:
+• Расходы: ${prevExp > 0 ? (Math.round(((curExp - prevExp) / prevExp) * 100) >= 0 ? "+" : "") + Math.round(((curExp - prevExp) / prevExp) * 100) + "%" : "н/д"}
+• Доходы: ${prevInc > 0 ? (Math.round(((curInc - prevInc) / prevInc) * 100) >= 0 ? "+" : "") + Math.round(((curInc - prevInc) / prevInc) * 100) + "%" : "н/д"}` : ""}
+
+${anomalies.length > 0 ? `🔍 АНОМАЛИИ И ИЗМЕНЕНИЯ В ТРАТАХ:
+${anomalies.join("\n")}` : ""}
+
+ТОП КАТЕГОРИЙ РАСХОДОВ (всё время):
+${topExpCats || "• Расходы не зафиксированы"}
+
+ИСТОЧНИКИ ДОХОДА:
+${topIncomeSources}
+
+СТАТУС БЮДЖЕТОВ:
+${budgetStatus}
+
+ФИНАНСОВЫЕ ЦЕЛИ:
 ${goalsSummary}
 
-ПРАВИЛА ОБЩЕНИЯ И ФОРМАТ ОТВЕТОВ:
-1. Тон: дружелюбный, экспертный, спокойный, подбадривающий, без занудства и нравоучений. Обращайся к пользователю на «ты» или уважительное «вы» по контексту.
-2. Персонализация: ВСЕГДА используй реальные цифры и категории пользователя из данных выше!
-3. Формат:
-   - Краткий вывод/диагноз ситуации в 1–2 предложениях.
-   - Четкие расчеты по пунктам (с эмодзи и выделением сумм **жирным**).
-   - В конце ответа добавь 1-2 интерактивных тега действий в формате:
-     [ACTION:goals:gl-cushion:Пополнить подушку безопасности]
-     [ACTION:budgets:bg-all:Настроить лимиты]
-     [ACTION:analytics:cf:Смотреть денежный поток]
-4. СТРОГИЙ ЭТИКЕТ И АНТИ-МАТ:
-   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО использовать любые нецензурные, матерные, ругательные или грубые слова.
-   - Если пользователь ругается матом: отвечай спокойно, с доброй иронией и переводи диалог на цифры.
-5. Безопасность:
-   - Не давай рискованных инвестиционных рекомендаций (не призывай скупать акции сомнительных компаний или криптовалюту).
-   - Никогда не проси и не принимай данные банковских карт, CVV, пароли или смс-коды.`;
+═══════════════════════════════════════
+📋 ПРАВИЛА ОТВЕТОВ
+═══════════════════════════════════════
+
+1. ПЕРСОНАЛИЗАЦИЯ ОБЯЗАТЕЛЬНА: всегда используй реальные цифры пользователя. Никогда не давай общих советов без привязки к его данным.
+
+2. СТРУКТУРА ОТВЕТА:
+   — Сначала: ёмкий диагноз ситуации (1-2 предложения с главным выводом).
+   — Затем: конкретные цифры и расчёты с выделением **жирным**.
+   — В конце: 1-3 кнопки действий в формате [ACTION:вкладка:id:Текст кнопки].
+
+3. АНОМАЛИИ: если видишь резкий рост расходов в категории — обязательно упомяни это без запроса пользователя.
+
+4. СРАВНЕНИЯ: когда возможно — сравнивай текущий месяц с прошлым, давай тренд.
+
+5. ЧЕСТНОСТЬ: если данных мало или 0 транзакций — честно скажи «мне нужно больше данных» вместо угадывания.
+
+6. ТОН: дружелюбный CFO-ментор. Не нравоучения, не запреты, не «вы тратите слишком много». Вместо этого: «вот факты, вот возможность, вот рычаг».
+
+7. ЗАПРЕЩЕНО: выдумывать цифры, делать финансовую арифметику самостоятельно (все расчёты уже в данных выше), давать инвестиционные рекомендации по конкретным акциям/криптовалюте, запрашивать пароли/данные карт.
+
+8. ИНТЕРАКТИВНЫЕ КНОПКИ — добавляй в конце ответа в формате:
+   [ACTION:goals:gl-fire:Создать цель FIRE]
+   [ACTION:budgets:bg-all:Настроить бюджеты]
+   [ACTION:analytics:cf:Анализ денежного потока]
+   [ACTION:transactions:tx-all:Посмотреть все операции]`;
 }
 
 async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
@@ -721,11 +821,8 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
     },
     contents,
     generationConfig: {
-      temperature: 0.6,
-      maxOutputTokens: 8192,
-      thinkingConfig: {
-        thinkingBudget: 0
-      }
+      temperature: 0.7,
+      maxOutputTokens: 8192
     }
   };
 
@@ -779,7 +876,7 @@ const assistantHandler = async (req, res) => {
         db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250", [req.user.id]),
         db.query("select category,limit_amount from budgets where user_id=$1", [req.user.id]),
         db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id]),
-        db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 8", [req.user.id])
+        db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 20", [req.user.id])
       ]);
       transactions = tr.rows || [];
       budgets = bu.rows || [];
