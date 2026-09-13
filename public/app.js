@@ -815,7 +815,8 @@ function icon(name, size = 16) {
     eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>',
     eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
-    calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path>'
+    calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
@@ -901,7 +902,7 @@ function renderMasthead() {
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.18</span>
+          <span class="brand-badge">8.20</span>
         </div>
       </div>
 
@@ -2206,10 +2207,16 @@ function renderTransactionsView() {
         <h1 class="view-title">История операций</h1>
         <p class="view-subtitle">Полный журнал поступлений и списаний средств с быстрым поиском и итогами.</p>
       </div>
-      <button class="btn-primary" id="btn-add-tx-view">
-        ${icon('plus', 14)}
-        <span>Новая операция</span>
-      </button>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button class="btn-secondary" id="btn-export-csv" title="Выгрузить операции в формате CSV (Excel)">
+          ${icon('download', 14)}
+          <span>Экспорт CSV</span>
+        </button>
+        <button class="btn-primary" id="btn-add-tx-view">
+          ${icon('plus', 14)}
+          <span>Новая операция</span>
+        </button>
+      </div>
     </div>
 
     <!-- Summary Metrics Strip for Transactions -->
@@ -2427,7 +2434,7 @@ function renderBudgetsView() {
         const rem = lim - spent;
         const isExceeded = rem < 0;
         const catIcon = getCategoryIcon(b.category);
-        const dailyAllowance = Math.max(0, Math.round(rem / daysLeft));
+        const dailyAllowance = Math.max(0, Math.round(rem / Math.max(1, daysLeft)));
         const elapsedDays = Math.max(1, now.getDate());
         const plannedDaily = Math.round(lim / daysInMonth);
         const actualDaily = Math.round(spent / elapsedDays);
@@ -3016,7 +3023,7 @@ function renderProfileModal() {
           <div class="form-group" style="margin-bottom: 20px;">
             <div class="avatar-section-title">
               <label class="form-label" style="margin-bottom: 0;">Коллекция 3D-аватаров инвестора</label>
-              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.18</span>
+              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.20</span>
             </div>
             <div class="avatar-grid-3d">
               ${Object.values(AVATARS_3D).map(av => {
@@ -3112,7 +3119,12 @@ function renderAuthScreen() {
 
           <div class="form-group">
             <label class="form-label">Пароль</label>
-            <input class="form-input" id="auth-password" type="password" placeholder="Минимум 6 символов" minlength="6" required>
+            <div class="password-input-wrap">
+              <input class="form-input" id="auth-password" type="password" placeholder="Минимум 6 символов" minlength="6" required>
+              <button type="button" class="btn-toggle-pw" id="btn-toggle-password" title="Показать/скрыть пароль" aria-label="Показать или скрыть пароль">
+                ${icon('eye', 14)}
+              </button>
+            </div>
           </div>
 
           <button type="submit" class="btn-submit" id="auth-submit-btn">
@@ -3317,6 +3329,18 @@ function bindAuthEvents() {
 
   if (tabLogin) tabLogin.onclick = () => { mode = 'login'; renderApp(); };
   if (tabReg) tabReg.onclick = () => { mode = 'register'; renderApp(); };
+
+  const btnTogglePw = document.getElementById('btn-toggle-password');
+  if (btnTogglePw) {
+    btnTogglePw.onclick = () => {
+      const pwInput = document.getElementById('auth-password');
+      if (pwInput) {
+        const isPw = pwInput.type === 'password';
+        pwInput.type = isPw ? 'text' : 'password';
+        btnTogglePw.innerHTML = isPw ? icon('eyeOff', 14) : icon('eye', 14);
+      }
+    };
+  }
 
   if (form) {
     form.onsubmit = async e => {
@@ -4098,6 +4122,37 @@ function bindInteractiveEvents() {
   if (btnQuickNew) btnQuickNew.onclick = () => openTxModal('expense');
   if (btnFirstOp) btnFirstOp.onclick = () => openTxModal('expense');
   if (btnAddTxView) btnAddTxView.onclick = () => openTxModal('expense');
+  const btnExportCsv = document.getElementById('btn-export-csv');
+  if (btnExportCsv) {
+    btnExportCsv.onclick = () => {
+      const rows = [
+        ['ID', 'Дата', 'Тип', 'Категория', 'Описание', 'Сумма (RUB)']
+      ];
+      (data.transactions || []).forEach(t => {
+        const typeStr = t.type === 'income' ? 'Поступление' : (t.type === 'transfer' ? 'Перевод' : 'Расход');
+        const catStr = `"${String(t.category || '').replace(/"/g, '""')}"`;
+        const descStr = `"${String(t.description || '').replace(/"/g, '""')}"`;
+        rows.push([
+          t.id,
+          getTxIso(t),
+          typeStr,
+          catStr,
+          descStr,
+          t.amount
+        ]);
+      });
+      const csvContent = '\uFEFF' + rows.map(e => e.join(';')).join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `finkaif_transactions_${toDateIso(new Date())}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+  }
   if (qAddExp) qAddExp.onclick = () => openTxModal('expense');
   if (qAddInc) qAddInc.onclick = () => openTxModal('income');
 
