@@ -521,6 +521,8 @@ const compactMoney = (num, force = false) => {
 };
 
 // Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
+
+// Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
 function parseQuickTxInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
@@ -556,8 +558,8 @@ function parseQuickTxInput(raw) {
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятерк[а-я]|пятёрк[а-я])(?:$|[^а-яёa-z0-9])/i, () => 5000) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:чирик[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 10000) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:косарь|косаря|кусок|штука)(?:$|[^а-яёa-z0-9])/i, () => 1000) ||
-  // Standard k / к / тыс
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
+  // Standard k / к / тыс / тысяч
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс[а-я]*|тыщ[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
   // Standard numbers
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(/\s+/g, '').replace(',', '.'))));
 
@@ -589,21 +591,35 @@ function parseQuickTxInput(raw) {
     }
   }
 
-  // 3. Category & Type Detection
+  // 3. Category & Type Detection (Income vs Expense)
   const lower = text.toLowerCase();
   let type = 'expense';
-  let category = 'Продукты';
-  let iconEmoji = '🛒';
+  let category = 'Прочее';
+  let iconEmoji = '💳';
 
-  // Income patterns
-  if (/зарплат|аванс|получк|гонорар|преми|бонус|дивиденд|купон|кэшбэк|фриланс|поступлени|клиент|приход|капнул|пришли бабк|пришел кэш|вернули долг/i.test(lower)) {
+  // Comprehensive Income Regex Patterns (все глаголы заработка, получения и переводов)
+  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
+
+  if (isIncome) {
     type = 'income';
-    if (/фриланс|проект|клиент|халтур/i.test(lower)) {
+    if (/фриланс|проект|клиент|заказ|шабашк|халтур|подработк|смен[аы]|дизайн|верстк|разработк|сайт/i.test(lower)) {
       category = 'Фриланс';
       iconEmoji = '💼';
-    } else if (/дивиденд|купон|процент/i.test(lower)) {
-      category = 'Дивиденды';
+    } else if (/дивиденд|купон|процент|вклад|акци|инвест|крипт/i.test(lower)) {
+      category = 'Инвестиции';
       iconEmoji = '📈';
+    } else if (/продал|авито|юла|сбыт/i.test(lower)) {
+      category = 'Продажи';
+      iconEmoji = '🏷️';
+    } else if (/подар|день рожден|др\b|чаев|донат/i.test(lower)) {
+      category = 'Подарки';
+      iconEmoji = '🎁';
+    } else if (/кэшбэк|бонус|возврат/i.test(lower)) {
+      category = 'Кэшбэк';
+      iconEmoji = '💳';
+    } else if (/долг|вернули|отдали/i.test(lower)) {
+      category = 'Возврат долга';
+      iconEmoji = '🤝';
     } else {
       category = 'Зарплата';
       iconEmoji = '💰';
@@ -657,13 +673,29 @@ function parseQuickTxInput(raw) {
     category = 'Жилье';
     iconEmoji = '🏠';
   }
+  // Groceries fallback
+  else if (/продукт|магазин|пятерочк|перекресток|магнит|вкусвилл|лента|ашан|хлеб|молоко|мясо|еда/i.test(lower)) {
+    type = 'expense';
+    category = 'Продукты';
+    iconEmoji = '🛒';
+  }
 
   // Clean description
-  let cleanDesc = cleanWords
-    .replace(/(?:^|[^а-яёa-z0-9])(?:за|на|в|из|по|с|со|от|для|рублей|руб|рубля|р)(?:$|[^а-яёa-z0-9])/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'тысяч', 'тысячи', 'тыщ']);
+  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал'];
 
+  const remainingWords = cleanWords
+    .trim()
+    .split(/\s+/)
+    .filter(w => {
+      const low = w.toLowerCase().replace(/[^а-яёa-z0-9]/gi, '');
+      if (!low) return false;
+      if (stopWords.has(low)) return false;
+      if (actionPrefixes.some(p => low.startsWith(p))) return false;
+      return true;
+    });
+
+  let cleanDesc = remainingWords.join(' ').trim();
   if (cleanDesc) {
     cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
   }
@@ -676,7 +708,7 @@ function parseQuickTxInput(raw) {
     icon: iconEmoji,
     occurred_on,
     dateLabel,
-    description: cleanDesc || category
+    description: cleanDesc || (type === 'income' ? 'Поступление средств' : category)
   };
 }
 
@@ -792,15 +824,20 @@ const categoryIcons = {
   'Продукты': '🛒',
   'Рестораны': '🍽️',
   'Кафе': '☕',
-  'Транспорт': '🚗',
+  'Транспорт': '🚕',
   'Такси': '🚕',
   'Зарплата': '💰',
+  'Фриланс': '💼',
   'Дивиденды': '📈',
-  'Инвестиции': '💎',
+  'Инвестиции': '📈',
+  'Продажи': '🏷️',
+  'Кэшбэк': '💳',
+  'Возврат долга': '🤝',
   'Подписки': '📱',
   'Здоровье': '🏥',
   'Спорт': '🏃',
   'Покупки': '🛍️',
+  'Техника': '💻',
   'Жилье': '🏠',
   'ЖКХ': '⚡',
   'Путешествия': '✈️',
@@ -810,7 +847,30 @@ const categoryIcons = {
   'Авто': '🚘'
 };
 
-const getCategoryIcon = cat => categoryIcons[cat] || '💳';
+const getCategoryIcon = (cat, type) => {
+  if (categoryIcons[cat]) return categoryIcons[cat];
+  const c = String(cat || '').toLowerCase();
+  if (type === 'income') {
+    if (/фриланс|проект|клиент|заказ|дизайн|разработк/i.test(c)) return '💼';
+    if (/инвест|дивиденд|купон|акци|крипт/i.test(c)) return '📈';
+    if (/продаж|авито/i.test(c)) return '🏷️';
+    if (/подар|чаев|донат/i.test(c)) return '🎁';
+    if (/кэшбэк|бонус/i.test(c)) return '💳';
+    if (/долг|возврат/i.test(c)) return '🤝';
+    return '💰';
+  }
+  if (/транспорт|такси|авто|машин|бензин|метро/i.test(c)) return '🚕';
+  if (/кофе|кафе|пекарн/i.test(c)) return '☕';
+  if (/ресторан|бар|пицц|бургер|еда|доставк/i.test(c)) return '🍽️';
+  if (/техник|гаджет|комп|айфон|ноут/i.test(c)) return '💻';
+  if (/подписк|сервис|онлайн/i.test(c)) return '📱';
+  if (/покупк|одежд|шмот|шопинг/i.test(c)) return '🛍️';
+  if (/здоров|спорт|фитнес|аптек|врач/i.test(c)) return '🏥';
+  if (/жил|аренд|квартир|жкх|коммунал/i.test(c)) return '🏠';
+  if (/развлечен|кино|игра|парк/i.test(c)) return '🎉';
+  if (/продукт|супермаркет/i.test(c)) return '🛒';
+  return '💳';
+};
 
 /* ==========================================================================
    MINIMAL SVG ICONS
@@ -1585,11 +1645,13 @@ function renderHomeView() {
       <div class="quick-express-top">
         <div class="quick-input-wrap">
           <span class="quick-input-icon">${icon('sparkle', 16)}</span>
-          <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «такси 450 вчера», «зарплата 80к»..." autocomplete="off">
-          <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;">${icon('close', 12)}</button>
-          <button type="button" class="btn-voice-express" id="btn-voice-express" title="Голосовой ввод: нажмите и говорите">
-            ${icon('mic', 15)}
-          </button>
+          <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»..." autocomplete="off">
+          <div class="quick-input-right-actions">
+            <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;" title="Очистить">${icon('close', 12)}</button>
+            <button type="button" class="btn-voice-express" id="btn-voice-express" title="Голосовой ввод: нажмите и говорите">
+              ${icon('mic', 15)}
+            </button>
+          </div>
         </div>
         <button class="btn-submit-express" id="btn-submit-express">
           ${icon('plus', 14)}
@@ -5057,19 +5119,20 @@ function bindInteractiveEvents() {
   const btnClearQuick = document.getElementById('btn-clear-quick');
   const previewBox = document.getElementById('quick-parse-preview');
 
-  const updateQuickPreview = () => {
-    if (!quickInput || !previewBox) return;
-    const parsed = parseQuickTxInput(quickInput.value);
-    if (btnClearQuick) btnClearQuick.style.display = quickInput.value ? 'inline-flex' : 'none';
+  let cachedAiTx = null;
+  let quickAiDebounceTimer = null;
 
+  const renderQuickPreviewBox = (parsed, isAi = false) => {
+    if (!previewBox) return;
     if (parsed && parsed.amount > 0) {
       previewBox.style.display = 'flex';
       previewBox.innerHTML = `
         <span class="preview-pill type ${parsed.type}">${parsed.type === 'income' ? '🟢 Поступление' : '🔴 Расход'}</span>
-        <span class="preview-pill cat">${parsed.icon} ${esc(parsed.category)}</span>
+        <span class="preview-pill cat">${parsed.icon || '💳'} ${esc(parsed.category)}</span>
         <span class="preview-pill amt num">${parsed.type === 'income' ? '+' : '−'}${new Intl.NumberFormat('ru-RU').format(parsed.amount)} ₽</span>
-        <span class="preview-pill date">📅 ${esc(parsed.dateLabel)}</span>
+        <span class="preview-pill date">📅 ${esc(parsed.dateLabel || 'Сегодня')}</span>
         <span class="preview-pill desc">💬 «${esc(parsed.description)}»</span>
+        ${isAi ? '<span class="preview-pill ai-tag">✨ ИИ</span>' : ''}
       `;
     } else {
       previewBox.style.display = 'none';
@@ -5077,8 +5140,64 @@ function bindInteractiveEvents() {
     }
   };
 
+  const updateQuickPreview = (triggerAi = true) => {
+    if (!quickInput || !previewBox) return;
+    const rawVal = quickInput.value.trim();
+    if (btnClearQuick) btnClearQuick.style.display = rawVal ? 'inline-flex' : 'none';
+
+    if (!rawVal) {
+      if (quickAiDebounceTimer) clearTimeout(quickAiDebounceTimer);
+      cachedAiTx = null;
+      renderQuickPreviewBox(null);
+      return;
+    }
+
+    // Check if we have cached AI result for this exact text
+    if (cachedAiTx && cachedAiTx.raw === rawVal) {
+      renderQuickPreviewBox(cachedAiTx, true);
+      return;
+    }
+
+    // Immediate zero-latency local parse
+    const localParsed = parseQuickTxInput(rawVal);
+    renderQuickPreviewBox(localParsed, false);
+
+    // Debounced AI enhancement (calls backend Gemini 2.5 with user API key)
+    if (triggerAi) {
+      if (quickAiDebounceTimer) clearTimeout(quickAiDebounceTimer);
+      quickAiDebounceTimer = setTimeout(async () => {
+        if (!quickInput || quickInput.value.trim() !== rawVal) return;
+        try {
+          const aiRes = await api('parse-tx', {
+            method: 'POST',
+            body: JSON.stringify({ text: rawVal })
+          });
+          if (aiRes && aiRes.parsed && Number(aiRes.parsed.amount) > 0 && quickInput.value.trim() === rawVal) {
+            const p = aiRes.parsed;
+            const iconEmoji = getCategoryIcon(p.category, p.type);
+            const isToday = !p.occurred_on || p.occurred_on === toDateIso(new Date());
+            cachedAiTx = {
+              raw: rawVal,
+              type: p.type || 'expense',
+              category: p.category || 'Прочее',
+              amount: Number(p.amount),
+              occurred_on: p.occurred_on || toDateIso(new Date()),
+              dateLabel: isToday ? 'Сегодня' : p.occurred_on,
+              description: p.description || rawVal,
+              icon: iconEmoji,
+              isAi: true
+            };
+            renderQuickPreviewBox(cachedAiTx, true);
+          }
+        } catch (e) {
+          // Silent fallback to local parse
+        }
+      }, 450);
+    }
+  };
+
   if (quickInput) {
-    quickInput.oninput = updateQuickPreview;
+    quickInput.oninput = () => updateQuickPreview(true);
     quickInput.onkeydown = async e => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -5090,7 +5209,9 @@ function bindInteractiveEvents() {
   if (btnClearQuick && quickInput) {
     btnClearQuick.onclick = () => {
       quickInput.value = '';
-      updateQuickPreview();
+      if (quickAiDebounceTimer) clearTimeout(quickAiDebounceTimer);
+      cachedAiTx = null;
+      updateQuickPreview(false);
       quickInput.focus();
     };
   }
@@ -5113,14 +5234,14 @@ function bindInteractiveEvents() {
           isRecording = false;
           btnVoiceExpress.classList.remove('recording');
           quickInput.classList.remove('voice-active');
-          quickInput.placeholder = 'Экспресс-запись: «кофе 250», «такси 450 вчера», «зарплата 80к»...';
+          quickInput.placeholder = 'Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»...';
         };
 
         recognition.onstart = () => {
           isRecording = true;
           btnVoiceExpress.classList.add('recording');
           quickInput.classList.add('voice-active');
-          quickInput.placeholder = 'Слушаю... (например: «заправил тачку на двушку вчера»)';
+          quickInput.placeholder = 'Слушаю... (например: «я сегодня получил 50 тысяч рублей»)';
         };
 
         recognition.onresult = (event) => {
@@ -5129,7 +5250,7 @@ function bindInteractiveEvents() {
             transcript += event.results[i][0].transcript;
           }
           quickInput.value = transcript;
-          updateQuickPreview();
+          updateQuickPreview(true);
         };
 
         recognition.onerror = (event) => {
@@ -5139,7 +5260,7 @@ function bindInteractiveEvents() {
 
         recognition.onend = () => {
           stopRecording();
-          updateQuickPreview();
+          updateQuickPreview(true);
         };
 
         btnVoiceExpress.onclick = () => {
@@ -5165,7 +5286,14 @@ function bindInteractiveEvents() {
 
   if (btnSubmitExpress && quickInput) {
     btnSubmitExpress.onclick = async () => {
-      let parsed = parseQuickTxInput(quickInput.value);
+      const rawVal = quickInput.value.trim();
+      let parsed = null;
+
+      if (cachedAiTx && cachedAiTx.raw === rawVal) {
+        parsed = cachedAiTx;
+      } else {
+        parsed = parseQuickTxInput(rawVal);
+      }
 
       // AI Fallback for complex colloquial / slang input
       if (!parsed || parsed.amount <= 0) {
@@ -5174,16 +5302,18 @@ function bindInteractiveEvents() {
           btnSubmitExpress.innerText = 'ИИ анализирует...';
           const aiRes = await api('parse-tx', {
             method: 'POST',
-            body: JSON.stringify({ text: quickInput.value })
+            body: JSON.stringify({ text: rawVal })
           });
           if (aiRes && aiRes.parsed && Number(aiRes.parsed.amount) > 0) {
+            const p = aiRes.parsed;
             parsed = {
-              type: aiRes.parsed.type || 'expense',
-              category: aiRes.parsed.category || 'Прочее',
-              amount: Number(aiRes.parsed.amount),
-              occurred_on: aiRes.parsed.occurred_on || toDateIso(new Date()),
+              type: p.type || 'expense',
+              category: p.category || 'Прочее',
+              amount: Number(p.amount),
+              occurred_on: p.occurred_on || toDateIso(new Date()),
               dateLabel: 'Сегодня',
-              description: aiRes.parsed.description || quickInput.value
+              description: p.description || rawVal,
+              icon: getCategoryIcon(p.category, p.type)
             };
           }
         } catch (aiErr) {
@@ -5192,7 +5322,7 @@ function bindInteractiveEvents() {
       }
 
       if (!parsed || parsed.amount <= 0) {
-        alert('Введите сумму и категорию (например: «кофе 250», «шавуха 350», «косарь на такси» или «зарплата 80к»)');
+        alert('Введите сумму и категорию (например: «кофе 250», «получил 50к», «шавуха 350», «зарплата 80к»)');
         btnSubmitExpress.disabled = false;
         btnSubmitExpress.innerText = 'Записать';
         quickInput.focus();
