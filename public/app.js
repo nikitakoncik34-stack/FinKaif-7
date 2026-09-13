@@ -95,8 +95,10 @@ let data = {
   transactions: [],
   budgets: [],
   goals: [],
-  chat: []
+  chat: [],
+  subscriptions: []
 };
+let subModalOpen = false;
 window.data = data;
 window.renderApp = renderApp;
 
@@ -518,97 +520,153 @@ const compactMoney = (num, force = false) => {
   return str + ' ' + sym;
 };
 
-// Smart Natural Language Financial Parser
+// Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
 function parseQuickTxInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
 
-  // 1. Extract Amount
+  let cleanWords = ' ' + text + ' ';
   let amount = 0;
-  let cleanWords = text;
 
-  // Check for k / к / тыс (e.g. 15к, 15k, 15.5к, 80k)
-  const kMatch = text.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ)(?:\s|$)/i);
-  // Check for standard number (e.g. 250, 4500, 25 000)
-  const numMatch = text.match(/(?:^|\s)(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:\s|$)/i);
-
-  if (kMatch) {
-    const val = parseFloat(kMatch[1].replace(',', '.'));
-    if (!isNaN(val) && val > 0) {
-      amount = Math.round(val * 1000);
-      cleanWords = cleanWords.replace(kMatch[0], ' ');
+  const matchAndRemove = (regex, extractVal) => {
+    const m = cleanWords.match(regex);
+    if (m) {
+      amount = extractVal(m);
+      cleanWords = cleanWords.replace(m[0], ' ');
+      return true;
     }
-  } else if (numMatch) {
-    const rawVal = numMatch[1].replace(/\s+/g, '').replace(',', '.');
-    const val = parseFloat(rawVal);
-    if (!isNaN(val) && val > 0) {
-      amount = Math.round(val);
-      cleanWords = cleanWords.replace(numMatch[0], ' ');
-    }
-  }
+    return false;
+  };
 
-  // 2. Extract Date
+  // 1. Slang & Colloquial Amounts
+  // "пол-ляма" / "полляма"
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])пол[- ]?лям[а-я]*(?:$|[^а-яёa-z0-9])/i, () => 500000) ||
+  // "N ляма / лямов"
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:лям[а-я]*|лимон[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000000)) ||
+  // "лям" / "лимон"
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:лям[а-я]*|лимон[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 1000000) ||
+  // "N косарей / кусков / штук / тонн"
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
+  // Fixed Slang Denominations
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 40000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 50000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яёa-z0-9])/i, () => 500) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яёa-z0-9])/i, () => 2000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яёa-z0-9])/i, () => 3000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятерк[а-я]|пятёрк[а-я])(?:$|[^а-яёa-z0-9])/i, () => 5000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:чирик[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 10000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:косарь|косаря|кусок|штука)(?:$|[^а-яёa-z0-9])/i, () => 1000) ||
+  // Standard k / к / тыс
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
+  // Standard numbers
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(/\s+/g, '').replace(',', '.'))));
+
+  // 2. Relative Dates
   let occurred_on = toDateIso(new Date());
   let dateLabel = 'Сегодня';
-  if (/вчера/i.test(text)) {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    occurred_on = toDateIso(d);
-    dateLabel = 'Вчера';
-    cleanWords = cleanWords.replace(/вчера/i, ' ');
-  } else if (/позавчера/i.test(text)) {
+
+  if (/(?:^|[^а-яёa-z0-9])позавчера(?:$|[^а-яёa-z0-9])/i.test(cleanWords)) {
     const d = new Date();
     d.setDate(d.getDate() - 2);
     occurred_on = toDateIso(d);
     dateLabel = 'Позавчера';
-    cleanWords = cleanWords.replace(/позавчера/i, ' ');
+    cleanWords = cleanWords.replace(/(?:^|[^а-яёa-z0-9])позавчера(?:$|[^а-яёa-z0-9])/gi, ' ');
+  } else if (/(?:^|[^а-яёa-z0-9])вчера(?:$|[^а-яёa-z0-9])/i.test(cleanWords)) {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    occurred_on = toDateIso(d);
+    dateLabel = 'Вчера';
+    cleanWords = cleanWords.replace(/(?:^|[^а-яёa-z0-9])вчера(?:$|[^а-яёa-z0-9])/gi, ' ');
+  } else {
+    const daysMatch = cleanWords.match(/(\d+)\s*(?:дн[яей]+|дня)\s*назад/i);
+    if (daysMatch) {
+      const n = parseInt(daysMatch[1], 10);
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      occurred_on = toDateIso(d);
+      dateLabel = `${n} дн. назад`;
+      cleanWords = cleanWords.replace(daysMatch[0], ' ');
+    }
   }
 
-  // 3. Category & Type detection
+  // 3. Category & Type Detection
   const lower = text.toLowerCase();
   let type = 'expense';
   let category = 'Продукты';
   let iconEmoji = '🛒';
 
-  if (/зарплат|аванс|гонорар|преми|дивиденд|фриланс|поступлени|клиент|приход/i.test(lower)) {
+  // Income patterns
+  if (/зарплат|аванс|получк|гонорар|преми|бонус|дивиденд|купон|кэшбэк|фриланс|поступлени|клиент|приход|капнул|пришли бабк|пришел кэш|вернули долг/i.test(lower)) {
     type = 'income';
-    category = /фриланс|проект/i.test(lower) ? 'Фриланс' : /дивиденд/i.test(lower) ? 'Дивиденды' : 'Зарплата';
-    iconEmoji = '💰';
-  } else if (/кофе|кафе|латте|капучино|булочн|выпечк|пекарн|круассан|эспрессо|чай/i.test(lower)) {
-    type = 'expense';
-    category = 'Кафе';
-    iconEmoji = '☕';
-  } else if (/ресторан|ужин|обед|завтрак|пицц|суши|бургер|доставк|бар|столов/i.test(lower)) {
-    type = 'expense';
-    category = 'Рестораны';
-    iconEmoji = '🍽️';
-  } else if (/такси|uber|яндекс такси|метро|бензин|азс|парковк|проезд|автобус|каршеринг/i.test(lower)) {
+    if (/фриланс|проект|клиент|халтур/i.test(lower)) {
+      category = 'Фриланс';
+      iconEmoji = '💼';
+    } else if (/дивиденд|купон|процент/i.test(lower)) {
+      category = 'Дивиденды';
+      iconEmoji = '📈';
+    } else {
+      category = 'Зарплата';
+      iconEmoji = '💰';
+    }
+  }
+  // Transport & Car
+  else if (/такс|uber|убер|яндекс.*гоу|яндекс.*такси|карш|каршеринг|ситидрайв|заправил|бенз|азс|лукойл|газпром|роснефть|мойка|помыл тачк|помыл машин|шиномонтаж|метро|проездной|тройк|автобус|электричк|сапсан|парковк|штраф/i.test(lower)) {
     type = 'expense';
     category = 'Транспорт';
     iconEmoji = '🚕';
-  } else if (/подписк|яндекс плюс|apple|spotify|телеграм|сервер|vpn|хостинг|облако/i.test(lower)) {
+  }
+  // Coffee & Drinks
+  else if (/кофе|кофей|латте|капуч|флэт|раф|эспрессо|чай|булочн|выпечк|пекарн|круассан/i.test(lower)) {
     type = 'expense';
-    category = 'Подписки';
-    iconEmoji = '📱';
-  } else if (/аптек|врач|лекарств|анализ|стоматолог|здоровь|больниц/i.test(lower)) {
+    category = 'Кафе';
+    iconEmoji = '☕';
+  }
+  // Dining, Fast food, Bars
+  else if (/шавух|шаверм|шаурм|пицц|додо|бургер|макдак|вкусно.*точк|кфс|kfc|ролл|суши|обед|ужин|завтрак|ланч|пивас|пиво|сидр|бар|паб|рестик|ресторан|кальян|посидели|скинул.*кент|скинул.*шав|покушать|доставк/i.test(lower)) {
     type = 'expense';
-    category = 'Здоровье';
-    iconEmoji = '🏥';
-  } else if (/техник|монитор|ноутбук|телефон|гаджет|девайс/i.test(lower)) {
+    category = 'Рестораны';
+    iconEmoji = '🍽️';
+  }
+  // Gadgets & Tech
+  else if (/плойк|соньк|playstation|ps5|xbox|иксбокс|видяха|видеокарт|айфон|iphone|эйрподс|airpods|макбук|macbook|ноут|монитор|комп|пк|техник|гаджет/i.test(lower)) {
     type = 'expense';
     category = 'Техника';
     iconEmoji = '💻';
-  } else if (/одежд|обувь|кроссовк|куртк|шопинг|покупк/i.test(lower)) {
+  }
+  // Subscriptions & Online Services
+  else if (/спотик|spotify|яндекс плюс|плюс|телег|telegram.*prem|нетфликс|netflix|ютуб|youtube|впн|vpn|хостинг|сервер|айклауд|icloud|облако|подписк/i.test(lower)) {
+    type = 'expense';
+    category = 'Подписки';
+    iconEmoji = '📱';
+  }
+  // Shopping & Clothes
+  else if (/шмот|педал|кросс|кед|ботинк|худи|куртк|пуховик|джинс|вб|вайлдберриз|wildberries|озон|ozon|зарин|лайм|lime|шопинг|покупк/i.test(lower)) {
     type = 'expense';
     category = 'Покупки';
     iconEmoji = '🛍️';
-  } else if (/жилье|аренд|квартир|жкх|коммуналк|свет|интернет/i.test(lower)) {
+  }
+  // Health & Sports
+  else if (/зал|спортзал|фитнес|трен[яе]|абонемент|протеин|аптек|таблетк|витамин|врач|доктор|стоматолог|зуб|анализ|здоровь/i.test(lower)) {
+    type = 'expense';
+    category = 'Здоровье';
+    iconEmoji = '🏥';
+  }
+  // Home & Utilities
+  else if (/аренд|квартир|хат|жкх|коммуналк|свет|интернет|вайфай|клининг|уборк/i.test(lower)) {
     type = 'expense';
     category = 'Жилье';
     iconEmoji = '🏠';
   }
 
-  const description = cleanWords.replace(/\s+/g, ' ').trim();
+  // Clean description
+  let cleanDesc = cleanWords
+    .replace(/(?:^|[^а-яёa-z0-9])(?:за|на|в|из|по|с|со|от|для|рублей|руб|рубля|р)(?:$|[^а-яёa-z0-9])/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleanDesc) {
+    cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+  }
 
   return {
     raw: text,
@@ -618,7 +676,7 @@ function parseQuickTxInput(raw) {
     icon: iconEmoji,
     occurred_on,
     dateLabel,
-    description: description || category
+    description: cleanDesc || category
   };
 }
 
@@ -783,7 +841,9 @@ function icon(name, size = 16) {
     eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
     calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path>',
-    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>'
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
+    mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line>',
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
@@ -921,6 +981,248 @@ function renderMasthead() {
         </div>
       </div>
     </header>
+  `;
+}
+
+/* ==========================================================================
+   SUBSCRIPTION RADAR & RECURRING BILLS COMPONENT
+   ========================================================================== */
+function renderSubscriptionRadar() {
+  const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
+  const now = new Date();
+  const today = now.getDate();
+  const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  const getSubMeta = (s) => {
+    const day = Math.min(31, Math.max(1, parseInt(s.day_of_month, 10) || 1));
+    let daysLeft = 0;
+    if (day === today) {
+      daysLeft = 0;
+    } else if (day > today) {
+      daysLeft = day - today;
+    } else {
+      daysLeft = (daysInCurMonth - today) + day;
+    }
+
+    let badgeText = '';
+    let badgeClass = 'normal';
+    let cardClass = '';
+
+    if (daysLeft === 0) {
+      badgeText = 'Сегодня!';
+      badgeClass = 'critical';
+      cardClass = 'critical';
+    } else if (daysLeft === 1) {
+      badgeText = 'Завтра!';
+      badgeClass = 'critical';
+      cardClass = 'critical';
+    } else if (daysLeft <= 3) {
+      badgeText = `Через ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}`;
+      badgeClass = 'warning';
+      cardClass = 'warning';
+    } else {
+      badgeText = `Через ${daysLeft} ${daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}`;
+      badgeClass = 'normal';
+      cardClass = '';
+    }
+
+    const nameLower = (s.name || '').toLowerCase();
+    let iconEmoji = '📱';
+    if (/яндекс|yandex|плюс/i.test(nameLower)) iconEmoji = '🟡';
+    else if (/telegram|телег/i.test(nameLower)) iconEmoji = '✈️';
+    else if (/spotify|спотик|музык|apple\s*music/i.test(nameLower)) iconEmoji = '🎧';
+    else if (/cloud|облак|icloud|drive/i.test(nameLower)) iconEmoji = '☁️';
+    else if (/зал|спорт|фитнес|gym/i.test(nameLower)) iconEmoji = '🏋️';
+    else if (/интернет|провайдер|связь|мтс|мегафон|билайн|т2/i.test(nameLower)) iconEmoji = '🌐';
+    else if (/ютуб|youtube|netflix|нетфликс|кинопоиск|иви/i.test(nameLower)) iconEmoji = '🎬';
+
+    return { daysLeft, badgeText, badgeClass, cardClass, iconEmoji, day };
+  };
+
+  const enrichedSubs = subs.map(s => ({ ...s, meta: getSubMeta(s) }))
+    .sort((a, b) => a.meta.daysLeft - b.meta.daysLeft);
+
+  const totalMonthly = subs.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+  const totalAnnual = totalMonthly * 12;
+
+  const existingNames = new Set(subs.map(s => (s.name || '').toLowerCase().trim()));
+  const presetSuggestions = [
+    { name: 'Яндекс Плюс', amount: 299, day: 25, icon: '🟡', cat: 'Подписки' },
+    { name: 'Telegram Premium', amount: 299, day: 12, icon: '✈️', cat: 'Подписки' },
+    { name: 'Spotify Premium', amount: 299, day: 1, icon: '🎧', cat: 'Подписки' },
+    { name: 'Облако iCloud / Drive', amount: 1490, day: 15, icon: '☁️', cat: 'Подписки' },
+    { name: 'Фитнес-клуб', amount: 2500, day: 5, icon: '🏋️', cat: 'Здоровье' },
+    { name: 'Домашний интернет', amount: 650, day: 1, icon: '🌐', cat: 'Жилье' }
+  ].filter(p => !existingNames.has(p.name.toLowerCase()));
+
+  return `
+    <div class="subscription-radar-card" id="subscription-radar">
+      <div class="sub-radar-header">
+        <div class="sub-radar-title-wrap">
+          <div class="sub-radar-kicker">
+            <span class="sub-radar-dot"></span>
+            <span>Радар регулярных списаний</span>
+          </div>
+          <h3 class="sub-radar-title">Подписки и периодические платежи</h3>
+          <p class="sub-radar-sub">Умный контроль повторяющихся трат: календарный таймер списаний и защита от скрытых утечек капитала.</p>
+        </div>
+
+        <div class="sub-radar-actions">
+          <button type="button" class="btn-sub-action secondary" id="btn-sub-audit" title="Запустить детальный разбор подписок с ИИ-ментором">
+            ${icon('sparkle', 14)}
+            <span>Аудит подписок</span>
+          </button>
+          <button type="button" class="btn-sub-action primary" id="btn-sub-add-open">
+            ${icon('plus', 13)}
+            <span>+ Добавить</span>
+          </button>
+        </div>
+      </div>
+
+      ${enrichedSubs.length > 0 ? `
+        <div class="sub-radar-grid">
+          ${enrichedSubs.map(s => `
+            <div class="sub-card ${s.meta.cardClass}" data-id="${esc(s.id)}">
+              <div class="sub-card-top">
+                <div class="sub-icon-box">${s.meta.iconEmoji}</div>
+                <span class="sub-badge ${s.meta.badgeClass}">${s.meta.badgeText}</span>
+              </div>
+              <div>
+                <div class="sub-card-name" title="${esc(s.name)}">${esc(s.name)}</div>
+                <div class="sub-card-meta">
+                  <span>${esc(s.category || 'Подписки')}</span>
+                  <span class="sub-dot-sep">•</span>
+                  <span>${s.meta.day}-е число</span>
+                </div>
+              </div>
+              <div class="sub-card-foot">
+                <div class="sub-amount">
+                  <span class="val num">${money(s.amount)}</span>
+                  <span class="period">/ мес</span>
+                </div>
+                <button type="button" class="sub-delete-btn" data-id="${esc(s.id)}" data-name="${esc(s.name)}" title="Удалить подписку из радара">
+                  ${icon('trash', 13)}
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : `
+        <div class="sub-empty-state">
+          <div style="font-size: 28px; margin-bottom: 8px;">📡</div>
+          <div style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">Радар пока чист</div>
+          <p style="font-size: 12.5px; color: var(--text-muted); max-width: 480px; margin: 0 auto 16px auto;">
+            Добавьте ваши регулярные сервисы (Яндекс, Telegram, облачные хранилища, фитнес или интернет), чтобы видеть предстоящие списания и годовую стоимость.
+          </p>
+        </div>
+      `}
+
+      ${presetSuggestions.length > 0 ? `
+        <div class="quick-pills-strip" style="margin-bottom: 14px; padding-top: 6px;">
+          <span class="quick-pills-label">⚡ Быстрый радар:</span>
+          ${presetSuggestions.slice(0, 4).map(p => `
+            <button type="button" class="quick-pill-btn sub-preset-add-btn" data-name="${esc(p.name)}" data-amt="${p.amount}" data-day="${p.day}" data-cat="${esc(p.cat)}">
+              <span>${p.icon}</span>
+              <span>+ ${esc(p.name)} (${money(p.amount)}/мес)</span>
+            </button>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <div class="sub-radar-summary">
+        <div class="sub-summary-left">
+          <span class="sub-active-chip">Сервисов: ${subs.length}</span>
+          <span>В месяц: <strong class="num" style="color: #FFFFFF;">${money(totalMonthly)}</strong></span>
+        </div>
+        <div>
+          <span>В год незаметно уходит: <strong class="num" style="color: ${totalAnnual > 25000 ? 'var(--accent-coral)' : 'var(--accent-jade)'};">~${money(totalAnnual)}</strong></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   SUBSCRIPTION MODAL
+   ========================================================================== */
+function renderSubscriptionModal() {
+  return `
+    <div id="sub-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-card" style="max-width: 440px;">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 20px;">📅</span>
+            <h3 class="modal-title">Новое списание в Радар</h3>
+          </div>
+          <button type="button" class="btn-icon" id="btn-close-sub-modal">${icon('close', 16)}</button>
+        </div>
+
+        <div class="quick-pills-strip" style="margin-bottom: 14px;">
+          <span class="quick-pills-label">Шаблоны:</span>
+          <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Яндекс Плюс" data-amt="299" data-day="25" data-cat="Подписки">
+            <span>🟡</span> <span>Яндекс 299 ₽</span>
+          </button>
+          <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Telegram Premium" data-amt="299" data-day="12" data-cat="Подписки">
+            <span>✈️</span> <span>TG 299 ₽</span>
+          </button>
+          <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Spotify" data-amt="299" data-day="1" data-cat="Подписки">
+            <span>🎧</span> <span>Spotify 299 ₽</span>
+          </button>
+          <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Облако" data-amt="1490" data-day="15" data-cat="Подписки">
+            <span>☁️</span> <span>Облако 1 490 ₽</span>
+          </button>
+        </div>
+
+        <form id="sub-modal-form">
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label">Название сервиса или списания</label>
+            <input class="form-input" id="sub-form-name" placeholder="Напр. Яндекс Плюс, Облако, Фитнес" required autocomplete="off">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+            <div class="form-group">
+              <label class="form-label">Сумма в месяц (${currencySymbols[profile.currency] || '₽'})</label>
+              <div class="number-stepper-wrap">
+                <input class="form-input num" id="sub-form-amount" type="number" min="1" step="any" placeholder="299" required>
+                <div class="input-spin-steppers">
+                  <button type="button" class="spin-step-btn" data-target="sub-form-amount" data-step="100" title="Увеличить на 100 ₽" aria-label="Увеличить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                  <button type="button" class="spin-step-btn" data-target="sub-form-amount" data-step="-100" title="Уменьшить на 100 ₽" aria-label="Уменьшить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">День списания (1-31)</label>
+              <div class="number-stepper-wrap">
+                <input class="form-input num" id="sub-form-day" type="number" min="1" max="31" value="1" placeholder="1" required>
+                <div class="input-spin-steppers">
+                  <button type="button" class="spin-step-btn" data-target="sub-form-day" data-step="1" title="Увеличить на 1 день" aria-label="Увеличить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                  <button type="button" class="spin-step-btn" data-target="sub-form-day" data-step="-1" title="Уменьшить на 1 день" aria-label="Уменьшить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label">Категория учета</label>
+            <input class="form-input" id="sub-form-category" value="Подписки" placeholder="Подписки">
+          </div>
+
+          <div class="modal-footer" style="padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn-secondary" id="btn-cancel-sub-modal">Отмена</button>
+            <button type="submit" class="btn-primary" id="btn-save-sub-modal">${icon('plus', 13)} Добавить в радар</button>
+          </div>
+        </form>
+      </div>
+    </div>
   `;
 }
 
@@ -1284,7 +1586,10 @@ function renderHomeView() {
         <div class="quick-input-wrap">
           <span class="quick-input-icon">${icon('sparkle', 16)}</span>
           <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «такси 450 вчера», «зарплата 80к»..." autocomplete="off">
-          <button class="btn-clear-quick" id="btn-clear-quick" style="display: none;">${icon('close', 12)}</button>
+          <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;">${icon('close', 12)}</button>
+          <button type="button" class="btn-voice-express" id="btn-voice-express" title="Голосовой ввод: нажмите и говорите">
+            ${icon('mic', 15)}
+          </button>
         </div>
         <button class="btn-submit-express" id="btn-submit-express">
           ${icon('plus', 14)}
@@ -1362,6 +1667,9 @@ function renderHomeView() {
         }).join('')}
       </div>
     ` : ''}
+
+    <!-- Subscription Radar & Recurring Bills -->
+    ${renderSubscriptionRadar()}
 
     <!-- Recent Transactions Stream -->
     <div class="section-head">
@@ -2592,6 +2900,9 @@ function renderBudgetsView() {
         </div>
       `}
     </div>
+
+    <!-- Subscriptions & Recurring Bills in Budgets View -->
+    ${renderSubscriptionRadar()}
   `;
 }
 
@@ -2794,6 +3105,9 @@ function renderAssistantView() {
         </button>
         <button class="assistant-mode-pill" data-prompt="Прогноз капитала через 5 лет со сложным процентом">
           <span>🔮</span> <span>Прогноз 5 лет</span>
+        </button>
+        <button class="assistant-mode-pill" data-prompt="Проведи полный аудит моих регулярных подписок и повторяющихся платежей: посчитай сумму за год и найди скрытые утечки бюджета">
+          <span>📅</span> <span>Аудит подписок</span>
         </button>
       </div>
 
@@ -3458,6 +3772,7 @@ function renderApp() {
       ${renderModal()}
       ${renderProfileModal()}
       ${renderPaydayModal()}
+      ${renderSubscriptionModal()}
     </div>
   `;
 
@@ -4780,11 +5095,106 @@ function bindInteractiveEvents() {
     };
   }
 
+  // Voice Input via Web Speech API (ru-RU)
+  const btnVoiceExpress = document.getElementById('btn-voice-express');
+  if (btnVoiceExpress && quickInput) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+
+    if (SpeechRecognition) {
+      try {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ru-RU';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+
+        const stopRecording = () => {
+          isRecording = false;
+          btnVoiceExpress.classList.remove('recording');
+          quickInput.classList.remove('voice-active');
+          quickInput.placeholder = 'Экспресс-запись: «кофе 250», «такси 450 вчера», «зарплата 80к»...';
+        };
+
+        recognition.onstart = () => {
+          isRecording = true;
+          btnVoiceExpress.classList.add('recording');
+          quickInput.classList.add('voice-active');
+          quickInput.placeholder = 'Слушаю... (например: «заправил тачку на двушку вчера»)';
+        };
+
+        recognition.onresult = (event) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          quickInput.value = transcript;
+          updateQuickPreview();
+        };
+
+        recognition.onerror = (event) => {
+          console.warn('Voice recognition notice:', event.error);
+          stopRecording();
+        };
+
+        recognition.onend = () => {
+          stopRecording();
+          updateQuickPreview();
+        };
+
+        btnVoiceExpress.onclick = () => {
+          if (!isRecording) {
+            try {
+              recognition.start();
+            } catch (e) {
+              console.warn(e);
+            }
+          } else {
+            recognition.stop();
+          }
+        };
+      } catch (err) {
+        console.warn('Voice API setup notice:', err);
+      }
+    } else {
+      btnVoiceExpress.onclick = () => {
+        alert('Голосовой ввод не поддерживается в этом браузере. Рекомендуем использовать Chrome, Safari или Edge.');
+      };
+    }
+  }
+
   if (btnSubmitExpress && quickInput) {
     btnSubmitExpress.onclick = async () => {
-      const parsed = parseQuickTxInput(quickInput.value);
+      let parsed = parseQuickTxInput(quickInput.value);
+
+      // AI Fallback for complex colloquial / slang input
       if (!parsed || parsed.amount <= 0) {
-        alert('Введите сумму и категорию (например: «кофе 250» или «такси 450 вчера»)');
+        try {
+          btnSubmitExpress.disabled = true;
+          btnSubmitExpress.innerText = 'ИИ анализирует...';
+          const aiRes = await api('parse-tx', {
+            method: 'POST',
+            body: JSON.stringify({ text: quickInput.value })
+          });
+          if (aiRes && aiRes.parsed && Number(aiRes.parsed.amount) > 0) {
+            parsed = {
+              type: aiRes.parsed.type || 'expense',
+              category: aiRes.parsed.category || 'Прочее',
+              amount: Number(aiRes.parsed.amount),
+              occurred_on: aiRes.parsed.occurred_on || toDateIso(new Date()),
+              dateLabel: 'Сегодня',
+              description: aiRes.parsed.description || quickInput.value
+            };
+          }
+        } catch (aiErr) {
+          console.warn('AI parse error:', aiErr);
+        }
+      }
+
+      if (!parsed || parsed.amount <= 0) {
+        alert('Введите сумму и категорию (например: «кофе 250», «шавуха 350», «косарь на такси» или «зарплата 80к»)');
+        btnSubmitExpress.disabled = false;
+        btnSubmitExpress.innerText = 'Записать';
         quickInput.focus();
         return;
       }
@@ -4856,6 +5266,168 @@ function bindInteractiveEvents() {
       renderApp();
     };
   });
+
+  // ==========================================================================
+  // SUBSCRIPTION RADAR & RECURRING BILLS EVENTS
+  // ==========================================================================
+  const btnSubAddOpen = document.getElementById('btn-sub-add-open');
+  const subModal = document.getElementById('sub-modal');
+  const btnCloseSubModal = document.getElementById('btn-close-sub-modal');
+  const btnCancelSubModal = document.getElementById('btn-cancel-sub-modal');
+  const subModalForm = document.getElementById('sub-modal-form');
+
+  const openSubModal = () => {
+    if (subModal) {
+      subModal.style.display = 'flex';
+      const nameInp = document.getElementById('sub-form-name');
+      if (nameInp) {
+        nameInp.value = '';
+        nameInp.focus();
+      }
+    }
+  };
+
+  const closeSubModal = () => {
+    if (subModal) subModal.style.display = 'none';
+  };
+
+  if (btnSubAddOpen) btnSubAddOpen.onclick = openSubModal;
+  if (btnCloseSubModal) btnCloseSubModal.onclick = closeSubModal;
+  if (btnCancelSubModal) btnCancelSubModal.onclick = closeSubModal;
+  if (subModal) {
+    subModal.onclick = (e) => {
+      if (e.target === subModal) closeSubModal();
+    };
+  }
+
+  // Presets in Subscriptions Modal
+  $$('.sub-modal-preset').forEach(btn => {
+    btn.onclick = () => {
+      const name = btn.getAttribute('data-name');
+      const amt = btn.getAttribute('data-amt');
+      const day = btn.getAttribute('data-day');
+      const cat = btn.getAttribute('data-cat') || 'Подписки';
+
+      const nameInp = document.getElementById('sub-form-name');
+      const amtInp = document.getElementById('sub-form-amount');
+      const dayInp = document.getElementById('sub-form-day');
+      const catInp = document.getElementById('sub-form-category');
+
+      if (nameInp) nameInp.value = name;
+      if (amtInp) amtInp.value = amt;
+      if (dayInp) dayInp.value = day;
+      if (catInp) catInp.value = cat;
+    };
+  });
+
+  // Direct 1-tap add from Radar Suggestions strip
+  $$('.sub-preset-add-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const name = btn.getAttribute('data-name');
+      const amount = Number(btn.getAttribute('data-amt')) || 299;
+      const day_of_month = Number(btn.getAttribute('data-day')) || 1;
+      const category = btn.getAttribute('data-cat') || 'Подписки';
+
+      try {
+        await api('subscriptions', {
+          method: 'POST',
+          body: JSON.stringify({ name, amount, day_of_month, category })
+        });
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка добавления: ' + err.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  // Submit Subscription Form
+  if (subModalForm) {
+    subModalForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const nameInp = document.getElementById('sub-form-name');
+      const amtInp = document.getElementById('sub-form-amount');
+      const dayInp = document.getElementById('sub-form-day');
+      const catInp = document.getElementById('sub-form-category');
+      const saveBtn = document.getElementById('btn-save-sub-modal');
+
+      const name = nameInp ? nameInp.value.trim() : '';
+      const amount = Number(amtInp ? amtInp.value : 0);
+      const day_of_month = Math.min(31, Math.max(1, parseInt(dayInp ? dayInp.value : 1, 10) || 1));
+      const category = (catInp && catInp.value.trim()) ? catInp.value.trim() : 'Подписки';
+
+      if (!name || amount <= 0) {
+        alert('Укажите корректное название и сумму подписки.');
+        return;
+      }
+
+      try {
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.innerText = 'Сохранение...';
+        }
+
+        await api('subscriptions', {
+          method: 'POST',
+          body: JSON.stringify({ name, amount, day_of_month, category })
+        });
+
+        closeSubModal();
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        alert('Ошибка сохранения подписки: ' + err.message);
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerText = 'Добавить в радар';
+        }
+      }
+    };
+  }
+
+  // Delete Subscription with Luxury Confirm Dialog
+  $$('.sub-delete-btn').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      const subName = btn.getAttribute('data-name') || 'подписку';
+      if (!id) return;
+
+      const confirmed = await showConfirmDialog({
+        title: 'Удалить подписку?',
+        message: `Удалить сервис «${subName}» из радара регулярных списаний?`,
+        confirmText: 'Удалить',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '🗑️'
+      });
+
+      if (confirmed) {
+        try {
+          await api(`subscriptions/${id}`, { method: 'DELETE' });
+          await refreshAllData();
+          renderApp();
+        } catch (err) {
+          alert('Ошибка при удалении: ' + err.message);
+        }
+      }
+    };
+  });
+
+  // AI Subscription Audit Button
+  const btnSubAudit = document.getElementById('btn-sub-audit');
+  if (btnSubAudit) {
+    btnSubAudit.onclick = () => {
+      tab = 'assistant';
+      window.location.hash = 'assistant';
+      renderApp();
+      submitAssistantQuestion('Проведи полный аудит моих регулярных подписок и повторяющихся списаний. Посчитай общие траты в год, выдели потенциально скрытые или избыточные расходы и дай практические рекомендации, как оптимизировать эти списания.');
+    };
+  }
 
   // ==========================================================================
   // PAYDAY AUTO-SPLITTER MODAL EVENTS
@@ -5218,17 +5790,19 @@ function bindInteractiveEvents() {
    ========================================================================== */
 async function refreshAllData() {
   try {
-    const [txs, bgs, gls, cht] = await Promise.all([
+    const [txs, bgs, gls, cht, subs] = await Promise.all([
       api('transactions').catch(() => []),
       api('budgets').catch(() => []),
       api('goals').catch(() => []),
-      api('chat').catch(() => [])
+      api('chat').catch(() => []),
+      api('subscriptions').catch(() => [])
     ]);
 
     data.transactions = Array.isArray(txs) ? txs : [];
     data.budgets = Array.isArray(bgs) ? bgs : [];
     data.goals = Array.isArray(gls) ? gls : [];
     data.chat = Array.isArray(cht) ? cht : [];
+    data.subscriptions = Array.isArray(subs) ? subs : [];
   } catch (err) {
     console.warn('Sync notice:', err.message);
   }
