@@ -368,6 +368,56 @@ const money = (n, force = false) => {
   return new Intl.NumberFormat('ru-RU').format(num) + ' ' + sym;
 };
 
+// Kinetic Number Ticker & Spotlight Helpers (FinKaif 8.20)
+const prevAnimatedNumbers = {};
+
+function animateNumber(el, targetVal, duration = 650, prefix = '', suffix = '') {
+  if (!el || privacyMode) return;
+  const key = el.id || el.getAttribute('data-num-key') || 'num_' + targetVal;
+  const startVal = prevAnimatedNumbers[key] !== undefined ? prevAnimatedNumbers[key] : 0;
+  prevAnimatedNumbers[key] = targetVal;
+
+  if (startVal === targetVal) {
+    el.textContent = `${prefix}${new Intl.NumberFormat('ru-RU').format(targetVal)}${suffix}`;
+    return;
+  }
+
+  const startTime = performance.now();
+  const diff = targetVal - startVal;
+
+  function frame(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const current = Math.round(startVal + diff * ease);
+
+    el.textContent = `${prefix}${new Intl.NumberFormat('ru-RU').format(current)}${suffix}`;
+
+    if (progress < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      el.textContent = `${prefix}${new Intl.NumberFormat('ru-RU').format(targetVal)}${suffix}`;
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+
+function initSpotlightCards() {
+  const cards = document.querySelectorAll('.stat-card, .hero-balance-card, .budget-card, .goal-card, .quick-action-btn, .tx-card, .create-card');
+  cards.forEach(card => {
+    if (card.__spotlightBound) return;
+    card.__spotlightBound = true;
+    card.addEventListener('mousemove', e => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      card.style.setProperty('--mouse-x', `${x}px`);
+      card.style.setProperty('--mouse-y', `${y}px`);
+    });
+  });
+}
+
 const esc = s =>
   String(s || '').replace(/[&<>"']/g, x => ({
     '&': '&amp;',
@@ -936,7 +986,7 @@ function renderMasthead() {
       <div class="masthead-actions">
         <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать баланс (горячая клавиша P)' : 'Скрыть баланс (горячая клавиша P)'}">
           <span class="pulse-dot"></span>
-          <span>${money(balance)}</span>
+          <span id="masthead-balance-figure">${money(balance)}</span>
           <button class="privacy-toggle-btn ${privacyMode ? 'active' : ''}" id="btn-toggle-privacy" title="${privacyMode ? 'Показать баланс' : 'Скрыть баланс'}">
             ${privacyMode ? icon('eyeOff', 14) : icon('eye', 14)}
           </button>
@@ -1297,7 +1347,7 @@ function renderHomeView() {
           <span class="stat-card-title">Поступления за период</span>
           <div class="stat-icon inc">${icon('trendUp', 16)}</div>
         </div>
-        <div class="stat-amount inc num">+${money(periodInc)}</div>
+        <div class="stat-amount inc num" id="stat-amount-inc">+${money(periodInc)}</div>
         <div class="stat-footnote">${periodFootnote}</div>
       </div>
 
@@ -1306,7 +1356,7 @@ function renderHomeView() {
           <span class="stat-card-title">Расходы за период</span>
           <div class="stat-icon exp">${icon('trendDown', 16)}</div>
         </div>
-        <div class="stat-amount exp num">−${money(periodExp)}</div>
+        <div class="stat-amount exp num" id="stat-amount-exp">−${money(periodExp)}</div>
         <div class="stat-footnote">${periodFootnote}</div>
       </div>
     </div>
@@ -3307,7 +3357,9 @@ function renderApp() {
     <div class="app-container">
       ${renderMasthead()}
       <main>
-        ${viewHtml}
+        <div class="view-container">
+          ${viewHtml}
+        </div>
       </main>
       ${renderMobileBottomBar()}
       ${renderModal()}
@@ -3381,6 +3433,43 @@ function bindAuthEvents() {
 }
 
 function bindInteractiveEvents() {
+  initSpotlightCards();
+
+  // Kinetic Number Tickers on Home View
+  if (tab === 'home' && !privacyMode) {
+    const sym = ` ${currencySymbols[profile.currency] || '₽'}`;
+    const heroBalEl = document.getElementById('hero-balance-val');
+    if (heroBalEl) {
+      const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
+      const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
+      const bal = Math.round(incTot - expTot);
+      animateNumber(heroBalEl, bal, 650, '', sym);
+    }
+    const mastBalEl = document.getElementById('masthead-balance-figure');
+    if (mastBalEl) {
+      const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
+      const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
+      const bal = Math.round(incTot - expTot);
+      animateNumber(mastBalEl, bal, 650, '', sym);
+    }
+    const statIncEl = document.getElementById('stat-amount-inc');
+    if (statIncEl) {
+      const now = new Date();
+      let days = period === '7d' ? 7 : (period === '30d' ? 30 : 365);
+      const cut = new Date(now.getTime() - days * 86400000);
+      const pInc = data.transactions.filter(x => x.type === 'income' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
+      animateNumber(statIncEl, Math.round(pInc), 650, '+', sym);
+    }
+    const statExpEl = document.getElementById('stat-amount-exp');
+    if (statExpEl) {
+      const now = new Date();
+      let days = period === '7d' ? 7 : (period === '30d' ? 30 : 365);
+      const cut = new Date(now.getTime() - days * 86400000);
+      const pExp = data.transactions.filter(x => x.type === 'expense' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
+      animateNumber(statExpEl, Math.round(pExp), 650, '−', sym);
+    }
+  }
+
   // Navigation Tabs
   $$('.nav-item').forEach(btn => {
     btn.onclick = () => {
