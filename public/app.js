@@ -1218,19 +1218,31 @@ function renderMasthead() {
 
   const avatarDisplay = getAvatarHtml(profile.avatar, userInitial, 36);
 
+  // Today's cashflow delta (MSK)
+  const todayIso = getTodayMskIso();
+  const todayTxs = (data.transactions || []).filter(t => (t.occurred_on || '').startsWith(todayIso));
+  const todayInc = todayTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const todayExp = todayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  const todayDelta = todayInc - todayExp;
+  const showDelta = !privacyMode && todayDelta !== 0;
+
   return `
     <header class="masthead">
-      <div class="brand" data-tab="home">
+      <div class="brand" data-tab="home" title="FinKaif — На главную">
         <div class="brand-icon">
           ${icon('sparkle', 18)}
         </div>
         <div style="display: flex; align-items: center;">
           <span class="brand-name">FinKaif</span>
-          <span class="brand-badge">8.20</span>
+          <span class="brand-badge live-badge" title="Синхронизировано с Московским временем (UTC+3)">
+            <span class="live-dot"></span>
+            <span class="live-label">Live MSK</span>
+          </span>
         </div>
       </div>
 
       <nav class="nav-controller" role="tablist">
+        <div class="nav-glider" id="nav-glider"></div>
         <button class="nav-item ${tab === 'home' ? 'active' : ''}" data-tab="home" title="Главный обзор">
           ${icon('overview', 15)}
           <span>Обзор</span>
@@ -1261,6 +1273,11 @@ function renderMasthead() {
         <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать баланс (горячая клавиша P)' : 'Скрыть баланс (горячая клавиша P)'}">
           <span class="pulse-dot"></span>
           <span id="masthead-balance-figure">${money(balance)}</span>
+          ${showDelta ? `
+            <span class="balance-delta ${todayDelta >= 0 ? 'pos' : 'neg'}" title="Денежный поток за сегодня (${todayDelta >= 0 ? '+' : ''}${new Intl.NumberFormat('ru-RU').format(todayDelta)} ₽)">
+              ${todayDelta >= 0 ? '▲ +' : '▼ −'}${new Intl.NumberFormat('ru-RU').format(Math.abs(todayDelta))} ₽
+            </span>
+          ` : ''}
           <button class="privacy-toggle-btn ${privacyMode ? 'active' : ''}" id="btn-toggle-privacy" title="${privacyMode ? 'Показать баланс' : 'Скрыть баланс'}">
             ${privacyMode ? icon('eyeOff', 14) : icon('eye', 14)}
           </button>
@@ -4296,6 +4313,9 @@ function bindInteractiveEvents() {
     };
   });
 
+  // Magnetic Navigation Glider
+  initNavGlider();
+
   $$('[data-tab]').forEach(el => {
     if (!el.classList.contains('nav-item')) {
       el.onclick = () => {
@@ -5522,9 +5542,55 @@ function bindInteractiveEvents() {
   // ==========================================================================
   const togglePrivacy = () => {
     privacyMode = !privacyMode;
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(6); } catch {}
+    }
     localStorage.setItem('finkaif_privacy', privacyMode ? 'true' : 'false');
     renderApp();
   };
+
+  function initNavGlider() {
+    const nav = document.querySelector('.nav-controller');
+    const glider = document.getElementById('nav-glider');
+    if (!nav || !glider) return;
+
+    const updatePosition = (target) => {
+      const el = target || nav.querySelector('.nav-item.active') || nav.querySelector(`.nav-item[data-tab="${tab}"]`);
+      if (!el) {
+        glider.style.opacity = '0';
+        return;
+      }
+      const left = el.offsetLeft;
+      const width = el.offsetWidth;
+      glider.style.opacity = '1';
+      glider.style.transform = `translate3d(${left}px, 0, 0)`;
+      glider.style.width = `${width}px`;
+    };
+
+    requestAnimationFrame(() => updatePosition());
+
+    nav.querySelectorAll('.nav-item').forEach(btn => {
+      btn.onmouseenter = () => updatePosition(btn);
+    });
+    nav.onmouseleave = () => updatePosition();
+  }
+
+  if (!window.__mastheadGlobalBound) {
+    window.__mastheadGlobalBound = true;
+    window.addEventListener('resize', () => {
+      if (typeof initNavGlider === 'function') initNavGlider();
+    });
+    window.addEventListener('scroll', () => {
+      const masthead = document.querySelector('.masthead');
+      if (masthead) {
+        if (window.scrollY > 16) {
+          masthead.classList.add('scrolled');
+        } else {
+          masthead.classList.remove('scrolled');
+        }
+      }
+    }, { passive: true });
+  }
 
   const btnTogglePrivacy = document.getElementById('btn-toggle-privacy');
   if (btnTogglePrivacy) {
