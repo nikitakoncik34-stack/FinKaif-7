@@ -33,6 +33,19 @@ async function initDb() {
     if (fs.existsSync(schemaPath)) {
       const schema = fs.readFileSync(schemaPath, "utf8");
       await db.query(schema);
+      try {
+        await db.query(`
+          DO $$ 
+          BEGIN 
+            IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'transactions_type_check') THEN
+              ALTER TABLE transactions DROP CONSTRAINT transactions_type_check;
+              ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK(type IN ('income','expense','transfer'));
+            END IF;
+          END $$;
+        `);
+      } catch (migErr) {
+        console.warn("Transfer constraint migration notice:", migErr.message);
+      }
       console.log("Database schema initialized successfully.");
     }
   } catch (e) {
@@ -183,7 +196,7 @@ app.get("/api/:resource", auth, async (req, res) => {
 app.post("/api/transactions", auth, async (req, res) => {
   try {
     const x = req.body;
-    if (!["income", "expense"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
+    if (!["income", "expense", "transfer"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
       return res.status(400).json({ error: "Проверьте тип, категорию и сумму операции." });
     }
     const createdAt = x.created_at ? new Date(x.created_at) : new Date();
@@ -200,7 +213,7 @@ app.post("/api/transactions", auth, async (req, res) => {
 app.put("/api/transactions/:id", auth, async (req, res) => {
   try {
     const x = req.body;
-    if (!["income", "expense"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
+    if (!["income", "expense", "transfer"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
       return res.status(400).json({ error: "Проверьте тип, категорию и сумму операции." });
     }
     const createdAt = x.created_at ? new Date(x.created_at) : null;
