@@ -527,6 +527,7 @@ function parseQuickTxInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
 
+  const lower = text.toLowerCase();
   let cleanWords = ' ' + text + ' ';
   let amount = 0;
 
@@ -552,6 +553,15 @@ function parseQuickTxInput(raw) {
   // Fixed Slang Denominations
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 40000) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 50000) ||
+  // "сотка тысяч / к" -> 100 000
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)\s*(?:тыс[а-я]*|тыщ[а-я]*|к\b|k\b)(?:$|[^а-яёa-z0-9])/i, () => 100000) ||
+  // "сотка рублей" -> 100
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)\s*(?:руб[а-я]*|р\b)(?:$|[^а-яёa-z0-9])/i, () => 100) ||
+  // "сотка" в контексте доходов/упали/зарплаты/баланса = 100 000 ₽
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)(?:$|[^а-яёa-z0-9])/i, () => {
+    if (/(?:руб|кофе|билет|проезд|чай|булк|чипс|жвачк)/i.test(lower)) return 100;
+    return 100000;
+  }) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яёa-z0-9])/i, () => 500) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яёa-z0-9])/i, () => 2000) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яёa-z0-9])/i, () => 3000) ||
@@ -592,13 +602,12 @@ function parseQuickTxInput(raw) {
   }
 
   // 3. Category & Type Detection (Income vs Expense)
-  const lower = text.toLowerCase();
   let type = 'expense';
   let category = 'Прочее';
   let iconEmoji = '💳';
 
   // Comprehensive Income Regex Patterns (все глаголы заработка, получения и переводов)
-  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
+  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|упал|прилетел|залетел|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
 
   if (isIncome) {
     type = 'income';
@@ -681,8 +690,8 @@ function parseQuickTxInput(raw) {
   }
 
   // Clean description
-  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'тысяч', 'тысячи', 'тыщ']);
-  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал'];
+  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'у', 'меня', 'тысяч', 'тысячи', 'тыщ']);
+  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал', 'упал', 'прилетел', 'залетел'];
 
   const remainingWords = cleanWords
     .trim()
@@ -5122,8 +5131,18 @@ function bindInteractiveEvents() {
   let cachedAiTx = null;
   let quickAiDebounceTimer = null;
 
-  const renderQuickPreviewBox = (parsed, isAi = false) => {
+  const renderQuickPreviewBox = (parsed, isAi = false, isThinking = false) => {
     if (!previewBox) return;
+    if (isThinking) {
+      previewBox.style.display = 'flex';
+      previewBox.innerHTML = `
+        <span class="preview-pill ai-tag" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(59, 130, 246, 0.25)); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.5); font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 6px;">
+          <span>✦</span> ИИ анализирует операцию...
+        </span>
+      `;
+      return;
+    }
+
     if (parsed && parsed.amount > 0) {
       previewBox.style.display = 'flex';
       previewBox.innerHTML = `
@@ -5154,16 +5173,22 @@ function bindInteractiveEvents() {
 
     // Check if we have cached AI result for this exact text
     if (cachedAiTx && cachedAiTx.raw === rawVal) {
-      renderQuickPreviewBox(cachedAiTx, true);
+      renderQuickPreviewBox(cachedAiTx, true, false);
       return;
     }
 
     // Immediate zero-latency local parse
     const localParsed = parseQuickTxInput(rawVal);
-    renderQuickPreviewBox(localParsed, false);
+    if (localParsed && localParsed.amount > 0) {
+      renderQuickPreviewBox(localParsed, false, false);
+    } else if (rawVal.length >= 3) {
+      renderQuickPreviewBox(null, false, true);
+    } else {
+      renderQuickPreviewBox(null);
+    }
 
-    // Debounced AI enhancement (calls backend Gemini 2.5 with user API key)
-    if (triggerAi) {
+    // Debounced AI enhancement (calls backend Gemini with multi-model fallback & prompt)
+    if (triggerAi && rawVal.length >= 3) {
       if (quickAiDebounceTimer) clearTimeout(quickAiDebounceTimer);
       quickAiDebounceTimer = setTimeout(async () => {
         if (!quickInput || quickInput.value.trim() !== rawVal) return;
@@ -5187,12 +5212,15 @@ function bindInteractiveEvents() {
               icon: iconEmoji,
               isAi: true
             };
-            renderQuickPreviewBox(cachedAiTx, true);
+            renderQuickPreviewBox(cachedAiTx, true, false);
           }
         } catch (e) {
-          // Silent fallback to local parse
+          // If AI fails, maintain local parsed if valid
+          if (localParsed && localParsed.amount > 0 && quickInput.value.trim() === rawVal) {
+            renderQuickPreviewBox(localParsed, false, false);
+          }
         }
-      }, 450);
+      }, 350);
     }
   };
 
