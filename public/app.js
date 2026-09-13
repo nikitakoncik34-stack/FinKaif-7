@@ -4165,6 +4165,16 @@ function bindInteractiveEvents() {
     };
   }
 
+  const txModalBackdrop = document.getElementById('tx-modal');
+  if (txModalBackdrop) {
+    txModalBackdrop.onclick = e => {
+      if (e.target === txModalBackdrop) {
+        txModalBackdrop.style.display = 'none';
+        editingTxId = null;
+      }
+    };
+  }
+
   // Delete Transaction from inside modal
   const btnModalDelete = document.getElementById('btn-modal-delete-tx');
   if (btnModalDelete) {
@@ -4427,9 +4437,30 @@ function bindInteractiveEvents() {
     mastheadBalPill.onclick = () => togglePrivacy();
   }
 
-  if (!window.__privacyKeyBound) {
-    window.__privacyKeyBound = true;
+  if (!window.__globalKeysBound) {
+    window.__globalKeysBound = true;
     window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        let shouldRender = false;
+        const txModal = document.getElementById('tx-modal');
+        if (txModal && txModal.style.display !== 'none') {
+          txModal.style.display = 'none';
+          editingTxId = null;
+        }
+        if (profileModalOpen) {
+          profileModalOpen = false;
+          shouldRender = true;
+        }
+        const mobileSheet = document.getElementById('mobile-more-sheet');
+        if (mobileSheet && mobileSheet.style.display !== 'none') {
+          mobileSheet.style.display = 'none';
+        }
+        if (paydaySplitData) {
+          paydaySplitData = null;
+          shouldRender = true;
+        }
+        if (shouldRender) renderApp();
+      }
       if ((e.key === 'p' || e.key === 'P' || e.key === 'з' || e.key === 'З') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
         togglePrivacy();
       }
