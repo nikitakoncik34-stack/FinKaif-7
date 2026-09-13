@@ -4200,6 +4200,8 @@ function bindInteractiveEvents() {
       }
 
       try {
+        const submitBtn = txForm.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Сохранение...'; }
         if (editingTxId) {
           await api('transactions/' + editingTxId, {
             method: 'PUT',
@@ -4221,6 +4223,8 @@ function bindInteractiveEvents() {
         renderApp();
       } catch (err) {
         alert('Ошибка сохранения операции: ' + err.message);
+        const submitBtn = txForm.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Сохранить'; }
       }
     };
   }
@@ -4465,6 +4469,7 @@ function bindInteractiveEvents() {
   // 1-Tap Quick-Tap Pills (Монетки)
   $$('.quick-pill-btn').forEach(pill => {
     pill.onclick = async () => {
+      if (pill.disabled) return;
       const type = pill.getAttribute('data-type') || 'expense';
       const category = pill.getAttribute('data-cat') || 'Продукты';
       const amount = Number(pill.getAttribute('data-amt')) || 0;
@@ -4474,6 +4479,7 @@ function bindInteractiveEvents() {
       if (amount <= 0) return;
 
       try {
+        pill.disabled = true;
         pill.classList.add('saving');
         await api('transactions', {
           method: 'POST',
@@ -4483,6 +4489,7 @@ function bindInteractiveEvents() {
         renderApp();
       } catch (err) {
         alert('Ошибка быстрой записи: ' + err.message);
+        pill.disabled = false;
       }
     };
   });
