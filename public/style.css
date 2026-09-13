@@ -3215,8 +3215,6 @@ html, body {
   transition: opacity 0.15s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
   min-width: 220px;
   max-width: 290px;
-  max-height: 220px;
-  overflow-y: auto;
   box-sizing: border-box;
 }
 
@@ -3224,12 +3222,31 @@ html, body {
   opacity: 1;
 }
 
-#home-chart-tooltip::-webkit-scrollbar {
+.chart-tooltip-txs {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 210px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 212, 191, 0.45) transparent;
+}
+
+.chart-tooltip-txs::-webkit-scrollbar {
   width: 4px;
 }
-#home-chart-tooltip::-webkit-scrollbar-thumb {
-  background: rgba(45, 212, 191, 0.35);
+.chart-tooltip-txs::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 4px;
+}
+.chart-tooltip-txs::-webkit-scrollbar-thumb {
+  background: rgba(45, 212, 191, 0.45);
+  border-radius: 4px;
+}
+.chart-tooltip-txs::-webkit-scrollbar-thumb:hover {
+  background: rgba(45, 212, 191, 0.8);
 }
 
 /* Day Breakdown Dock (Responsive Mobile & Desktop Sheet) */
