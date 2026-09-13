@@ -1,266 +1,37 @@
-
 // ==========================================================================
-// FINKAIF 3D INVESTOR AVATAR COLLECTION & NEURAL LIVING CORE
+// FINKAIF MODERN AVATAR SYSTEM & NEURAL LIVING CORE
 // ==========================================================================
-const AVATARS_3D = {
-  lion: {
-    id: 'lion',
-    name: 'Obsidian Lion',
-    title: 'Суверенный капитал',
-    color: '#F59E0B',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="lionBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#1E293B"/>
-            <stop offset="100%" stop-color="#090D16"/>
-          </radialGradient>
-          <linearGradient id="lionGold_${size}" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#FDE68A"/>
-            <stop offset="40%" stop-color="#F59E0B"/>
-            <stop offset="100%" stop-color="#B45309"/>
-          </linearGradient>
-          <filter id="lionGlow_${size}" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#F59E0B" flood-opacity="0.4"/>
-          </filter>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#lionBg_${size})" stroke="#F59E0B" stroke-width="1.5" stroke-opacity="0.5"/>
-        <circle cx="32" cy="32" r="27" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-        <path d="M32 14C23 14 17 21 17 29C17 38 23 48 32 50C41 48 47 38 47 29C47 21 41 14 32 14Z" fill="url(#lionGold_${size})" filter="url(#lionGlow_${size})" opacity="0.9"/>
-        <path d="M32 20L36 28L43 27L38 34L40 41L32 37L24 41L26 34L21 27L28 28L32 20Z" fill="#0F172A"/>
-        <circle cx="28" cy="32" r="2" fill="#FDE68A"/>
-        <circle cx="36" cy="32" r="2" fill="#FDE68A"/>
-        <polygon points="32,36 30,39 34,39" fill="#F59E0B"/>
-      </svg>
-    `
-  },
-  griffin: {
-    id: 'griffin',
-    name: 'Golden Griffin',
-    title: 'Стратегический надзор',
-    color: '#EAB308',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="griffBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#1F242D"/>
-            <stop offset="100%" stop-color="#0A0C10"/>
-          </radialGradient>
-          <linearGradient id="griffGrad_${size}" x1="12" y1="12" x2="52" y2="52" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#FEF08A"/>
-            <stop offset="50%" stop-color="#EAB308"/>
-            <stop offset="100%" stop-color="#854D0E"/>
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#griffBg_${size})" stroke="#EAB308" stroke-width="1.5" stroke-opacity="0.45"/>
-        <path d="M18 36C21 24 30 18 32 18C34 18 43 24 46 36C42 42 36 46 32 46C28 46 22 42 18 36Z" fill="url(#griffGrad_${size})"/>
-        <path d="M14 26C20 28 24 34 26 40C20 40 16 34 14 26Z" fill="#FEF08A" opacity="0.8"/>
-        <path d="M50 26C44 28 40 34 38 40C44 40 48 34 50 26Z" fill="#FEF08A" opacity="0.8"/>
-        <polygon points="32,28 28,35 36,35" fill="#0F172A"/>
-        <polygon points="32,32 30,36 34,36" fill="#FACC15"/>
-      </svg>
-    `
-  },
-  dragon: {
-    id: 'dragon',
-    name: 'Emerald Dragon',
-    title: 'Экспоненциальный рост',
-    color: '#2DD4BF',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="dragBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#132E2B"/>
-            <stop offset="100%" stop-color="#061312"/>
-          </radialGradient>
-          <linearGradient id="dragGrad_${size}" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#5EEAD4"/>
-            <stop offset="50%" stop-color="#2DD4BF"/>
-            <stop offset="100%" stop-color="#0F766E"/>
-          </linearGradient>
-          <filter id="dragGlow_${size}" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#2DD4BF" flood-opacity="0.45"/>
-          </filter>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#dragBg_${size})" stroke="#2DD4BF" stroke-width="1.5" stroke-opacity="0.5"/>
-        <path d="M32 15L38 23L47 21L42 29L48 37L39 37L36 47L32 41L28 47L25 37L16 37L22 29L17 21L26 23L32 15Z" fill="url(#dragGrad_${size})" filter="url(#dragGlow_${size})"/>
-        <circle cx="28" cy="31" r="2.5" fill="#042F2E"/>
-        <circle cx="36" cy="31" r="2.5" fill="#042F2E"/>
-        <circle cx="28" cy="31" r="1" fill="#5EEAD4"/>
-        <circle cx="36" cy="31" r="1" fill="#5EEAD4"/>
-      </svg>
-    `
-  },
-  phoenix: {
-    id: 'phoenix',
-    name: 'Quantum Phoenix',
-    title: 'Трансформация и сила',
-    color: '#FB7185',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="phxBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#31131E"/>
-            <stop offset="100%" stop-color="#12050A"/>
-          </radialGradient>
-          <linearGradient id="phxGrad_${size}" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#FDA4AF"/>
-            <stop offset="50%" stop-color="#F43F5E"/>
-            <stop offset="100%" stop-color="#881337"/>
-          </linearGradient>
-          <filter id="phxGlow_${size}" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#F43F5E" flood-opacity="0.45"/>
-          </filter>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#phxBg_${size})" stroke="#FB7185" stroke-width="1.5" stroke-opacity="0.5"/>
-        <path d="M32 14C36 22 46 26 48 36C45 44 38 48 32 50C26 48 19 44 16 36C18 26 28 22 32 14Z" fill="url(#phxGrad_${size})" filter="url(#phxGlow_${size})"/>
-        <path d="M32 24C34 29 40 32 40 37C38 42 35 44 32 45C29 44 26 42 24 37C24 32 30 29 32 24Z" fill="#FFF1F2"/>
-      </svg>
-    `
-  },
-  bull: {
-    id: 'bull',
-    name: 'Cyber Bull',
-    title: 'Бычий тренд капитала',
-    color: '#38BDF8',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="bullBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#142638"/>
-            <stop offset="100%" stop-color="#070E17"/>
-          </radialGradient>
-          <linearGradient id="bullGrad_${size}" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#BAE6FD"/>
-            <stop offset="50%" stop-color="#38BDF8"/>
-            <stop offset="100%" stop-color="#0369A1"/>
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#bullBg_${size})" stroke="#38BDF8" stroke-width="1.5" stroke-opacity="0.45"/>
-        <path d="M14 20C18 20 22 25 24 30C20 30 16 26 14 20Z" fill="#BAE6FD"/>
-        <path d="M50 20C46 20 42 25 40 30C44 30 48 26 50 20Z" fill="#BAE6FD"/>
-        <path d="M22 28H42L38 44L32 48L26 44L22 28Z" fill="url(#bullGrad_${size})"/>
-        <circle cx="28" cy="35" r="2" fill="#082F49"/>
-        <circle cx="36" cy="35" r="2" fill="#082F49"/>
-        <circle cx="32" cy="43" r="3" stroke="#BAE6FD" stroke-width="1.5" fill="none"/>
-      </svg>
-    `
-  },
-  lotus: {
-    id: 'lotus',
-    name: 'Cosmic Lotus',
-    title: 'Финансовый дзен',
-    color: '#A855F7',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="lotusBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#28163B"/>
-            <stop offset="100%" stop-color="#0E0617"/>
-          </radialGradient>
-          <linearGradient id="lotusGrad_${size}" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#E9D5FF"/>
-            <stop offset="50%" stop-color="#A855F7"/>
-            <stop offset="100%" stop-color="#6B21A8"/>
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#lotusBg_${size})" stroke="#A855F7" stroke-width="1.5" stroke-opacity="0.45"/>
-        <path d="M32 16C36 24 40 34 32 44C24 34 28 24 32 16Z" fill="url(#lotusGrad_${size})"/>
-        <path d="M32 28C40 28 47 34 44 42C38 45 32 44 32 44C32 44 26 45 20 42C17 34 24 28 32 28Z" fill="#D8B4FE" opacity="0.85"/>
-        <circle cx="32" cy="36" r="3" fill="#FAF5FF"/>
-      </svg>
-    `
-  },
-  falcon: {
-    id: 'falcon',
-    name: 'Titanium Falcon',
-    title: 'Скорость и точность',
-    color: '#34D399',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="falcBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#132E24"/>
-            <stop offset="100%" stop-color="#05130D"/>
-          </radialGradient>
-          <linearGradient id="falcGrad_${size}" x1="16" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#A7F3D0"/>
-            <stop offset="50%" stop-color="#34D399"/>
-            <stop offset="100%" stop-color="#065F46"/>
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#falcBg_${size})" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.45"/>
-        <path d="M32 16L40 28L48 32L38 38L32 48L26 38L16 32L24 28L32 16Z" fill="url(#falcGrad_${size})"/>
-        <polygon points="32,24 35,32 32,36 29,32" fill="#064E3B"/>
-        <circle cx="32" cy="28" r="1.5" fill="#ECFDF5"/>
-      </svg>
-    `
-  },
-  crown: {
-    id: 'crown',
-    name: 'Diamond Crown',
-    title: 'Капитал FIRE',
-    color: '#FBBF24',
-    svg: (size = 48) => `
-      <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-svg-3d">
-        <defs>
-          <radialGradient id="crownBg_${size}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#2E2310"/>
-            <stop offset="100%" stop-color="#120D04"/>
-          </radialGradient>
-          <linearGradient id="crownGrad_${size}" x1="14" y1="16" x2="50" y2="48" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stop-color="#FEF3C7"/>
-            <stop offset="50%" stop-color="#FBBF24"/>
-            <stop offset="100%" stop-color="#B45309"/>
-          </linearGradient>
-        </defs>
-        <circle cx="32" cy="32" r="30" fill="url(#crownBg_${size})" stroke="#FBBF24" stroke-width="1.5" stroke-opacity="0.5"/>
-        <path d="M18 42L16 26L26 32L32 20L38 32L48 26L46 42H18Z" fill="url(#crownGrad_${size})"/>
-        <circle cx="16" cy="24" r="2" fill="#FEF3C7"/>
-        <circle cx="32" cy="18" r="2.5" fill="#FEF3C7"/>
-        <circle cx="48" cy="24" r="2" fill="#FEF3C7"/>
-        <rect x="20" y="39" width="24" height="2" rx="1" fill="#78350F"/>
-      </svg>
-    `
-  }
-};
-
-const EMOJI_TO_3D = {
-  '🦁': 'lion',
-  '🦅': 'griffin',
-  '🐉': 'dragon',
-  '🔥': 'phoenix',
-  '👑': 'crown',
-  '⚡': 'falcon',
-  '💎': 'crown',
-  '🐂': 'bull',
-  '🪷': 'lotus',
-  '🚀': 'phoenix',
-  '🧘': 'lotus',
-  '💼': 'griffin',
-  '🎯': 'falcon',
-  '🏆': 'crown'
-};
+function renderDefaultAvatarSvg(size = 38) {
+  const uid = Math.round(Math.random() * 10000);
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="avatar-default-svg" style="border-radius: 50%;">
+      <defs>
+        <radialGradient id="defAvBg_${uid}" cx="32" cy="24" r="32" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#142426"/>
+          <stop offset="100%" stop-color="#0B1317"/>
+        </radialGradient>
+        <linearGradient id="defAvGrad_${uid}" x1="20" y1="16" x2="44" y2="48" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#5EEAD4"/>
+          <stop offset="100%" stop-color="#0D9488"/>
+        </linearGradient>
+      </defs>
+      <circle cx="32" cy="32" r="31" fill="url(#defAvBg_${uid})" stroke="#2DD4BF" stroke-width="1.5" stroke-opacity="0.5"/>
+      <circle cx="32" cy="24" r="9.5" fill="url(#defAvGrad_${uid})"/>
+      <path d="M17 48C17 39.5 23.5 37 32 37C40.5 37 47 39.5 47 48C47 51 45 52 32 52C19 52 17 51 17 48Z" fill="url(#defAvGrad_${uid})" opacity="0.88"/>
+    </svg>
+  `;
+}
 
 function getAvatarHtml(avatarKey, userInitial = 'Н', size = 38) {
-  let key = avatarKey;
-  if (key && EMOJI_TO_3D[key]) {
-    key = EMOJI_TO_3D[key];
+  const key = String(avatarKey || '').trim();
+
+  // If user uploaded a custom photo (data URI or URL)
+  if (key.startsWith('data:image/') || key.startsWith('http')) {
+    return `<img src="${key}" alt="Avatar" class="custom-avatar-img" style="width: ${size}px; height: ${size}px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(45, 212, 191, 0.4); display: block;">`;
   }
 
-  if (key && AVATARS_3D[key]) {
-    return AVATARS_3D[key].svg(size);
-  }
-
-  if (key && (key.startsWith('data:image/') || key.startsWith('http'))) {
-    return `<img src="${key}" alt="Avatar" class="custom-avatar-img" style="width: ${size}px; height: ${size}px;">`;
-  }
-
-  if (key && key !== 'monogram' && key.length <= 4) {
-    return `<span class="emoji-avatar" style="font-size: ${Math.round(size * 0.55)}px;">${key}</span>`;
-  }
-
-  return `<span class="monogram-avatar" style="width: ${size}px; height: ${size}px; font-size: ${Math.round(size * 0.44)}px;">${userInitial}</span>`;
+  // Default elegant investor avatar
+  return renderDefaultAvatarSvg(size);
 }
 
 function renderAssistantOrb(state = 'idle', size = 34) {
@@ -315,9 +86,10 @@ let simState = {
 
 let profile = {
   display_name: localStorage.getItem('finkaif_name') || '',
-  avatar: localStorage.getItem('finkaif_avatar') || '⚡',
+  avatar: localStorage.getItem('finkaif_avatar') || 'default',
   currency: localStorage.getItem('finkaif_currency') || 'RUB'
 };
+window.profile = profile;
 
 let data = {
   transactions: [],
@@ -360,13 +132,74 @@ const currencySymbols = {
   'KZT': '₸'
 };
 
-const money = (n, force = false) => {
-  const sym = currencySymbols[profile.currency] || '₽';
+// Live CBR Exchange Rates Engine
+let currentRates = {
+  base: 'RUB',
+  date: new Date().toISOString().slice(0, 10),
+  rates: { RUB: 1, USD: 0.010811, EUR: 0.009881, KZT: 5.2632 },
+  quotes: { USD: 92.5, EUR: 101.2, KZT: 0.19 },
+  updated_at: new Date().toISOString()
+};
+
+async function fetchExchangeRates() {
+  try {
+    const res = await fetch('/api/rates');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.quotes) {
+        currentRates = data;
+        const banner = document.getElementById('cbr-rates-list-el');
+        if (banner) {
+          banner.innerHTML = `
+            <span>1 $ = ${(currentRates.quotes.USD || 92.5).toFixed(2)} ₽</span>
+            <span>1 € = ${(currentRates.quotes.EUR || 101.2).toFixed(2)} ₽</span>
+            <span>1 ₸ = ${(currentRates.quotes.KZT || 0.19).toFixed(2)} ₽</span>
+          `;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch exchange rates, using fallback:', err.message);
+  }
+}
+
+function convertFromRub(amountInRub, targetCur = profile.currency) {
+  const rub = Number(amountInRub) || 0;
+  if (targetCur === 'RUB' || !targetCur) return rub;
+  const quote = currentRates?.quotes?.[targetCur] || (targetCur === 'USD' ? 92.5 : targetCur === 'EUR' ? 101.2 : 0.19);
+  if (!quote || quote <= 0) return rub;
+  return rub / quote;
+}
+
+function convertToRub(amountInForeign, cur = profile.currency) {
+  const amt = Number(amountInForeign) || 0;
+  if (cur === 'RUB' || !cur) return amt;
+  const quote = currentRates?.quotes?.[cur] || (cur === 'USD' ? 92.5 : cur === 'EUR' ? 101.2 : 0.19);
+  if (!quote || quote <= 0) return amt;
+  return amt * quote;
+}
+
+const money = (n, force = false, isAlreadyConverted = false) => {
+  const cur = profile.currency || 'RUB';
+  const sym = currencySymbols[cur] || '₽';
   if (privacyMode && !force) {
     return '•••• ' + sym;
   }
-  const num = Math.round(Number(n) || 0);
-  return new Intl.NumberFormat('ru-RU').format(num) + ' ' + sym;
+  const rawNum = Number(n) || 0;
+  const converted = isAlreadyConverted ? rawNum : convertFromRub(rawNum, cur);
+
+  if (cur === 'USD' || cur === 'EUR') {
+    const isSmallOrDecimal = Math.abs(converted) < 1000 || Math.round(converted * 100) !== Math.round(converted) * 100;
+    const formatted = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: isSmallOrDecimal ? 2 : 0,
+      maximumFractionDigits: 2
+    }).format(converted);
+    return (cur === 'USD' ? '$' : '€') + formatted;
+  } else {
+    // RUB or KZT
+    const formatted = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(converted));
+    return formatted + ' ' + sym;
+  }
 };
 
 // Kinetic Number Ticker & Spotlight Helpers (FinKaif 8.20)
@@ -378,8 +211,20 @@ function animateNumber(el, targetVal, duration = 650, prefix = '', suffix = '') 
   const startVal = prevAnimatedNumbers[key] !== undefined ? prevAnimatedNumbers[key] : 0;
   prevAnimatedNumbers[key] = targetVal;
 
+  const cur = profile.currency || 'RUB';
+  const formatVal = val => {
+    if (cur === 'USD' || cur === 'EUR') {
+      const isSmallOrDecimal = Math.abs(val) < 1000 || Math.round(val * 100) !== Math.round(val) * 100;
+      return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: isSmallOrDecimal ? 2 : 0,
+        maximumFractionDigits: 2
+      }).format(val);
+    }
+    return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(val));
+  };
+
   if (startVal === targetVal) {
-    el.textContent = `${prefix}${new Intl.NumberFormat('ru-RU').format(targetVal)}${suffix}`;
+    el.textContent = `${prefix}${formatVal(targetVal)}${suffix}`;
     return;
   }
 
@@ -390,14 +235,14 @@ function animateNumber(el, targetVal, duration = 650, prefix = '', suffix = '') 
     const elapsed = now - startTime;
     const progress = Math.min(1, elapsed / duration);
     const ease = 1 - Math.pow(1 - progress, 3);
-    const current = Math.round(startVal + diff * ease);
+    const current = startVal + diff * ease;
 
-    el.textContent = `${prefix}${new Intl.NumberFormat('ru-RU').format(current)}${suffix}`;
+    el.textContent = `${prefix}${formatVal(current)}${suffix}`;
 
     if (progress < 1) {
       requestAnimationFrame(frame);
     } else {
-      el.textContent = `${prefix}${new Intl.NumberFormat('ru-RU').format(targetVal)}${suffix}`;
+      el.textContent = `${prefix}${formatVal(targetVal)}${suffix}`;
     }
   }
 
@@ -592,14 +437,21 @@ const pluralizeOps = n => {
   return 'операций';
 };
 
-// Compact currency formatter for axis scales (e.g. 50K ₽, 1.2M ₽)
+// Compact currency formatter for axis scales (e.g. 50K ₽, 1.2M ₽, $1.5K)
 const compactMoney = (num, force = false) => {
-  const sym = currencySymbols[profile.currency] || '₽';
+  const cur = profile.currency || 'RUB';
+  const sym = currencySymbols[cur] || '₽';
   if (privacyMode && !force) return '••• ' + sym;
-  const n = Math.abs(Number(num) || 0);
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.0', '') + 'M ' + sym;
-  if (n >= 1000) return Math.round(n / 1000) + 'K ' + sym;
-  return n + ' ' + sym;
+  const raw = Math.abs(Number(num) || 0);
+  const n = convertFromRub(raw, cur);
+  let str = '';
+  if (n >= 1000000) str = (n / 1000000).toFixed(1).replace('.0', '') + 'M';
+  else if (n >= 1000) str = Math.round(n / 1000) + 'K';
+  else str = (cur === 'USD' || cur === 'EUR') ? n.toFixed(1).replace('.0', '') : Math.round(n);
+
+  if (cur === 'USD') return '$' + str;
+  if (cur === 'EUR') return '€' + str;
+  return str + ' ' + sym;
 };
 
 // Smart Natural Language Financial Parser
@@ -3026,7 +2878,8 @@ function renderModal() {
           <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label class="form-label">Сумма (${currencySymbols[profile.currency] || '₽'})</label>
-              <input class="form-input num" id="form-amount" type="number" min="1" step="any" placeholder="0" required>
+              <input class="form-input num" id="form-amount" type="number" min="0.01" step="any" placeholder="0" required>
+              <div id="tx-rub-equivalent" style="font-size: 11px; color: var(--accent-jade); margin-top: 4px; display: none;"></div>
             </div>
             <div class="form-group">
               <label class="form-label">Дата</label>
@@ -3101,35 +2954,32 @@ function renderProfileModal() {
         </div>
 
         <form id="profile-form">
-          <!-- 3D Investor Avatar Collection -->
+          <!-- Photo Upload & Current Avatar Card -->
           <div class="form-group" style="margin-bottom: 20px;">
             <div class="avatar-section-title">
-              <label class="form-label" style="margin-bottom: 0;">Коллекция 3D-аватаров инвестора</label>
+              <label class="form-label" style="margin-bottom: 0;">Фото профиля</label>
               <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.20</span>
             </div>
-            <div class="avatar-grid-3d">
-              ${Object.values(AVATARS_3D).map(av => {
-                const isAct = profile.avatar === av.id || (profile.avatar === '🦁' && av.id === 'lion') || (EMOJI_TO_3D[profile.avatar] === av.id);
-                return `
-                  <button type="button" class="avatar-card-opt ${isAct ? 'active' : ''}" data-avatar="${av.id}">
-                    <div style="width: 40px; height: 40px;">${av.svg(40)}</div>
-                    <span class="avatar-opt-title">${av.name}</span>
-                    <span class="avatar-opt-sub">${av.title}</span>
-                  </button>
-                `;
-              }).join('')}
-            </div>
 
-            <!-- Alternative Options: Monogram and Custom Photo Upload -->
-            <div style="display: flex; gap: 8px; margin-top: 10px;">
-              <button type="button" class="btn btn-secondary ${profile.avatar === 'monogram' ? 'active' : ''}" id="btn-avatar-monogram" style="flex: 1; font-size: 11.5px; padding: 7px 10px;">
-                <span>🔤 Монограмма</span>
-              </button>
-              <label class="btn btn-secondary" style="flex: 1; font-size: 11.5px; padding: 7px 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                <span>📷 Загрузить фото</span>
-                <input type="file" id="input-avatar-upload" accept="image/*" style="display: none;">
-              </label>
-            </div>
+            <label class="avatar-upload-zone" for="input-avatar-upload" title="Нажмите для выбора фото с устройства">
+              <div class="avatar-upload-icon">
+                ${icon('camera', 22)}
+              </div>
+              <div>
+                <div class="avatar-upload-title">Загрузить фото</div>
+                <div class="avatar-upload-sub">PNG, JPG, WebP до 5 МБ (автоматическая оптимизация)</div>
+              </div>
+              <input type="file" id="input-avatar-upload" accept="image/*" style="display: none;">
+            </label>
+
+            ${(profile.avatar && (profile.avatar.startsWith('data:image/') || profile.avatar.startsWith('http'))) ? `
+              <div class="avatar-actions-bar">
+                <button type="button" class="btn-avatar-reset" id="btn-avatar-reset-default">
+                  ${icon('trash', 12)}
+                  <span>Вернуть стандартную аватарку</span>
+                </button>
+              </div>
+            ` : ''}
           </div>
 
           <!-- Display Name -->
@@ -3154,6 +3004,19 @@ function renderProfileModal() {
               <button type="button" class="currency-pill-btn ${profile.currency === 'KZT' ? 'active' : ''}" data-currency="KZT">
                 ₸ KZT (Тенге)
               </button>
+            </div>
+
+            <!-- CBR Exchange Rates Live Banner -->
+            <div class="currency-rates-banner">
+              <div class="cbr-badge">
+                ${icon('sparkle', 12)}
+                <span>Курсы ЦБ РФ</span>
+              </div>
+              <div class="cbr-rates-list" id="cbr-rates-list-el">
+                <span>1 $ = ${(currentRates.quotes.USD || 92.5).toFixed(2)} ₽</span>
+                <span>1 € = ${(currentRates.quotes.EUR || 101.2).toFixed(2)} ₽</span>
+                <span>1 ₸ = ${(currentRates.quotes.KZT || 0.19).toFixed(2)} ₽</span>
+              </div>
             </div>
           </div>
 
@@ -3368,6 +3231,7 @@ function renderPaydayModal() {
 }
 
 function renderApp() {
+  window.renderApp = renderApp;
   const container = document.getElementById('app');
   if (!container) return;
 
@@ -3469,20 +3333,25 @@ function bindInteractiveEvents() {
 
   // Kinetic Number Tickers on Home View
   if (tab === 'home' && !privacyMode) {
-    const sym = ` ${currencySymbols[profile.currency] || '₽'}`;
+    const cur = profile.currency || 'RUB';
+    const sym = (cur === 'USD' || cur === 'EUR') ? '' : ` ${currencySymbols[cur] || '₽'}`;
+    const curPrefix = cur === 'USD' ? '$' : cur === 'EUR' ? '€' : '';
+
     const heroBalEl = document.getElementById('hero-balance-val');
     if (heroBalEl) {
       const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
       const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
-      const bal = Math.round(incTot - expTot);
-      animateNumber(heroBalEl, bal, 650, '', sym);
+      const balInRub = incTot - expTot;
+      const balConv = convertFromRub(balInRub);
+      animateNumber(heroBalEl, balConv, 650, curPrefix, sym);
     }
     const mastBalEl = document.getElementById('masthead-balance-figure');
     if (mastBalEl) {
       const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
       const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
-      const bal = Math.round(incTot - expTot);
-      animateNumber(mastBalEl, bal, 650, '', sym);
+      const balInRub = incTot - expTot;
+      const balConv = convertFromRub(balInRub);
+      animateNumber(mastBalEl, balConv, 650, curPrefix, sym);
     }
     const statIncEl = document.getElementById('stat-amount-inc');
     if (statIncEl) {
@@ -3490,7 +3359,8 @@ function bindInteractiveEvents() {
       let days = period === '7d' ? 7 : (period === '30d' ? 30 : 365);
       const cut = new Date(now.getTime() - days * 86400000);
       const pInc = data.transactions.filter(x => x.type === 'income' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
-      animateNumber(statIncEl, Math.round(pInc), 650, '+', sym);
+      const pIncConv = convertFromRub(pInc);
+      animateNumber(statIncEl, pIncConv, 650, `+${curPrefix}`, sym);
     }
     const statExpEl = document.getElementById('stat-amount-exp');
     if (statExpEl) {
@@ -3498,7 +3368,8 @@ function bindInteractiveEvents() {
       let days = period === '7d' ? 7 : (period === '30d' ? 30 : 365);
       const cut = new Date(now.getTime() - days * 86400000);
       const pExp = data.transactions.filter(x => x.type === 'expense' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
-      animateNumber(statExpEl, Math.round(pExp), 650, '−', sym);
+      const pExpConv = convertFromRub(pExp);
+      animateNumber(statExpEl, pExpConv, 650, `−${curPrefix}`, sym);
     }
   }
 
@@ -3551,7 +3422,7 @@ function bindInteractiveEvents() {
     };
   }
 
-  // 3D Avatar Selection & Custom Upload Handlers
+  // Custom Photo Upload & Reset Handlers
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
   const userInitial = rawUser.charAt(0).toUpperCase();
 
@@ -3560,51 +3431,45 @@ function bindInteractiveEvents() {
     if (preview) {
       preview.innerHTML = getAvatarHtml(profile.avatar, userInitial, 70);
     }
+    const mastAv = document.querySelector('.user-avatar');
+    if (mastAv) {
+      mastAv.innerHTML = getAvatarHtml(profile.avatar, userInitial, 36);
+    }
   };
-
-  $$('.avatar-card-opt').forEach(btn => {
-    btn.onclick = () => {
-      const av = btn.getAttribute('data-avatar');
-      profile.avatar = av;
-      $$('.avatar-card-opt').forEach(b => b.classList.remove('active'));
-      const monoBtn = document.getElementById('btn-avatar-monogram');
-      if (monoBtn) monoBtn.classList.remove('active');
-      btn.classList.add('active');
-      updateModalAvatarPreview();
-    };
-  });
-
-  const btnMono = document.getElementById('btn-avatar-monogram');
-  if (btnMono) {
-    btnMono.onclick = () => {
-      profile.avatar = 'monogram';
-      $$('.avatar-card-opt').forEach(b => b.classList.remove('active'));
-      btnMono.classList.add('active');
-      updateModalAvatarPreview();
-    };
-  }
 
   const inputUpload = document.getElementById('input-avatar-upload');
   if (inputUpload) {
     inputUpload.onchange = (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        alert('Пожалуйста, выберите файл изображения (PNG, JPG, WebP).');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (re) => {
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          canvas.width = 160;
-          canvas.height = 160;
+          const MAX_SIZE = 256;
+          let w = img.width;
+          let h = img.height;
+          const minDim = Math.min(w, h);
+          const sx = (w - minDim) / 2;
+          const sy = (h - minDim) / 2;
+
+          canvas.width = MAX_SIZE;
+          canvas.height = MAX_SIZE;
           const ctx = canvas.getContext('2d');
-          const minDim = Math.min(img.width, img.height);
-          const sx = (img.width - minDim) / 2;
-          const sy = (img.height - minDim) / 2;
-          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, 160, 160);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, MAX_SIZE, MAX_SIZE);
+
           profile.avatar = canvas.toDataURL('image/jpeg', 0.85);
-          $$('.avatar-card-opt').forEach(b => b.classList.remove('active'));
-          if (btnMono) btnMono.classList.remove('active');
           updateModalAvatarPreview();
+          renderApp();
+          const pm = document.getElementById('profile-modal');
+          if (pm) pm.style.display = 'flex';
         };
         img.src = re.target.result;
       };
@@ -3612,13 +3477,26 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Currency Selection
+  const btnResetAv = document.getElementById('btn-avatar-reset-default');
+  if (btnResetAv) {
+    btnResetAv.onclick = () => {
+      profile.avatar = 'default';
+      updateModalAvatarPreview();
+      renderApp();
+      const pm = document.getElementById('profile-modal');
+      if (pm) pm.style.display = 'flex';
+    };
+  }
+
+  // Currency Selection with Live Instant Conversion
   $$('.currency-pill-btn').forEach(btn => {
     btn.onclick = () => {
       const cur = btn.getAttribute('data-currency');
       profile.currency = cur;
-      $$('.currency-pill-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      localStorage.setItem('finkaif_currency', profile.currency);
+      renderApp();
+      const pm = document.getElementById('profile-modal');
+      if (pm) pm.style.display = 'flex';
     };
   });
 
@@ -4203,7 +4081,7 @@ function bindInteractiveEvents() {
       }
       if (typeSelect) typeSelect.value = txOrType.type || 'expense';
       if (catInput) catInput.value = txOrType.category || '';
-      if (amtInput) amtInput.value = txOrType.amount || '';
+      if (amtInput) amtInput.value = profile.currency === 'RUB' ? (txOrType.amount || '') : Number(convertFromRub(txOrType.amount).toFixed(2));
       if (dateInput) dateInput.value = getTxIso(txOrType);
       if (timeInput) timeInput.value = formatTxTime(txOrType);
       if (descInput) descInput.value = txOrType.description || '';
@@ -4344,8 +4222,32 @@ function bindInteractiveEvents() {
   const modalCatInput = document.getElementById('form-category');
   const modalAmtInput = document.getElementById('form-amount');
   const modalTypeSelect = document.getElementById('form-type');
+  const rubEqEl = document.getElementById('tx-rub-equivalent');
+
+  const updateRubEq = () => {
+    if (!rubEqEl) return;
+    const cur = profile.currency || 'RUB';
+    if (cur === 'RUB') {
+      rubEqEl.style.display = 'none';
+      return;
+    }
+    const val = Number(modalAmtInput?.value) || 0;
+    if (val > 0) {
+      const rub = Math.round(convertToRub(val, cur));
+      rubEqEl.textContent = `≈ ${new Intl.NumberFormat('ru-RU').format(rub)} ₽ (базовый расчет)`;
+      rubEqEl.style.display = 'block';
+    } else {
+      rubEqEl.style.display = 'none';
+    }
+  };
+
   if (modalCatInput) modalCatInput.oninput = updateModalBudgetAlert;
-  if (modalAmtInput) modalAmtInput.oninput = updateModalBudgetAlert;
+  if (modalAmtInput) {
+    modalAmtInput.oninput = () => {
+      updateModalBudgetAlert();
+      updateRubEq();
+    };
+  }
   if (modalTypeSelect) modalTypeSelect.onchange = updateModalBudgetAlert;
 
   // Modal Form Submit (Create or Update Transaction with Budget Protection)
@@ -4355,7 +4257,8 @@ function bindInteractiveEvents() {
       e.preventDefault();
       const type = document.getElementById('form-type').value;
       const category = document.getElementById('form-category').value.trim();
-      const amount = Number(document.getElementById('form-amount').value);
+      const inputAmount = Number(document.getElementById('form-amount').value);
+      const amount = profile.currency === 'RUB' ? inputAmount : Math.round(convertToRub(inputAmount));
       const occurred_on = document.getElementById('form-date').value;
       const timeVal = document.getElementById('form-time') ? document.getElementById('form-time').value : '';
       let created_at;
@@ -5091,6 +4994,7 @@ function syncHash() {
 
 async function boot() {
   initAmbientCanvas();
+  fetchExchangeRates(); // Fetch live CBR exchange rates on launch
 
   const initHash = window.location.hash.replace('#', '');
   if (['home', 'analytics', 'transactions', 'budgets', 'goals', 'assistant'].includes(initHash)) {
@@ -5106,7 +5010,7 @@ async function boot() {
       const prof = await api('profile');
       if (prof) {
         profile.display_name = prof.display_name || localStorage.getItem('finkaif_name') || '';
-        profile.avatar = localStorage.getItem('finkaif_avatar') || prof.avatar || 'lion';
+        profile.avatar = localStorage.getItem('finkaif_avatar') || prof.avatar || 'default';
         if (prof.currency) {
           profile.currency = prof.currency;
           localStorage.setItem('finkaif_currency', prof.currency);
