@@ -907,6 +907,43 @@ html, body {
 /* ==========================================================================
    TRANSACTIONS PAGE / OPERATIONAL LEDGER
    ========================================================================== */
+.tx-month-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 14px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.month-chip {
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-subtle);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--fast);
+}
+
+.month-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.month-chip.active {
+  background: var(--accent-jade-glow);
+  color: var(--accent-jade);
+  border-color: rgba(45, 212, 191, 0.35);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.2);
+}
+
 .filter-bar {
   display: flex;
   align-items: center;
