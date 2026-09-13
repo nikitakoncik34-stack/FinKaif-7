@@ -54,7 +54,7 @@ async function initDb() {
 }
 initDb();
 
-app.use(express.json({ limit: "100kb" }));
+app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public"), {
   maxAge: 0,
@@ -137,6 +137,59 @@ app.post("/api/auth/logout", (_req, res) => {
   res.clearCookie("finkaif_token", cookie).json({ ok: true });
 });
 
+// ============================================================================
+// CURRENCY EXCHANGE RATES (CBR Central Bank of Russia with caching & fallbacks)
+// ============================================================================
+let cachedRates = {
+  base: "RUB",
+  date: new Date().toISOString().slice(0, 10),
+  rates: { RUB: 1, USD: 0.0108, EUR: 0.00988, KZT: 5.26 },
+  quotes: { USD: 92.5, EUR: 101.2, KZT: 0.19 },
+  updated_at: new Date().toISOString()
+};
+let lastRatesFetch = 0;
+
+async function fetchCbrRates() {
+  if (Date.now() - lastRatesFetch < 60 * 60 * 1000) return cachedRates;
+  try {
+    const res = await fetch("https://www.cbr-xml-daily.ru/daily_json.js", { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      const val = data.Valute;
+      if (val && val.USD && val.EUR && val.KZT) {
+        const usdRub = val.USD.Value;
+        const eurRub = val.EUR.Value;
+        const kztRub = val.KZT.Value / (val.KZT.Nominal || 100);
+        cachedRates = {
+          base: "RUB",
+          date: data.Date ? data.Date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          rates: {
+            RUB: 1,
+            USD: Number((1 / usdRub).toFixed(6)),
+            EUR: Number((1 / eurRub).toFixed(6)),
+            KZT: Number((1 / kztRub).toFixed(4))
+          },
+          quotes: {
+            USD: Number(usdRub.toFixed(2)),
+            EUR: Number(eurRub.toFixed(2)),
+            KZT: Number(kztRub.toFixed(4))
+          },
+          updated_at: new Date().toISOString()
+        };
+        lastRatesFetch = Date.now();
+      }
+    }
+  } catch (err) {
+    console.warn("CBR rates fetch failed, using fallback:", err.message);
+  }
+  return cachedRates;
+}
+
+app.get("/api/rates", async (req, res) => {
+  const rates = await fetchCbrRates();
+  res.json(rates);
+});
+
 app.get("/api/me", auth, (req, res) => {
   res.json({ user: req.user });
 });
@@ -147,11 +200,11 @@ app.get("/api/profile", auth, async (req, res) => {
     if (r.rows[0]) {
       res.json(r.rows[0]);
     } else {
-      res.json({ display_name: "", avatar: "⚡", currency: "RUB" });
+      res.json({ display_name: "", avatar: "default", currency: "RUB" });
     }
   } catch (e) {
     console.warn("Profile fetch fallback:", e.message);
-    res.json({ display_name: "", avatar: "⚡", currency: "RUB" });
+    res.json({ display_name: "", avatar: "default", currency: "RUB" });
   }
 });
 
@@ -159,7 +212,8 @@ app.post("/api/profile", auth, async (req, res) => {
   try {
     const { display_name, avatar, currency } = req.body;
     const name = String(display_name || "").slice(0, 50).trim();
-    const av = String(avatar || "⚡").slice(0, 100).trim();
+    // Allow large data URI (base64 image up to 500KB)
+    const av = String(avatar || "default").slice(0, 500000).trim();
     const cur = ["RUB", "USD", "EUR", "KZT"].includes(currency) ? currency : "RUB";
 
     const r = await db.query(
