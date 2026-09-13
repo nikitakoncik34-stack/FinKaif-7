@@ -1264,14 +1264,17 @@ html, body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 100;
-  background: rgba(7, 11, 16, 0.82);
+  z-index: 2000;
+  background: rgba(7, 11, 16, 0.86);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 24px 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .modal-card {
@@ -1280,15 +1283,31 @@ html, body {
   border-radius: var(--r-xl);
   width: 100%;
   max-width: 500px;
-  padding: 28px;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 24px;
   box-shadow: var(--shadow-lg), var(--inner-highlight);
+  position: relative;
+  margin: auto;
 }
 
 .modal-header {
+  position: sticky;
+  top: -24px;
+  z-index: 10;
+  background: var(--bg-surface);
+  margin-top: -24px;
+  margin-left: -24px;
+  margin-right: -24px;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .modal-title {
@@ -4849,7 +4868,14 @@ html, body {
 
 @media (max-width: 540px) {
   .avatar-grid-3d {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+  .avatar-card-opt {
+    padding: 6px 3px;
+  }
+  .avatar-opt-sub {
+    display: none;
   }
 }
 
