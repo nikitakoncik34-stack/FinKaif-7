@@ -1865,11 +1865,19 @@ html, body {
   flex-direction: column;
   justify-content: space-between;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .analytics-metric-card:hover {
   border-color: var(--border-medium);
   transform: translateY(-2px);
+}
+
+.analytics-metric-card:has(.metric-popover.pinned),
+.analytics-metric-card:has(.metric-popover.hover-open),
+.analytics-metric-card.popover-active {
+  z-index: 60;
+  border-color: var(--border-medium);
 }
 
 .metric-topline {
@@ -1879,12 +1887,166 @@ html, body {
   margin-bottom: 12px;
 }
 
+.metric-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .metric-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.metric-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.metric-info-btn:hover,
+.metric-info-btn.active {
+  background: rgba(45, 212, 191, 0.15);
+  border-color: rgba(45, 212, 191, 0.4);
+  color: var(--accent-jade);
+  transform: scale(1.1);
+}
+
+/* Elegant Popover Card for Analytics Metrics */
+.metric-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -1px;
+  right: -1px;
+  background: rgba(18, 22, 29, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 14px 16px;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.2s;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.metric-popover.pinned,
+.metric-popover.hover-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.metric-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.popover-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+}
+
+.popover-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.popover-close:hover {
+  color: #FFFFFF;
+}
+
+.popover-desc {
+  color: var(--text-secondary);
+  margin: 0 0 10px 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.popover-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-bottom: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.p-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.p-row strong {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.p-row.highlight {
+  padding-top: 5px;
+  margin-top: 3px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.p-row.highlight strong {
+  font-size: 12px;
+}
+
+.popover-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  background: rgba(45, 212, 191, 0.06);
+  border-radius: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(45, 212, 191, 0.14);
+}
+
+.jade-text {
+  color: var(--accent-jade) !important;
+}
+
+.amber-text {
+  color: var(--accent-amber) !important;
+}
+
+.coral-text {
+  color: var(--accent-coral) !important;
 }
 
 .metric-icon {
