@@ -417,12 +417,12 @@ html, body {
     align-items: stretch;
     gap: 14px;
   }
-  .view-header > div:last-child {
+  .view-header > div:not(:only-child):last-child {
     display: flex;
     gap: 8px;
     width: 100%;
   }
-  .view-header > div:last-child button {
+  .view-header > div:not(:only-child):last-child button {
     flex: 1;
     justify-content: center;
     white-space: nowrap;
@@ -474,18 +474,18 @@ html, body {
   box-shadow: var(--shadow-md), var(--inner-highlight);
   margin-bottom: 14px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .hero-balance-card::before {
   content: '';
   position: absolute;
-  top: -80px;
-  right: -80px;
+  top: 0;
+  right: 0;
   width: 260px;
   height: 260px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(45, 212, 191, 0.12) 0%, transparent 70%);
+  border-top-right-radius: var(--r-xl);
+  background: radial-gradient(circle at top right, rgba(45, 212, 191, 0.12) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -3196,6 +3196,186 @@ html, body {
   font-size: 11px;
   font-weight: 600;
   margin-top: 2px;
+}
+
+/* Home Balance Chart Luxury Popover (Zero Clipping & High-Precision Alignment) */
+#home-chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(14, 20, 29, 0.96);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 25px rgba(45, 212, 191, 0.16);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  z-index: 150;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 220px;
+  max-width: 290px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+#home-chart-tooltip.visible {
+  opacity: 1;
+}
+
+#home-chart-tooltip::-webkit-scrollbar {
+  width: 4px;
+}
+#home-chart-tooltip::-webkit-scrollbar-thumb {
+  background: rgba(45, 212, 191, 0.35);
+  border-radius: 4px;
+}
+
+/* Day Breakdown Dock (Responsive Mobile & Desktop Sheet) */
+.home-day-breakdown {
+  display: none;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgba(18, 24, 34, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-md);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.2s ease;
+}
+
+.home-day-breakdown.visible {
+  display: block;
+  animation: fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.day-breakdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.day-breakdown-date-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-breakdown-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-jade);
+  box-shadow: 0 0 8px var(--accent-jade);
+}
+
+.day-breakdown-date {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.day-breakdown-bal {
+  font-size: 15px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.day-breakdown-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.day-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.day-pill.inc {
+  background: rgba(45, 212, 191, 0.15);
+  color: var(--accent-jade);
+  border: 1px solid rgba(45, 212, 191, 0.25);
+}
+.day-pill.exp {
+  background: rgba(251, 113, 133, 0.15);
+  color: var(--accent-coral);
+  border: 1px solid rgba(251, 113, 133, 0.25);
+}
+.day-pill.count {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.day-breakdown-txs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.day-breakdown-txs::-webkit-scrollbar {
+  width: 4px;
+}
+.day-breakdown-txs::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.day-tx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.day-tx-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.day-tx-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.day-tx-cat {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.day-tx-amount {
+  font-weight: 800;
+  font-family: var(--font-mono);
+}
+.day-tx-amount.inc { color: var(--accent-jade); }
+.day-tx-amount.exp { color: var(--accent-coral); }
+
+/* Mobile optimization: on phones, hide floating chart tooltip to prevent finger obstruction and use the dedicated Day Breakdown dock */
+@media (max-width: 640px) {
+  #home-chart-tooltip {
+    display: none !important;
+  }
+  .home-day-breakdown {
+    display: block;
+  }
 }
 
 /* HTML-based Fluid Scrubber & Perfectly Round Beacon Elements (Zero SVG stretching distortion!) */
