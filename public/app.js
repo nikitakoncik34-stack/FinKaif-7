@@ -1626,6 +1626,9 @@ function renderHomeView() {
           ${axisItemsHtml}
         </div>
       </div>
+
+      <!-- Interactive Day Breakdown Dock (Responsive Mobile & Desktop Sheet) -->
+      <div id="home-day-breakdown" class="home-day-breakdown"></div>
     </div>
 
     <!-- Stats Row (2 Cards) -->
@@ -4280,6 +4283,7 @@ function bindInteractiveEvents() {
   const homeScrubberLaser = document.getElementById('home-scrubber-laser');
   const homeScrubberBeacon = document.getElementById('home-scrubber-beacon');
   const homeTerminalBeacon = document.getElementById('home-terminal-beacon');
+  const homeDayBreakdown = document.getElementById('home-day-breakdown');
   const heroBalVal = document.getElementById('hero-balance-val');
   const heroBalLbl = document.getElementById('hero-balance-lbl');
 
@@ -4302,11 +4306,22 @@ function bindInteractiveEvents() {
       mids.push((pts[i].x + pts[i + 1].x) / 2);
     }
 
-    homeWrap.onmousemove = e => {
+    const formatOpsCount = (n) => {
+      const abs = Math.abs(n) % 100;
+      const num = abs % 10;
+      if (abs > 10 && abs < 20) return `${n} операций`;
+      if (num > 1 && num < 5) return `${n} операции`;
+      if (num === 1) return `${n} операция`;
+      return `${n} операций`;
+    };
+
+    let lastScrubbedDayIdx = -1;
+
+    const handleHomeScrub = (clientX) => {
       const rect = homeWrap.getBoundingClientRect();
       if (!rect.width || rect.width <= 0) return;
 
-      const mousePxX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const mousePxX = Math.max(0, Math.min(clientX - rect.left, rect.width));
       const targetSvgX = (mousePxX / rect.width) * svgW;
       const minX = pts[0].x;
       const maxX = pts[pts.length - 1].x;
@@ -4339,6 +4354,15 @@ function bindInteractiveEvents() {
             break;
           }
         }
+      }
+
+      if (dayIdx !== lastScrubbedDayIdx) {
+        lastScrubbedDayIdx = dayIdx;
+        try {
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(4);
+          }
+        } catch (_) {}
       }
 
       const activePt = pts[dayIdx] || pts[0];
@@ -4379,14 +4403,19 @@ function bindInteractiveEvents() {
         heroBalLbl.innerText = `Остаток на ${esc(activePt.dayDisplay || activePt.dayLabel)}`;
       }
 
-      // Display operations of THIS SPECIFIC DAY ONLY:
-      // An operation only appears where it actually occurred!
+      // Calculate totals for this day
       const dayTxs = (bucket.txs || []).slice().sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
+      let dayInc = 0;
+      let dayExp = 0;
+      dayTxs.forEach(t => {
+        if (t.type === 'income') dayInc += Number(t.amount);
+        else if (t.type === 'expense') dayExp += Number(t.amount);
+      });
 
       let txsHtml = '';
       if (dayTxs.length > 0) {
         txsHtml = `
-          <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto; padding-right: 2px;">
             ${dayTxs.map(t => {
               const isInc = t.type === 'income';
               const color = isInc ? 'var(--accent-jade)' : 'var(--accent-coral)';
@@ -4396,14 +4425,14 @@ function bindInteractiveEvents() {
               return `
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11.5px; background: ${bg}; padding: 3px 8px; border-radius: 4px;">
                   <span style="color: var(--text-secondary); font-size: 10.5px; font-weight: 600;">${tTime} • ${esc(t.category)}</span>
-                  <span style="color: ${color}; font-weight: 700;">${sign}${money(t.amount)}</span>
+                  <span style="color: ${color}; font-weight: 700; font-family: var(--font-mono);">${sign}${money(t.amount)}</span>
                 </div>
               `;
             }).join('')}
           </div>
         `;
       } else {
-        txsHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 5px; font-size: 11px;">В этот день операций не было</div>`;
+        txsHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 6px; font-size: 11px;">В этот день операций не было</div>`;
       }
 
       homeTooltip.innerHTML = `
@@ -4411,24 +4440,71 @@ function bindInteractiveEvents() {
           <span class="chart-tooltip-title">${esc(bucket.fullDate || bucket.dayDisplay || bucket.dayLabel)}</span>
         </div>
         <div class="chart-tooltip-value num">${money(activePt.balance)}</div>
+        ${dayTxs.length > 0 ? `
+          <div style="display: flex; gap: 6px; margin-top: 4px; font-size: 10.5px; align-items: center;">
+            ${dayInc > 0 ? `<span style="color: var(--accent-jade); font-weight: 700;">+${money(dayInc)}</span>` : ''}
+            ${dayExp > 0 ? `<span style="color: var(--accent-coral); font-weight: 700;">−${money(dayExp)}</span>` : ''}
+            <span style="color: var(--text-muted); font-size: 10px;">(${dayTxs.length} оп.)</span>
+          </div>
+        ` : ''}
         ${txsHtml}
       `;
 
-      // Center tooltip on cursor, constrained within chart bounds
-      const tooltipW = 185;
-      let leftPos = pxX;
-      if (leftPos + tooltipW / 2 > rect.width) {
-        leftPos = rect.width - tooltipW / 2 - 8;
-      } else if (leftPos - tooltipW / 2 < 0) {
-        leftPos = tooltipW / 2 + 8;
-      }
+      // Smart Side-Anchoring for Desktop HUD:
+      // If cursor is on right half of chart, popover anchors to the LEFT of the laser beacon!
+      // If cursor is on left half, popover anchors to the RIGHT of the laser beacon!
+      const isRightHalf = pxX > (rect.width * 0.52);
+      const gap = 16;
+      const leftPos = isRightHalf ? (pxX - gap) : (pxX + gap);
+      const transformX = isRightHalf ? '-100%' : '0%';
 
+      // Clamped safely vertically inside plot bounds (top: 0 is safely below figure and meta chips!)
       homeTooltip.style.left = `${leftPos}px`;
-      homeTooltip.style.top = `${Math.max(8, pxY - 14)}px`;
+      homeTooltip.style.top = `0px`;
+      homeTooltip.style.transform = `translate(${transformX}, 0)`;
       homeTooltip.classList.add('visible');
+
+      // Update Day Breakdown dock (active on mobile and expandable on desktop)
+      if (homeDayBreakdown) {
+        homeDayBreakdown.innerHTML = `
+          <div class="day-breakdown-head">
+            <div class="day-breakdown-date-wrap">
+              <span class="day-breakdown-dot"></span>
+              <span class="day-breakdown-date">${esc(bucket.fullDate || bucket.dayDisplay || bucket.dayLabel)}</span>
+            </div>
+            <div class="day-breakdown-bal num">${money(activePt.balance)}</div>
+          </div>
+          <div class="day-breakdown-pills">
+            ${dayInc > 0 ? `<span class="day-pill inc">+${money(dayInc)}</span>` : ''}
+            ${dayExp > 0 ? `<span class="day-pill exp">−${money(dayExp)}</span>` : ''}
+            <span class="day-pill count">${formatOpsCount(dayTxs.length)}</span>
+          </div>
+          ${dayTxs.length > 0 ? `
+            <div class="day-breakdown-txs">
+              ${dayTxs.map(t => {
+                const isInc = t.type === 'income';
+                const sign = isInc ? '+' : '−';
+                const tTime = formatTxTime(t);
+                return `
+                  <div class="day-tx-item">
+                    <div class="day-tx-left">
+                      <span class="day-tx-time">${tTime}</span>
+                      <span class="day-tx-cat">${esc(t.category)}</span>
+                    </div>
+                    <span class="day-tx-amount ${isInc ? 'inc' : 'exp'}">${sign}${money(t.amount)}</span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : `
+            <div style="font-size: 11.5px; color: var(--text-muted); padding: 4px 0;">В этот день операций не было • Баланс стабилен</div>
+          `}
+        `;
+        homeDayBreakdown.classList.add('visible');
+      }
     };
 
-    homeWrap.onmouseleave = () => {
+    const resetHomeScrub = () => {
       if (homeScrubberLaser) homeScrubberLaser.style.opacity = '0';
       if (homeScrubberBeacon) homeScrubberBeacon.style.opacity = '0';
       if (homeTerminalBeacon) homeTerminalBeacon.style.opacity = '1';
@@ -4441,7 +4517,36 @@ function bindInteractiveEvents() {
       if (heroBalLbl) {
         heroBalLbl.innerText = 'Чистый свободный остаток';
       }
+      lastScrubbedDayIdx = -1;
     };
+
+    homeWrap.onmousemove = e => handleHomeScrub(e.clientX);
+    homeWrap.onmouseleave = resetHomeScrub;
+
+    // Full Mobile Touch Support
+    homeWrap.addEventListener('touchstart', e => {
+      if (e.touches && e.touches.length > 0) {
+        handleHomeScrub(e.touches[0].clientX);
+      }
+    }, { passive: true });
+
+    homeWrap.addEventListener('touchmove', e => {
+      if (e.touches && e.touches.length > 0) {
+        e.preventDefault(); // lock vertical scroll while scrubbing the chart
+        handleHomeScrub(e.touches[0].clientX);
+      }
+    }, { passive: false });
+
+    homeWrap.addEventListener('touchend', () => {
+      // On desktop mouse leaves, on mobile keep day breakdown readable until tap elsewhere
+      setTimeout(() => {
+        if (window.innerWidth <= 640) {
+          // On mobile leave the selected day active so user can review the transactions!
+        } else {
+          resetHomeScrub();
+        }
+      }, 300);
+    }, { passive: true });
   }
 
   // Cashflow Dual Mode (Bars & Wave) Dynamic Scrubber & Tooltip
