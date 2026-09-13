@@ -4415,7 +4415,7 @@ function bindInteractiveEvents() {
       let txsHtml = '';
       if (dayTxs.length > 0) {
         txsHtml = `
-          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto; padding-right: 2px;">
+          <div class="chart-tooltip-txs">
             ${dayTxs.map(t => {
               const isInc = t.type === 'income';
               const color = isInc ? 'var(--accent-jade)' : 'var(--accent-coral)';
@@ -4423,7 +4423,7 @@ function bindInteractiveEvents() {
               const sign = isInc ? '+' : '−';
               const tTime = formatTxTime(t);
               return `
-                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11.5px; background: ${bg}; padding: 3px 8px; border-radius: 4px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 11.5px; background: ${bg}; padding: 4px 8px; border-radius: 5px;">
                   <span style="color: var(--text-secondary); font-size: 10.5px; font-weight: 600;">${tTime} • ${esc(t.category)}</span>
                   <span style="color: ${color}; font-weight: 700; font-family: var(--font-mono);">${sign}${money(t.amount)}</span>
                 </div>
