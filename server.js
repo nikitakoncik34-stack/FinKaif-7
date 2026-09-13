@@ -70,6 +70,137 @@ const cookie = {
 
 const token = user => jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "14d" });
 
+const GEMINI_API_KEYS = [
+  Buffer.from("QVEuQWI4Uk42S3JXeGdudDl6bDJsd0lHcVlacDBONk1MSHhrVXl4c285aXpwU1VqZEhYSXc=", "base64").toString("utf8"),
+  process.env.GEMINI_API_KEY,
+  Buffer.from("QVEuQWI4Uk42TFRKMGxod1B2QnpuTE5HQkd4cHBta1hiaHZVYXZ1QXAyc2JGaWNDNERTYmc=", "base64").toString("utf8")
+].filter(Boolean);
+
+function parseTxFallback(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+
+  let cleanWords = ' ' + text + ' ';
+  let amount = 0;
+
+  const matchAndRemove = (regex, extractVal) => {
+    const m = cleanWords.match(regex);
+    if (m) {
+      amount = extractVal(m);
+      cleanWords = cleanWords.replace(m[0], ' ');
+      return true;
+    }
+    return false;
+  };
+
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])пол[- ]?лям[а-я]*(?:$|[^а-яёa-z0-9])/i, () => 500000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:лям[а-я]*|лимон[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000000)) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:лям[а-я]*|лимон[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 1000000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 40000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 50000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яёa-z0-9])/i, () => 500) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яёa-z0-9])/i, () => 2000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яёa-z0-9])/i, () => 3000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятерк[а-я]|пятёрк[а-я])(?:$|[^а-яёa-z0-9])/i, () => 5000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:чирик[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 10000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:косарь|косаря|кусок|штука)(?:$|[^а-яёa-z0-9])/i, () => 1000) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс[а-я]*|тыщ[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(/\s+/g, '').replace(',', '.'))));
+
+  const now = new Date();
+  const toIso = d => d.toISOString().slice(0, 10);
+  let occurred_on = toIso(now);
+
+  if (/(?:^|[^а-яёa-z0-9])позавчера(?:$|[^а-яёa-z0-9])/i.test(cleanWords)) {
+    const d = new Date(now); d.setDate(d.getDate() - 2);
+    occurred_on = toIso(d);
+  } else if (/(?:^|[^а-яёa-z0-9])вчера(?:$|[^а-яёa-z0-9])/i.test(cleanWords)) {
+    const d = new Date(now); d.setDate(d.getDate() - 1);
+    occurred_on = toIso(d);
+  }
+
+  const lower = text.toLowerCase();
+  let type = 'expense';
+  let category = 'Прочее';
+
+  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
+
+  if (isIncome) {
+    type = 'income';
+    if (/фриланс|проект|клиент|заказ|шабашк|халтур|подработк|смен[аы]|дизайн|верстк|разработк|сайт/i.test(lower)) {
+      category = 'Фриланс';
+    } else if (/дивиденд|купон|процент|вклад|акци|инвест|крипт/i.test(lower)) {
+      category = 'Инвестиции';
+    } else if (/продал|авито|юла|сбыт/i.test(lower)) {
+      category = 'Продажи';
+    } else if (/подар|день рожден|др\b|чаев|донат/i.test(lower)) {
+      category = 'Подарки';
+    } else if (/кэшбэк|бонус|возврат/i.test(lower)) {
+      category = 'Кэшбэк';
+    } else if (/долг|вернули|отдали/i.test(lower)) {
+      category = 'Возврат долга';
+    } else {
+      category = 'Зарплата';
+    }
+  } else if (/такс|uber|убер|яндекс.*гоу|яндекс.*такси|карш|каршеринг|ситидрайв|заправил|бенз|азс|лукойл|мойка|помыл тачк|шиномонтаж|метро|проездной|автобус|сапсан/i.test(lower)) {
+    type = 'expense';
+    category = 'Транспорт';
+  } else if (/кофе|кофей|латте|капуч|флэт|раф|эспрессо|чай|пекарн|круассан/i.test(lower)) {
+    type = 'expense';
+    category = 'Кафе';
+  } else if (/шавух|шаверм|шаурм|пицц|додо|бургер|макдак|вкусно.*точк|кфс|kfc|ролл|суши|обед|ужин|завтрак|ланч|пивас|пиво|сидр|бар|паб|рестик|ресторан|посидели|скинул.*кент|скинул.*шав|доставк/i.test(lower)) {
+    type = 'expense';
+    category = 'Рестораны';
+  } else if (/плойк|соньк|playstation|ps5|xbox|видяха|видеокарт|айфон|iphone|эйрподс|airpods|макбук|macbook|ноут|комп|пк|техник/i.test(lower)) {
+    type = 'expense';
+    category = 'Техника';
+  } else if (/спотик|spotify|яндекс плюс|плюс|телег|telegram.*prem|нетфликс|netflix|ютуб|youtube|впн|vpn|айклауд|icloud|облако|подписк/i.test(lower)) {
+    type = 'expense';
+    category = 'Подписки';
+  } else if (/шмот|педал|кросс|кед|ботинк|худи|куртк|джинс|вб|вайлдберриз|wildberries|озон|ozon|лайм|lime|шопинг|покупк/i.test(lower)) {
+    type = 'expense';
+    category = 'Покупки';
+  } else if (/зал|спортзал|фитнес|трен[яе]|абонемент|протеин|аптек|таблетк|врач|стоматолог|здоровь/i.test(lower)) {
+    type = 'expense';
+    category = 'Здоровье';
+  } else if (/аренд|квартир|хат|жкх|коммуналк|свет|интернет/i.test(lower)) {
+    type = 'expense';
+    category = 'Жилье';
+  } else if (/продукт|магазин|пятерочк|перекресток|магнит|вкусвилл|еда/i.test(lower)) {
+    type = 'expense';
+    category = 'Продукты';
+  }
+
+  // Clean description
+  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'тысяч', 'тысячи', 'тыщ']);
+  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал'];
+
+  const remainingWords = cleanWords
+    .trim()
+    .split(/\s+/)
+    .filter(w => {
+      const low = w.toLowerCase().replace(/[^а-яёa-z0-9]/gi, '');
+      if (!low) return false;
+      if (stopWords.has(low)) return false;
+      if (actionPrefixes.some(p => low.startsWith(p))) return false;
+      return true;
+    });
+
+  let cleanDesc = remainingWords.join(' ').trim();
+  if (cleanDesc) {
+    cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+  }
+
+  return {
+    type,
+    category,
+    amount,
+    description: cleanDesc || (type === 'income' ? 'Поступление средств' : category),
+    occurred_on
+  };
+}
+
 function auth(req, res, next) {
   try {
     const header = req.headers.authorization;
@@ -368,26 +499,73 @@ app.post("/api/parse-tx", auth, async (req, res) => {
     if (!text || !String(text).trim()) {
       return res.status(400).json({ error: "Текст не передан." });
     }
-    const prompt = `Ты финансовый парсер FinKaif OS. Твоя задача — извлечь параметры транзакции из русской разговорной фразы со сленгом.
-Сленг: косарь/кусок/штука = 1000, двушка = 2000, трешка = 3000, пятихатка = 500, пятерка = 5000, чирик = 10000, сорокет = 40000, полтос = 50000, сотка = 100000, лям = 1000000.
-Категории: шавуха/бургер/пицца = Кафе, заправил тачку/бенз/убер = Транспорт, шмот/кроссы/зарина = Покупки, плойка/сонька = Техника, спотик/телега/плюс = Подписки, аванс/получка/кэш = Зарплата (income).
-Даты: сегодня, вчера, позавчера.
+    const cleanInput = String(text).trim();
 
-Ответь ТОЛЬКО чистым валидным JSON без markdown:
+    const now = new Date();
+    const dYesterday = new Date(now); dYesterday.setDate(dYesterday.getDate() - 1);
+    const dBefore = new Date(now); dBefore.setDate(dBefore.getDate() - 2);
+    const toIso = d => d.toISOString().slice(0, 10);
+
+    const prompt = `Ты — профессиональный финансовый классификатор транзакций FinKaif OS.
+Твоя задача — извлечь параметры операции из русской разговорной фразы со сленгом.
+
+КРИТИЧЕСКИ ВАЖНО — ТОЧНОЕ ОПРЕДЕЛЕНИЕ ТИПА (income vs expense):
+1. "type": "income" (ДОХОД / ПОСТУПЛЕНИЕ) — если деньги получены, заработаны, начислены, подняты или пришли:
+   - Примеры: «получил», «заработал», «мне перевели / скинули», «поднял», «выплатили», «пришли деньги / кэш», «капнул аванс», «начислили зарплату», «продал на авито», «подарили на др», «вернули долг».
+2. "type": "expense" (РАСХОД / ТРАТА) — если деньги потрачены или отданы:
+   - Примеры: «купил», «потратил», «заправил», «скинул кенту за еду», «оплатил», «взял шмот», «сходили в ресторан».
+
+СУММА И СЛЕНГ (amount):
+- косарь / кусок / штука / тонна = 1000
+- двушка = 2000, трешка / трояк = 3000, пятихатка = 500, пятерка = 5000, чирик = 10000
+- сорокет = 40000, полтос / полтинник = 50000, сотка = 100000
+- пол-ляма = 500000, лям / лимон = 1000000
+- 15к / 15 тыс / 15 тысяч = 15000
+
+КАТЕГОРИИ:
+- Для income: Зарплата, Фриланс, Инвестиции, Подарки, Продажи, Возврат долга, Прочее.
+- Для expense: Продукты, Кафе, Рестораны, Транспорт, Жилье, Техника, Покупки, Здоровье, Подписки, Развлечения, Прочее.
+
+ДАТЫ:
+- сегодня = ${toIso(now)}, вчера = ${toIso(dYesterday)}, позавчера = ${toIso(dBefore)}
+
+Ответь СТРОГО валидным JSON без markdown:
 {
-  "type": "expense" или "income",
+  "type": "income" или "expense",
   "category": "Название категории",
-  "amount": число,
-  "description": "Краткое описание",
+  "amount": числовое_значение,
+  "description": "Краткое понятное описание",
   "occurred_on": "YYYY-MM-DD"
 }`;
+
     let parsed = null;
-    try {
-      if (geminiKey) {
-        const raw = await callGemini(geminiKey, prompt, String(text).trim(), []);
-        if (raw) parsed = JSON.parse(raw.replace(/\`\`\`(?:json)?/gi, '').replace(/\`\`\`/g, '').trim());
+    for (const key of GEMINI_API_KEYS) {
+      try {
+        const raw = await callGemini(key, prompt, cleanInput, []);
+        if (raw) {
+          const cleanJson = raw.replace(/^```(?:json)?/im, '').replace(/```$/im, '').trim();
+          const p = JSON.parse(cleanJson);
+          if (p && Number(p.amount) > 0) {
+            parsed = {
+              type: p.type === 'income' ? 'income' : 'expense',
+              category: String(p.category || (p.type === 'income' ? 'Зарплата' : 'Прочее')),
+              amount: Math.round(Number(p.amount)),
+              description: String(p.description || cleanInput),
+              occurred_on: String(p.occurred_on || toIso(now)),
+              ai: true
+            };
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn("Gemini parse attempt notice:", err.message);
       }
-    } catch {}
+    }
+
+    if (!parsed) {
+      parsed = parseTxFallback(cleanInput);
+    }
+
     res.json({ ok: true, parsed });
   } catch (e) {
     fail(res, e);
@@ -960,7 +1138,8 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
   }
 
   const parts = candidate.content?.parts || [];
-  const fullText = parts.map(p => p.text || "").join("").trim();
+  const validParts = parts.filter(p => !p.thought);
+  const fullText = (validParts.length > 0 ? validParts : parts).map(p => p.text || "").join("").trim();
   if (!fullText) {
     throw new Error("Пустой текст ответа Gemini");
   }
@@ -1003,8 +1182,6 @@ const assistantHandler = async (req, res) => {
       console.warn("DB read error in assistant:", dbReadErr.message);
     }
 
-    const DEFAULT_GEMINI_KEY = Buffer.from("QVEuQWI4Uk42TFRKMGxod1B2QnpuTE5HQkd4cHBta1hiaHZVYXZ1QXAyc2JGaWNDNERTYmc=", "base64").toString("utf8");
-
     const rawOpenAI = process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.trim() : "";
     const isValidOpenAI = rawOpenAI.startsWith("sk-");
 
@@ -1013,7 +1190,7 @@ const assistantHandler = async (req, res) => {
       geminiKey = rawOpenAI;
     }
     if (!geminiKey && !isValidOpenAI && !process.env.GROQ_API_KEY && !process.env.DEEPSEEK_API_KEY) {
-      geminiKey = DEFAULT_GEMINI_KEY;
+      geminiKey = GEMINI_API_KEYS[0];
     }
 
     let answer = "";
