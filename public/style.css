@@ -108,6 +108,49 @@ html, body {
   padding: 24px 20px 80px;
 }
 
+.view-container {
+  animation: viewFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+@keyframes viewFadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tactile Spring Physics */
+.btn-primary:active, .btn-secondary:active, .quick-action-btn:active, .period-tab:active, .filter-tab:active, .quick-pill-btn:active, .cat-chip:active {
+  transform: scale(0.96) !important;
+  transition: transform 0.08s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* MengTo / Linear Spotlight Cursor Glow */
+.stat-card, .hero-balance-card, .budget-card, .goal-card, .quick-action-btn, .tx-card, .create-card {
+  position: relative;
+}
+
+.stat-card::after, .hero-balance-card::after, .budget-card::after, .goal-card::after, .quick-action-btn::after, .tx-card::after, .create-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(360px circle at var(--mouse-x, -500px) var(--mouse-y, -500px), rgba(45, 212, 191, 0.08), transparent 65%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: 1;
+}
+
+.stat-card:hover::after, .hero-balance-card:hover::after, .budget-card:hover::after, .goal-card:hover::after, .quick-action-btn:hover::after, .tx-card:hover::after, .create-card:hover::after {
+  opacity: 1;
+}
+
 /* ==========================================================================
    MASTHEAD / NAVIGATION
    ========================================================================== */
