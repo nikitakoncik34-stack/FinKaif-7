@@ -3566,40 +3566,79 @@ html, body {
   color: #94A3B8;
 }
 
-/* Today / Latest Day styling */
+/* Today styling */
+.home-axis-item.is-today .axis-tick-pip,
 .home-axis-item.is-latest .axis-tick-pip {
   background: var(--accent-jade);
-  height: 7px;
+  height: 8px;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);
 }
 
+.home-axis-item.is-today .axis-date-badge,
 .home-axis-item.is-latest .axis-date-badge {
-  background: rgba(45, 212, 191, 0.12);
-  border: 1px solid rgba(45, 212, 191, 0.28);
+  background: rgba(45, 212, 191, 0.16);
+  border: 1px solid rgba(45, 212, 191, 0.45);
   border-radius: var(--r-pill);
   padding: 2px 8px;
   margin-top: -1px;
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.25);
 }
 
+.home-axis-item.is-today .axis-dow,
 .home-axis-item.is-latest .axis-dow {
   color: var(--accent-jade);
-  font-weight: 700;
+  font-weight: 800;
 }
 
+.home-axis-item.is-today .axis-num,
 .home-axis-item.is-latest .axis-num {
   color: #FFFFFF;
   font-weight: 800;
 }
 
-/* Deficit mood adaptation */
-.hero-balance-card.deficit .home-axis-item.is-latest .axis-tick-pip {
-  background: var(--accent-coral);
+/* Future Day styling */
+.home-axis-item.is-future {
+  opacity: 0.52;
+  transition: opacity 0.2s ease;
 }
 
+.home-axis-item.is-future:hover,
+.home-axis-item.is-future.active {
+  opacity: 1;
+}
+
+.home-axis-item.is-future .axis-tick-pip {
+  background: rgba(255, 255, 255, 0.2);
+  height: 4px;
+}
+
+.home-axis-item.is-future .axis-date-badge {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.home-axis-item.is-future .axis-dow {
+  color: #64748B;
+}
+
+.home-axis-item.is-future .axis-num {
+  color: #64748B;
+}
+
+/* Deficit mood adaptation */
+.hero-balance-card.deficit .home-axis-item.is-today .axis-tick-pip,
+.hero-balance-card.deficit .home-axis-item.is-latest .axis-tick-pip {
+  background: var(--accent-coral);
+  box-shadow: 0 0 8px rgba(251, 113, 133, 0.6);
+}
+
+.hero-balance-card.deficit .home-axis-item.is-today .axis-date-badge,
 .hero-balance-card.deficit .home-axis-item.is-latest .axis-date-badge {
   background: rgba(251, 113, 133, 0.14);
   border-color: rgba(251, 113, 133, 0.35);
+  box-shadow: 0 0 12px rgba(251, 113, 133, 0.25);
 }
 
+.hero-balance-card.deficit .home-axis-item.is-today .axis-dow,
 .hero-balance-card.deficit .home-axis-item.is-latest .axis-dow {
   color: var(--accent-coral);
 }
