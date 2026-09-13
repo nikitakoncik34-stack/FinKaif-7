@@ -343,6 +343,36 @@ html, body {
   font-size: 12.5px;
 }
 
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--fast);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+}
+
+.btn-ghost:active {
+  transform: scale(0.97);
+}
+
 .user-btn {
   display: flex;
   align-items: center;
@@ -4804,7 +4834,73 @@ input[type="number"] {
 .payday-actions-footer {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.payday-actions-footer .btn-primary {
+  width: 100%;
+  min-height: 48px;
+  padding: 13px 20px;
+  border-radius: var(--r-pill);
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
+  background: linear-gradient(135deg, var(--accent-jade) 0%, #0D9488 100%);
+  color: #042F2E;
+  box-shadow: 0 4px 18px rgba(45, 212, 191, 0.35);
+  transition: all var(--fast);
+  letter-spacing: -0.01em;
+  white-space: normal;
+  text-align: center;
+}
+
+.payday-actions-footer .btn-primary:hover {
+  background: linear-gradient(135deg, #5EEAD4 0%, #14B8A6 100%);
+  box-shadow: 0 6px 24px rgba(45, 212, 191, 0.5);
+  transform: translateY(-1px);
+}
+
+.payday-actions-footer .btn-primary:active {
+  transform: scale(0.98);
+}
+
+.payday-actions-footer .btn-ghost {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 20px;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  margin-top: 0 !important;
+  transition: all var(--fast);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.payday-actions-footer .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+.payday-actions-footer .btn-ghost:active {
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 @media (max-width: 600px) {
