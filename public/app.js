@@ -295,6 +295,7 @@ let cashflowChartMode = localStorage.getItem('finkaif_cf_mode') || 'bars';
 let activeAnalyticsCat = null;
 let hoveredAnalyticsCat = null;
 let txFilter = 'all';
+let txMonthFilter = 'all';
 let txSearch = '';
 let modalType = 'expense';
 let editingTxId = null;
@@ -2229,8 +2230,27 @@ function renderAnalyticsView() {
    CRITICAL RULE: NO "Добрый день" here!
    ========================================================================== */
 function renderTransactionsView() {
+  const monthMap = {};
+  (data.transactions || []).forEach(t => {
+    const iso = getTxIso(t);
+    if (iso && iso.length >= 7) {
+      const ym = iso.slice(0, 7);
+      if (!monthMap[ym]) {
+        const [y, m] = ym.split('-');
+        const dateObj = new Date(Number(y), Number(m) - 1, 1);
+        const label = dateObj.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+        monthMap[ym] = label.charAt(0).toUpperCase() + label.slice(1);
+      }
+    }
+  });
+  const availableMonths = Object.keys(monthMap).sort((a, b) => b.localeCompare(a));
+
   const filtered = data.transactions.filter(t => {
     if (txFilter !== 'all' && t.type !== txFilter) return false;
+    if (txMonthFilter !== 'all') {
+      const iso = getTxIso(t);
+      if (!iso || !iso.startsWith(txMonthFilter)) return false;
+    }
     if (txSearch) {
       const q = txSearch.toLowerCase();
       return (t.category || '').toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q);
@@ -2288,6 +2308,18 @@ function renderTransactionsView() {
         <span class="tx-summary-val num ${txNet >= 0 ? 'inc' : 'exp'}">${txNet >= 0 ? '+' : ''}${money(txNet)}</span>
       </div>
     </div>
+
+    <!-- Month Selection Strip -->
+    ${availableMonths.length > 0 ? `
+      <div class="tx-month-strip">
+        <button class="month-chip ${txMonthFilter === 'all' ? 'active' : ''}" data-month="all">Все месяцы</button>
+        ${availableMonths.map(ym => `
+          <button class="month-chip ${txMonthFilter === ym ? 'active' : ''}" data-month="${ym}">
+            ${esc(monthMap[ym])}
+          </button>
+        `).join('')}
+      </div>
+    ` : ''}
 
     <!-- Search & Filters -->
     <div class="filter-bar">
@@ -4217,7 +4249,15 @@ function bindInteractiveEvents() {
       const rows = [
         ['ID', 'Дата', 'Тип', 'Категория', 'Описание', 'Сумма (RUB)']
       ];
-      (data.transactions || []).forEach(t => {
+      const toExport = (data.transactions || []).filter(t => {
+        if (txFilter !== 'all' && t.type !== txFilter) return false;
+        if (txMonthFilter !== 'all') {
+          const iso = getTxIso(t);
+          if (!iso || !iso.startsWith(txMonthFilter)) return false;
+        }
+        return true;
+      });
+      toExport.forEach(t => {
         const typeStr = t.type === 'income' ? 'Поступление' : (t.type === 'transfer' ? 'Перевод' : 'Расход');
         const catStr = `"${String(t.category || '').replace(/"/g, '""')}"`;
         const descStr = `"${String(t.description || '').replace(/"/g, '""')}"`;
@@ -4235,7 +4275,8 @@ function bindInteractiveEvents() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `finkaif_transactions_${toDateIso(new Date())}.csv`);
+      const suffix = txMonthFilter !== 'all' ? `_${txMonthFilter}` : '';
+      link.setAttribute('download', `finkaif_transactions${suffix}_${toDateIso(new Date())}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -4398,6 +4439,14 @@ function bindInteractiveEvents() {
   $$('.filter-tab').forEach(btn => {
     btn.onclick = () => {
       txFilter = btn.getAttribute('data-filter');
+      renderApp();
+    };
+  });
+
+  // Transaction Month Chips
+  $$('.month-chip').forEach(btn => {
+    btn.onclick = () => {
+      txMonthFilter = btn.getAttribute('data-month');
       renderApp();
     };
   });
