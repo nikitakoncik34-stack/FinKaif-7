@@ -4095,17 +4095,17 @@ function renderPaydayModal() {
 
         <div class="payday-actions-footer">
           ${primaryGoal ? `
-            <button class="btn-primary" id="btn-payday-split-goal" data-goal-id="${primaryGoal.id}" data-split-amt="${savings}" style="width: 100%;">
+            <button class="btn-primary" id="btn-payday-split-goal" data-goal-id="${primaryGoal.id}" data-split-amt="${savings}">
               ${icon('sparkle', 16)}
               <span>Отложить 20% (+${new Intl.NumberFormat('ru-RU').format(savings)} ₽) в «${esc(primaryGoal.name)}»</span>
             </button>
           ` : `
-            <button class="btn-primary" id="btn-payday-create-goal" style="width: 100%;">
+            <button class="btn-primary" id="btn-payday-create-goal">
               ${icon('sparkle', 16)}
               <span>Создать цель для 20% сбережений</span>
             </button>
           `}
-          <button type="button" class="btn-ghost" id="btn-close-payday" style="width: 100%; margin-top: 8px;">
+          <button type="button" class="btn-ghost" id="btn-close-payday">
             Спасибо, распределю самостоятельно
           </button>
         </div>
@@ -4116,6 +4116,10 @@ function renderPaydayModal() {
 
 function renderApp() {
   window.renderApp = renderApp;
+  window.openPaydayModal = (amt = 1000000) => {
+    paydaySplitData = { amount: amt };
+    renderApp();
+  };
   const container = document.getElementById('app');
   if (!container) return;
 
@@ -6077,6 +6081,15 @@ function bindInteractiveEvents() {
     btnClosePayday.onclick = () => {
       paydaySplitData = null;
       renderApp();
+    };
+  }
+  const paydayModal = document.getElementById('payday-modal');
+  if (paydayModal) {
+    paydayModal.onclick = (e) => {
+      if (e.target === paydayModal) {
+        paydaySplitData = null;
+        renderApp();
+      }
     };
   }
 
