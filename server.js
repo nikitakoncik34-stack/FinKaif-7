@@ -233,7 +233,7 @@ app.post("/api/profile", auth, async (req, res) => {
   }
 });
 
-const tables = { transactions: "transactions", budgets: "budgets", goals: "goals" };
+const tables = { transactions: "transactions", budgets: "budgets", goals: "goals", subscriptions: "subscriptions" };
 
 app.get("/api/:resource", auth, async (req, res) => {
   try {
@@ -339,6 +339,56 @@ app.put("/api/goals/:id", auth, async (req, res) => {
     );
     if (!r.rows[0]) return res.status(404).json({ error: "Цель не найдена." });
     res.json(r.rows[0]);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/subscriptions", auth, async (req, res) => {
+  try {
+    const x = req.body;
+    if (!String(x.name || "").trim() || !(Number(x.amount) > 0)) {
+      return res.status(400).json({ error: "Проверьте название и сумму подписки." });
+    }
+    const day = Math.min(31, Math.max(1, parseInt(x.day_of_month, 10) || 1));
+    const cat = String(x.category || "Подписки").trim();
+    const r = await db.query(
+      "insert into subscriptions(user_id,name,amount,category,day_of_month) values($1,$2,$3,$4,$5) returning *",
+      [req.user.id, String(x.name).trim(), Math.round(Number(x.amount) * 100) / 100, cat, day]
+    );
+    res.json(r.rows[0]);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/parse-tx", auth, async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ error: "Текст не передан." });
+    }
+    const prompt = `Ты финансовый парсер FinKaif OS. Твоя задача — извлечь параметры транзакции из русской разговорной фразы со сленгом.
+Сленг: косарь/кусок/штука = 1000, двушка = 2000, трешка = 3000, пятихатка = 500, пятерка = 5000, чирик = 10000, сорокет = 40000, полтос = 50000, сотка = 100000, лям = 1000000.
+Категории: шавуха/бургер/пицца = Кафе, заправил тачку/бенз/убер = Транспорт, шмот/кроссы/зарина = Покупки, плойка/сонька = Техника, спотик/телега/плюс = Подписки, аванс/получка/кэш = Зарплата (income).
+Даты: сегодня, вчера, позавчера.
+
+Ответь ТОЛЬКО чистым валидным JSON без markdown:
+{
+  "type": "expense" или "income",
+  "category": "Название категории",
+  "amount": число,
+  "description": "Краткое описание",
+  "occurred_on": "YYYY-MM-DD"
+}`;
+    let parsed = null;
+    try {
+      if (geminiKey) {
+        const raw = await callGemini(geminiKey, prompt, String(text).trim(), []);
+        if (raw) parsed = JSON.parse(raw.replace(/\`\`\`(?:json)?/gi, '').replace(/\`\`\`/g, '').trim());
+      }
+    } catch {}
+    res.json({ ok: true, parsed });
   } catch (e) {
     fail(res, e);
   }
