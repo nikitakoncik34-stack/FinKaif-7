@@ -408,6 +408,31 @@ function calculateFinScore() {
   return { score, label, badgeClass, runway: runway.toFixed(1), savingsRate };
 }
 
+// Central Moscow Time (Europe/Moscow, UTC+3) helper
+function getMskDate(d = new Date()) {
+  const dateObj = (typeof d === 'string' || typeof d === 'number') ? new Date(d) : (d || new Date());
+  if (isNaN(dateObj.getTime())) return new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hourCycle: 'h23'
+    });
+    const parts = formatter.formatToParts(dateObj);
+    const p = {};
+    for (const { type, value } of parts) p[type] = value;
+    return new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+  } catch (e) {
+    const utc = dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000);
+    return new Date(utc + (3600000 * 3));
+  }
+}
+
 // Local Date YYYY-MM-DD helper without UTC timezone distortion
 const toDateIso = d => {
   if (!d) return '';
@@ -417,6 +442,9 @@ const toDateIso = d => {
   return `${y}-${m}-${day}`;
 };
 
+// Current Moscow Date in YYYY-MM-DD
+const getTodayMskIso = () => toDateIso(getMskDate());
+
 // Safe ISO Date extractor (YYYY-MM-DD) from string, Date or object
 const getTxIso = t => {
   if (!t) return '';
@@ -424,11 +452,11 @@ const getTxIso = t => {
   const s = String(val);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   const d = new Date(s);
-  if (!isNaN(d.getTime())) return toDateIso(d);
+  if (!isNaN(d.getTime())) return toDateIso(getMskDate(d));
   return s.slice(0, 10);
 };
 
-// Intraday transaction minute parser (0..1439) with timezone awareness
+// Intraday transaction minute parser (0..1439) with Moscow timezone awareness
 const getTxMinutes = t => {
   if (!t) return 12 * 60;
   if (t.time && /^\d{1,2}:\d{2}$/.test(String(t.time).trim())) {
@@ -444,7 +472,8 @@ const getTxMinutes = t => {
     }
     const d = new Date(s);
     if (!isNaN(d.getTime())) {
-      return d.getHours() * 60 + d.getMinutes();
+      const msk = getMskDate(d);
+      return msk.getHours() * 60 + msk.getMinutes();
     }
   }
   return 12 * 60;
@@ -459,8 +488,9 @@ const formatTxTime = t => {
   if (raw) {
     const d = new Date(raw);
     if (!isNaN(d.getTime())) {
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
+      const msk = getMskDate(d);
+      const hh = String(msk.getHours()).padStart(2, '0');
+      const mm = String(msk.getMinutes()).padStart(2, '0');
       return `${hh}:${mm}`;
     }
   }
@@ -723,18 +753,19 @@ function parseQuickTxInput(raw) {
     cleanWords = cleanWords.replace(new RegExp(matchedNumStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
   }
 
-  // 2. Relative Dates
-  let occurred_on = toDateIso(new Date());
+  // 2. Relative Dates (Synchronized with Moscow Time)
+  const mskNow = getMskDate();
+  let occurred_on = toDateIso(mskNow);
   let dateLabel = 'Сегодня';
 
   if (/(?:^|[^а-яa-z0-9])позавчера(?:$|[^а-яa-z0-9])/i.test(cleanWords)) {
-    const d = new Date();
+    const d = new Date(mskNow);
     d.setDate(d.getDate() - 2);
     occurred_on = toDateIso(d);
     dateLabel = 'Позавчера';
     cleanWords = cleanWords.replace(/(?:^|[^а-яa-z0-9])позавчера(?:$|[^а-яa-z0-9])/gi, ' ');
   } else if (/(?:^|[^а-яa-z0-9])вчера(?:$|[^а-яa-z0-9])/i.test(cleanWords)) {
-    const d = new Date();
+    const d = new Date(mskNow);
     d.setDate(d.getDate() - 1);
     occurred_on = toDateIso(d);
     dateLabel = 'Вчера';
@@ -743,11 +774,30 @@ function parseQuickTxInput(raw) {
     const daysMatch = cleanWords.match(/(\d+)\s*(?:дн[яей]+|дня)\s*назад/i);
     if (daysMatch) {
       const n = parseInt(daysMatch[1], 10);
-      const d = new Date();
+      const d = new Date(mskNow);
       d.setDate(d.getDate() - n);
       occurred_on = toDateIso(d);
       dateLabel = `${n} дн. назад`;
       cleanWords = cleanWords.replace(daysMatch[0], ' ');
+    } else {
+      // Day of week support (понедельник, вторник, среду, четверг, пятницу, субботу, воскресенье)
+      const dowMatch = cleanWords.match(/(?:в|во)?\s*(прошл[уюыйое]+)?\s*(понедельник|вторник|сред[уа]|четверг|пятниц[уа]|суббот[уа]|воскресень[ея])/i);
+      if (dowMatch) {
+        const dNames = { 'воскресень': 0, 'понедельник': 1, 'вторник': 2, 'сред': 3, 'четверг': 4, 'пятниц': 5, 'суббот': 6 };
+        const rawKey = Object.keys(dNames).find(k => dowMatch[2].toLowerCase().startsWith(k));
+        if (rawKey !== undefined) {
+          const targetDow = dNames[rawKey];
+          const curDow = mskNow.getDay();
+          let diff = curDow - targetDow;
+          if (diff < 0) diff += 7;
+          if (diff === 0 && dowMatch[1]) diff = 7; // "в прошлый понедельник" on Monday
+          const d = new Date(mskNow);
+          d.setDate(d.getDate() - diff);
+          occurred_on = toDateIso(d);
+          dateLabel = diff === 0 ? 'Сегодня' : (diff === 1 ? 'Вчера' : `${diff} дн. назад`);
+          cleanWords = cleanWords.replace(dowMatch[0], ' ');
+        }
+      }
     }
   }
 
@@ -1236,7 +1286,7 @@ function renderMasthead() {
    ========================================================================== */
 function renderSubscriptionRadar() {
   const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
-  const now = new Date();
+  const now = getMskDate();
   const today = now.getDate();
   const daysInCurMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
@@ -1491,8 +1541,8 @@ function renderHomeView() {
 
   const savingsRate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
 
-  // Build continuous intraday capital timeline
-  const now = new Date();
+  // Build continuous intraday capital timeline (Synchronized with Moscow Time)
+  const now = getMskDate();
   const svgW = 760;
   const svgH = 120;
   const padX = 28;
@@ -1527,12 +1577,20 @@ function renderHomeView() {
         txs: mTxs
       });
     }
-  } else {
-    // 7 days or 30 days
-    const numDays = period === '7d' ? 7 : 30;
-    for (let i = numDays - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+  } else if (period === '7d') {
+    // Current Calendar Week: Monday to Sunday (Пн — Вс) in Moscow Time
+    const mskNow = getMskDate();
+    const todayIso = toDateIso(mskNow);
+    const dow = mskNow.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const dayFromMonday = dow === 0 ? 6 : dow - 1;
+    const monday = new Date(mskNow.getFullYear(), mskNow.getMonth(), mskNow.getDate() - dayFromMonday);
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
       const iso = toDateIso(d);
+      const isToday = (iso === todayIso);
+      const isFuture = (iso > todayIso);
+
       const dayTxs = (data.transactions || [])
         .filter(t => getTxIso(t) === iso)
         .sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
@@ -1547,8 +1605,42 @@ function renderHomeView() {
         dayDate: d,
         dayNum: d.getDate(),
         wkShort: capWk,
-        dayLabel: period === '7d' ? capWk : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
-        dayDisplay: period === '7d' ? `${capWk} ${d.getDate()}` : `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
+        isToday,
+        isFuture,
+        dayLabel: capWk,
+        dayDisplay: `${capWk} ${d.getDate()}`,
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        exp: dayExp,
+        inc: dayInc,
+        txs: dayTxs
+      });
+    }
+  } else {
+    // 30 days
+    const numDays = 30;
+    const todayIso = toDateIso(now);
+    for (let i = numDays - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const iso = toDateIso(d);
+      const isToday = (iso === todayIso);
+      const dayTxs = (data.transactions || [])
+        .filter(t => getTxIso(t) === iso)
+        .sort((a, b) => getTxMinutes(a) - getTxMinutes(b));
+      const dayExp = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+      const dayInc = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+
+      const wkShort = d.toLocaleDateString('ru-RU', { weekday: 'short' });
+      const capWk = wkShort.charAt(0).toUpperCase() + wkShort.slice(1);
+
+      dayBuckets.push({
+        date: iso,
+        dayDate: d,
+        dayNum: d.getDate(),
+        wkShort: capWk,
+        isToday,
+        isFuture: false,
+        dayLabel: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+        dayDisplay: `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
         fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
         exp: dayExp,
         inc: dayInc,
@@ -1578,7 +1670,7 @@ function renderHomeView() {
 
   const periodInc = dayBuckets.reduce((s, p) => s + p.inc, 0);
   const periodExp = dayBuckets.reduce((s, p) => s + p.exp, 0);
-  const periodFootnote = period === '7d' ? 'За последние 7 дней' : (period === '30d' ? 'За последние 30 дней' : 'За последние 12 месяцев');
+  const periodFootnote = period === '7d' ? 'За текущую неделю (Пн–Вс)' : (period === '30d' ? 'За последние 30 дней' : 'За последние 12 месяцев');
 
   const minVal = Math.min(...pointsWithBal.map(p => p.balance));
   const maxVal = Math.max(...pointsWithBal.map(p => p.balance));
@@ -1653,7 +1745,9 @@ function renderHomeView() {
     else show = (idx % 2 === 0 || idx === points.length - 1);
 
     if (!show) return '';
-    const isLatest = (idx === points.length - 1);
+    const isToday = !!pt.isToday;
+    const isFuture = !!pt.isFuture;
+    const isLatest = (!isToday && idx === points.length - 1);
     const leftPct = ((pt.x / svgW) * 100).toFixed(2);
 
     let badgeContent = '';
@@ -1666,8 +1760,13 @@ function renderHomeView() {
       badgeContent = `<span class="axis-num">${esc(pt.dayDisplay || pt.dayLabel)}</span>`;
     }
 
+    let stateClass = '';
+    if (isToday) stateClass = 'is-today is-latest';
+    else if (isFuture) stateClass = 'is-future';
+    else if (isLatest) stateClass = 'is-latest';
+
     return `
-      <div class="home-axis-item ${isLatest ? 'is-latest' : ''}" data-idx="${idx}" style="left: ${leftPct}%;">
+      <div class="home-axis-item ${stateClass}" data-idx="${idx}" style="left: ${leftPct}%;">
         <div class="axis-tick-pip"></div>
         <div class="axis-date-badge">
           ${badgeContent}
@@ -1676,9 +1775,13 @@ function renderHomeView() {
     `;
   }).join('');
 
-  // HTML-based live terminal beacon (100% round circle, zero SVG distortion)
+  // HTML-based live terminal beacon (positioned on today's point!)
+  const beaconPt = (period === '7d' && points.some(p => p.isToday))
+    ? (points.find(p => p.isToday) || lastPt)
+    : lastPt;
+
   const terminalBeaconHtml = `
-    <div id="home-terminal-beacon" class="home-terminal-beacon" style="left: ${((lastPt.x / svgW) * 100).toFixed(2)}%; top: ${((lastPt.y / svgH) * 100).toFixed(2)}%;">
+    <div id="home-terminal-beacon" class="home-terminal-beacon" style="left: ${((beaconPt.x / svgW) * 100).toFixed(2)}%; top: ${((beaconPt.y / svgH) * 100).toFixed(2)}%;">
       <div class="terminal-pulse-ring" style="border-color: ${accentColor}; background: ${isDeficit ? 'rgba(251, 113, 133, 0.15)' : 'rgba(45, 212, 191, 0.15)'};"></div>
       <div class="terminal-core-dot" style="background: ${accentColor}; box-shadow: 0 0 6px ${accentColor};"></div>
     </div>
@@ -1715,10 +1818,17 @@ function renderHomeView() {
       </div>
     `;
 
+  const mskHour = getMskDate().getHours();
+  let timeGreeting = 'Добрый день';
+  if (mskHour >= 5 && mskHour < 12) timeGreeting = 'Доброе утро';
+  else if (mskHour >= 12 && mskHour < 18) timeGreeting = 'Добрый день';
+  else if (mskHour >= 18 && mskHour < 23) timeGreeting = 'Добрый вечер';
+  else timeGreeting = 'Доброй ночи';
+
   return `
     <div class="view-header">
       <div>
-        <div class="view-greeting">Добрый день, ${esc(userName)}</div>
+        <div class="view-greeting">${timeGreeting}, ${esc(userName)}</div>
         <h1 class="view-title">Финансовый баланс</h1>
         <p class="view-subtitle">Сводный обзор капитала, ежедневные потоки и операционные записи.</p>
       </div>
@@ -1729,7 +1839,7 @@ function renderHomeView() {
       <div class="hero-topline">
         <span class="hero-label" id="hero-balance-lbl">Чистый свободный остаток</span>
         <div class="period-tabs">
-          <button class="period-tab ${period === '7d' ? 'active' : ''}" data-period="7d">7 дней</button>
+          <button class="period-tab ${period === '7d' ? 'active' : ''}" data-period="7d">Неделя</button>
           <button class="period-tab ${period === '30d' ? 'active' : ''}" data-period="30d">30 дней</button>
           <button class="period-tab ${period === 'year' ? 'active' : ''}" data-period="year">Год</button>
         </div>
@@ -1948,17 +2058,26 @@ function renderHomeView() {
    CRITICAL RULE: NO "Добрый день" here!
    ========================================================================== */
 function renderAnalyticsView() {
-  const now = new Date();
+  const mskNow = getMskDate();
+  const now = mskNow;
 
   // Filter transactions for chosen period
   let periodTxs = [...data.transactions];
   let daysCount = 30;
 
+  const dow = mskNow.getDay();
+  const dayFromMonday = dow === 0 ? 6 : dow - 1;
+  const monday = new Date(mskNow.getFullYear(), mskNow.getMonth(), mskNow.getDate() - dayFromMonday);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  const mondayIso = toDateIso(monday);
+  const sundayIso = toDateIso(sunday);
+
   if (analyticsPeriod === '7d') {
     daysCount = 7;
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
-    const since = toDateIso(d);
-    periodTxs = data.transactions.filter(t => getTxIso(t) >= since);
+    periodTxs = data.transactions.filter(t => {
+      const iso = getTxIso(t);
+      return iso >= mondayIso && iso <= sundayIso;
+    });
   } else if (analyticsPeriod === '30d') {
     daysCount = 30;
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
@@ -2126,15 +2245,17 @@ function renderAnalyticsView() {
   let cfSubtitle = 'Сравнение поступлений и списаний по дням с интерактивным курсором';
 
   if (analyticsPeriod === '7d') {
-    cfSubtitle = 'Сравнение поступлений и списаний по дням за неделю';
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    cfSubtitle = 'Сравнение поступлений и списаний по дням за текущую неделю (Пн–Вс)';
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
       const iso = toDateIso(d);
+      const wkShort = d.toLocaleDateString('ru-RU', { weekday: 'short' });
+      const capWk = wkShort.charAt(0).toUpperCase() + wkShort.slice(1);
       const dExp = allTxs.filter(t => t.type === 'expense' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
       const dInc = allTxs.filter(t => t.type === 'income' && getTxIso(t) === iso).reduce((s, t) => s + Number(t.amount), 0);
       cashflowPoints.push({
         date: iso,
-        dayLabel: d.toLocaleDateString('ru-RU', { weekday: 'short' }),
+        dayLabel: `${capWk} ${d.getDate()}`,
         fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' }),
         exp: dExp,
         inc: dInc,
@@ -2315,7 +2436,7 @@ function renderAnalyticsView() {
       </div>
 
       <div class="analytics-period-bar">
-        <button class="analytics-period-btn ${analyticsPeriod === '7d' ? 'active' : ''}" data-aperiod="7d">7 дней</button>
+        <button class="analytics-period-btn ${analyticsPeriod === '7d' ? 'active' : ''}" data-aperiod="7d">Неделя</button>
         <button class="analytics-period-btn ${analyticsPeriod === '30d' ? 'active' : ''}" data-aperiod="30d">30 дней</button>
         <button class="analytics-period-btn ${analyticsPeriod === 'month' ? 'active' : ''}" data-aperiod="month">Этот месяц</button>
         <button class="analytics-period-btn ${analyticsPeriod === 'all' ? 'active' : ''}" data-aperiod="all">Все время</button>
@@ -3646,11 +3767,11 @@ function renderModal() {
             </div>
             <div class="form-group">
               <label class="form-label">Дата</label>
-              <input class="form-input" id="form-date" type="date" value="${toDateIso(new Date())}" required>
+              <input class="form-input" id="form-date" type="date" value="${toDateIso(getMskDate())}" required>
             </div>
             <div class="form-group">
               <label class="form-label">Время</label>
-              <input class="form-input" id="form-time" type="time" value="${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}" required>
+              <input class="form-input" id="form-time" type="time" value="${String(getMskDate().getHours()).padStart(2, '0')}:${String(getMskDate().getMinutes()).padStart(2, '0')}" required>
             </div>
           </div>
 
@@ -4119,19 +4240,49 @@ function bindInteractiveEvents() {
     }
     const statIncEl = document.getElementById('stat-amount-inc');
     if (statIncEl) {
-      const now = new Date();
-      let days = period === '7d' ? 7 : (period === '30d' ? 30 : 365);
-      const cut = new Date(now.getTime() - days * 86400000);
-      const pInc = data.transactions.filter(x => x.type === 'income' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
+      let pInc = 0;
+      if (period === '7d') {
+        const mskNow = getMskDate();
+        const dow = mskNow.getDay();
+        const dayFromMonday = dow === 0 ? 6 : dow - 1;
+        const monday = new Date(mskNow.getFullYear(), mskNow.getMonth(), mskNow.getDate() - dayFromMonday);
+        const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+        const monIso = toDateIso(monday);
+        const sunIso = toDateIso(sunday);
+        pInc = data.transactions.filter(x => {
+          const iso = getTxIso(x);
+          return x.type === 'income' && iso >= monIso && iso <= sunIso;
+        }).reduce((s, x) => s + Number(x.amount), 0);
+      } else {
+        const now = getMskDate();
+        let days = period === '30d' ? 30 : 365;
+        const cut = new Date(now.getTime() - days * 86400000);
+        pInc = data.transactions.filter(x => x.type === 'income' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
+      }
       const pIncConv = convertFromRub(pInc);
       animateNumber(statIncEl, pIncConv, 650, `+${curPrefix}`, sym);
     }
     const statExpEl = document.getElementById('stat-amount-exp');
     if (statExpEl) {
-      const now = new Date();
-      let days = period === '7d' ? 7 : (period === '30d' ? 30 : 365);
-      const cut = new Date(now.getTime() - days * 86400000);
-      const pExp = data.transactions.filter(x => x.type === 'expense' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
+      let pExp = 0;
+      if (period === '7d') {
+        const mskNow = getMskDate();
+        const dow = mskNow.getDay();
+        const dayFromMonday = dow === 0 ? 6 : dow - 1;
+        const monday = new Date(mskNow.getFullYear(), mskNow.getMonth(), mskNow.getDate() - dayFromMonday);
+        const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+        const monIso = toDateIso(monday);
+        const sunIso = toDateIso(sunday);
+        pExp = data.transactions.filter(x => {
+          const iso = getTxIso(x);
+          return x.type === 'expense' && iso >= monIso && iso <= sunIso;
+        }).reduce((s, x) => s + Number(x.amount), 0);
+      } else {
+        const now = getMskDate();
+        let days = period === '30d' ? 30 : 365;
+        const cut = new Date(now.getTime() - days * 86400000);
+        pExp = data.transactions.filter(x => x.type === 'expense' && new Date(getTxIso(x)) >= cut).reduce((s, x) => s + Number(x.amount), 0);
+      }
       const pExpConv = convertFromRub(pExp);
       animateNumber(statExpEl, pExpConv, 650, `−${curPrefix}`, sym);
     }
@@ -4590,6 +4741,16 @@ function bindInteractiveEvents() {
         else if (t.type === 'expense') dayExp += Number(t.amount);
       });
 
+      const isTodayBucket = bucket.isToday || (bucket.date === getTodayMskIso());
+      const isFutureBucket = bucket.isFuture;
+
+      let statusBadgeHtml = '';
+      if (isTodayBucket) {
+        statusBadgeHtml = `<span style="background: rgba(45, 212, 191, 0.18); color: #2DD4BF; font-size: 9.5px; font-weight: 700; padding: 1.5px 6px; border-radius: 4px; margin-left: 6px; letter-spacing: 0.03em;">СЕГОДНЯ</span>`;
+      } else if (isFutureBucket) {
+        statusBadgeHtml = `<span style="background: rgba(148, 163, 184, 0.15); color: #94A3B8; font-size: 9.5px; font-weight: 600; padding: 1.5px 6px; border-radius: 4px; margin-left: 6px; letter-spacing: 0.03em;">ПРОГНОЗ</span>`;
+      }
+
       let txsHtml = '';
       if (dayTxs.length > 0) {
         txsHtml = `
@@ -4610,12 +4771,15 @@ function bindInteractiveEvents() {
           </div>
         `;
       } else {
-        txsHtml = `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 6px; font-size: 11px;">В этот день операций не было</div>`;
+        txsHtml = isFutureBucket
+          ? `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 6px; font-size: 11px;">Предстоящий день • Прогноз остатка</div>`
+          : `<div class="chart-tooltip-badge" style="color: var(--text-muted); margin-top: 6px; font-size: 11px;">В этот день операций не было</div>`;
       }
 
       homeTooltip.innerHTML = `
         <div class="chart-tooltip-header">
           <span class="chart-tooltip-title">${esc(bucket.fullDate || bucket.dayDisplay || bucket.dayLabel)}</span>
+          ${statusBadgeHtml}
         </div>
         <div class="chart-tooltip-value num">${money(activePt.balance)}</div>
         ${dayTxs.length > 0 ? `
@@ -4649,6 +4813,7 @@ function bindInteractiveEvents() {
             <div class="day-breakdown-date-wrap">
               <span class="day-breakdown-dot"></span>
               <span class="day-breakdown-date">${esc(bucket.fullDate || bucket.dayDisplay || bucket.dayLabel)}</span>
+              ${statusBadgeHtml}
             </div>
             <div class="day-breakdown-bal num">${money(activePt.balance)}</div>
           </div>
@@ -4675,7 +4840,9 @@ function bindInteractiveEvents() {
               }).join('')}
             </div>
           ` : `
-            <div style="font-size: 11.5px; color: var(--text-muted); padding: 4px 0;">В этот день операций не было • Баланс стабилен</div>
+            <div style="font-size: 11.5px; color: var(--text-muted); padding: 4px 0;">
+              ${isFutureBucket ? 'Предстоящий день недели • Прогноз остатка капитала' : 'В этот день операций не было • Баланс стабилен'}
+            </div>
           `}
         `;
         homeDayBreakdown.classList.add('visible');
@@ -4974,9 +5141,9 @@ function bindInteractiveEvents() {
       if (typeSelect) typeSelect.value = type;
       if (catInput) catInput.value = type === 'income' ? 'Зарплата' : 'Продукты';
       if (amtInput) amtInput.value = '';
-      if (dateInput) dateInput.value = toDateIso(new Date());
+      if (dateInput) dateInput.value = toDateIso(getMskDate());
       if (timeInput) {
-        const d = new Date();
+        const d = getMskDate();
         timeInput.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       }
       if (descInput) descInput.value = '';
@@ -5028,7 +5195,7 @@ function bindInteractiveEvents() {
       const link = document.createElement('a');
       link.setAttribute('href', url);
       const suffix = txMonthFilter !== 'all' ? `_${txMonthFilter}` : '';
-      link.setAttribute('download', `finkaif_transactions${suffix}_${toDateIso(new Date())}.csv`);
+      link.setAttribute('download', `finkaif_transactions${suffix}_${toDateIso(getMskDate())}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -5483,13 +5650,13 @@ function bindInteractiveEvents() {
           if (aiRes && aiRes.parsed && Number(aiRes.parsed.amount) > 0 && quickInput.value.trim() === rawVal) {
             const p = aiRes.parsed;
             const iconEmoji = getCategoryIcon(p.category, p.type);
-            const isToday = !p.occurred_on || p.occurred_on === toDateIso(new Date());
+            const isToday = !p.occurred_on || p.occurred_on === toDateIso(getMskDate());
             cachedAiTx = {
               raw: rawVal,
               type: p.type || 'expense',
               category: p.category || 'Прочее',
               amount: Number(p.amount),
-              occurred_on: p.occurred_on || toDateIso(new Date()),
+              occurred_on: p.occurred_on || toDateIso(getMskDate()),
               dateLabel: isToday ? 'Сегодня' : p.occurred_on,
               description: p.description || rawVal,
               icon: iconEmoji,
@@ -5621,7 +5788,7 @@ function bindInteractiveEvents() {
               type: p.type || 'expense',
               category: p.category || 'Прочее',
               amount: Number(p.amount),
-              occurred_on: p.occurred_on || toDateIso(new Date()),
+              occurred_on: p.occurred_on || toDateIso(getMskDate()),
               dateLabel: 'Сегодня',
               description: p.description || rawVal,
               icon: getCategoryIcon(p.category, p.type)
@@ -5678,7 +5845,7 @@ function bindInteractiveEvents() {
       const category = pill.getAttribute('data-cat') || 'Продукты';
       const amount = Number(pill.getAttribute('data-amt')) || 0;
       const description = pill.getAttribute('data-desc') || category;
-      const occurred_on = toDateIso(new Date());
+      const occurred_on = toDateIso(getMskDate());
 
       if (amount <= 0) return;
 
