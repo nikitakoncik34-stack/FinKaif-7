@@ -70,6 +70,39 @@ const cookie = {
 
 const token = user => jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "14d" });
 
+// Central Moscow Time (Europe/Moscow, UTC+3) helper
+function getMskDate(d = new Date()) {
+  const dateObj = (typeof d === 'string' || typeof d === 'number') ? new Date(d) : (d || new Date());
+  if (isNaN(dateObj.getTime())) return new Date();
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hourCycle: 'h23'
+    });
+    const parts = formatter.formatToParts(dateObj);
+    const p = {};
+    for (const { type, value } of parts) p[type] = value;
+    return new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+  } catch (e) {
+    const utc = dateObj.getTime() + (dateObj.getTimezoneOffset() * 60000);
+    return new Date(utc + (3600000 * 3));
+  }
+}
+
+function getMskIsoDate(d = new Date()) {
+  const m = getMskDate(d);
+  const y = m.getFullYear();
+  const mo = String(m.getMonth() + 1).padStart(2, '0');
+  const day = String(m.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
 const GEMINI_API_KEYS = [
   Buffer.from("QVEuQWI4Uk42S3JXeGdudDl6bDJsd0lHcVlacDBONk1MSHhrVXl4c285aXpwU1VqZEhYSXc=", "base64").toString("utf8"),
   process.env.GEMINI_API_KEY,
@@ -289,17 +322,16 @@ function parseTxFallback(raw) {
     cleanWords = cleanWords.replace(new RegExp(matchedNumStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
   }
 
-  const now = new Date();
-  const toIso = d => d.toISOString().slice(0, 10);
-  let occurred_on = toIso(now);
+  const mskNow = getMskDate();
+  let occurred_on = getMskIsoDate(mskNow);
 
   if (/(?:^|[^а-яa-z0-9])позавчера(?:$|[^а-яa-z0-9])/i.test(cleanWords)) {
-    const d = new Date(now); d.setDate(d.getDate() - 2);
-    occurred_on = toIso(d);
+    const d = new Date(mskNow); d.setDate(d.getDate() - 2);
+    occurred_on = getMskIsoDate(d);
     cleanWords = cleanWords.replace(/(?:^|[^а-яa-z0-9])позавчера(?:$|[^а-яa-z0-9])/gi, ' ');
   } else if (/(?:^|[^а-яa-z0-9])вчера(?:$|[^а-яa-z0-9])/i.test(cleanWords)) {
-    const d = new Date(now); d.setDate(d.getDate() - 1);
-    occurred_on = toIso(d);
+    const d = new Date(mskNow); d.setDate(d.getDate() - 1);
+    occurred_on = getMskIsoDate(d);
     cleanWords = cleanWords.replace(/(?:^|[^а-яa-z0-9])вчера(?:$|[^а-яa-z0-9])/gi, ' ');
   }
 
@@ -607,7 +639,7 @@ app.post("/api/transactions", auth, async (req, res) => {
     const createdAt = x.created_at ? new Date(x.created_at) : new Date();
     const r = await db.query(
       "insert into transactions(user_id,type,category,description,amount,occurred_on,created_at) values($1,$2,$3,$4,$5,$6,$7) returning *",
-      [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Math.round(Number(x.amount) * 100) / 100, x.occurred_on || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })(), isNaN(createdAt.getTime()) ? new Date() : createdAt]
+      [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Math.round(Number(x.amount) * 100) / 100, x.occurred_on || getMskIsoDate(), isNaN(createdAt.getTime()) ? new Date() : createdAt]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -636,7 +668,7 @@ app.put("/api/transactions/:id", auth, async (req, res) => {
         String(x.category).trim(),
         String(x.description || "").trim(),
         Number(x.amount),
-        x.occurred_on || new Date().toISOString().slice(0, 10),
+        x.occurred_on || getMskIsoDate(),
         createdAt && !isNaN(createdAt.getTime()) ? createdAt : null,
         req.params.id,
         req.user.id
@@ -777,10 +809,10 @@ app.post("/api/parse-tx", async (req, res) => {
       return res.json({ ok: true, parsed: instantParse, instant: true });
     }
 
-    const now = new Date();
-    const dYesterday = new Date(now); dYesterday.setDate(dYesterday.getDate() - 1);
-    const dBefore = new Date(now); dBefore.setDate(dBefore.getDate() - 2);
-    const toIso = d => d.toISOString().slice(0, 10);
+    const mskNow = getMskDate();
+    const dYesterday = new Date(mskNow); dYesterday.setDate(dYesterday.getDate() - 1);
+    const dBefore = new Date(mskNow); dBefore.setDate(dBefore.getDate() - 2);
+    const toIso = d => getMskIsoDate(d);
 
     const prompt = `Ты — ультра-быстрый финансовый классификатор FinKaif OS.
 Извлеки операцию из русской разговорной фразы со сленгом.
@@ -1206,8 +1238,8 @@ function buildSystemPrompt(transactions, budgets, goals) {
       return `• ${cat}: ${Math.round(amt).toLocaleString("ru-RU")} ₽ (${pct}% от расходов)`;
     }).join("\n");
 
-  // --- Monthly breakdown (current vs previous month) ---
-  const now = new Date();
+  // --- Monthly breakdown (current vs previous month in Moscow Time) ---
+  const now = getMskDate();
   const curYear = now.getFullYear();
   const curMonth = now.getMonth(); // 0-indexed
   const prevMonth = curMonth === 0 ? 11 : curMonth - 1;
