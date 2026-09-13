@@ -266,6 +266,68 @@ function initSpotlightCards() {
   });
 }
 
+// Beautiful Custom In-App Confirmation Modal
+function showConfirmDialog({
+  title = 'Подтверждение',
+  message = 'Вы уверены, что хотите выполнить это действие?',
+  confirmText = 'Подтвердить',
+  cancelText = 'Отмена',
+  danger = true,
+  icon = '⚠️'
+} = {}) {
+  return new Promise(resolve => {
+    const existing = document.getElementById('custom-confirm-modal');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'custom-confirm-modal';
+    backdrop.className = 'confirm-dialog-backdrop';
+    backdrop.innerHTML = `
+      <div class="confirm-dialog-card">
+        <div class="confirm-dialog-icon-wrap ${danger ? 'danger' : 'info'}">
+          <span>${icon}</span>
+        </div>
+        <h3 class="confirm-dialog-title">${esc(title)}</h3>
+        <p class="confirm-dialog-message">${esc(message).replace(/\n/g, '<br>')}</p>
+        <div class="confirm-dialog-actions">
+          <button type="button" class="btn-confirm-cancel" id="confirm-btn-cancel">${esc(cancelText)}</button>
+          <button type="button" class="${danger ? 'btn-confirm-danger' : 'btn-confirm-primary'}" id="confirm-btn-ok">${esc(confirmText)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+    requestAnimationFrame(() => {
+      backdrop.classList.add('visible');
+      backdrop.querySelector('#confirm-btn-ok')?.focus();
+    });
+
+    let resolved = false;
+    const cleanup = (result) => {
+      if (resolved) return;
+      resolved = true;
+      backdrop.classList.remove('visible');
+      setTimeout(() => {
+        backdrop.remove();
+        resolve(result);
+      }, 190);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+
+    backdrop.querySelector('#confirm-btn-cancel').onclick = () => cleanup(false);
+    backdrop.querySelector('#confirm-btn-ok').onclick = () => cleanup(true);
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) cleanup(false);
+    };
+  });
+}
+
 const esc = s =>
   String(s || '').replace(/[&<>"']/g, x => ({
     '&': '&amp;',
@@ -1866,7 +1928,6 @@ function renderAnalyticsView() {
                   stroke-dasharray="${s.sliceLen} ${Math.max(0.1, circ - s.sliceLen)}"
                   stroke-dashoffset="${-s.offset}"
                   stroke-linecap="butt"
-                  transform="rotate(-90 100 100)"
                 />
               `).join('') : `
                 <circle cx="100" cy="100" r="${radius}" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14" stroke-dasharray="6 6" />
@@ -2437,7 +2498,17 @@ function renderBudgetsView() {
 
       <form id="budget-form" style="display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 12px; margin-top: 12px;">
         <input class="form-input" id="budget-cat" list="budget-categories-datalist" placeholder="Категория (выберите или введите)" required>
-        <input class="form-input num" id="budget-limit" type="number" min="1" step="any" placeholder="Сумма лимита (₽)" required>
+        <div class="number-stepper-wrap">
+          <input class="form-input num" id="budget-limit" type="number" min="1" step="any" placeholder="Сумма лимита (₽)" required>
+          <div class="input-spin-steppers">
+            <button type="button" class="spin-step-btn" data-target="budget-limit" data-step="1000" title="Увеличить на 1 000 ₽" aria-label="Увеличить">
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button type="button" class="spin-step-btn" data-target="budget-limit" data-step="-1000" title="Уменьшить на 1 000 ₽" aria-label="Уменьшить">
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
         <button type="submit" class="btn-primary" style="height: 42px; justify-content: center;">
           ${icon('plus', 14)}
           <span>Сохранить</span>
@@ -2561,8 +2632,28 @@ function renderGoalsView() {
       <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px;">Создать новую цель</h3>
       <form id="goal-form" style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1fr; gap: 12px;">
         <input class="form-input" id="goal-name" placeholder="Название (напр. Подушка безопасности)" required>
-        <input class="form-input num" id="goal-target" type="number" min="1" step="any" placeholder="Целевая сумма (₽)" required>
-        <input class="form-input num" id="goal-saved" type="number" min="0" step="any" placeholder="Уже есть (₽)">
+        <div class="number-stepper-wrap">
+          <input class="form-input num" id="goal-target" type="number" min="1" step="any" placeholder="Целевая сумма (₽)" required>
+          <div class="input-spin-steppers">
+            <button type="button" class="spin-step-btn" data-target="goal-target" data-step="5000" title="Увеличить на 5 000 ₽" aria-label="Увеличить">
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button type="button" class="spin-step-btn" data-target="goal-target" data-step="-5000" title="Уменьшить на 5 000 ₽" aria-label="Уменьшить">
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="number-stepper-wrap">
+          <input class="form-input num" id="goal-saved" type="number" min="0" step="any" placeholder="Уже есть (₽)">
+          <div class="input-spin-steppers">
+            <button type="button" class="spin-step-btn" data-target="goal-saved" data-step="1000" title="Увеличить на 1 000 ₽" aria-label="Увеличить">
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+            <button type="button" class="spin-step-btn" data-target="goal-saved" data-step="-1000" title="Уменьшить на 1 000 ₽" aria-label="Уменьшить">
+              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
         <button type="submit" class="btn-primary" style="height: 42px; justify-content: center;">
           ${icon('plus', 14)}
           <span>Создать</span>
@@ -2607,7 +2698,17 @@ function renderGoalsView() {
 
             <!-- Quick Add to Goal -->
             <div class="goal-add-strip">
-              <input class="form-input num goal-topup-input" data-id="${g.id}" type="number" min="1" step="any" placeholder="Сумма пополнения...">
+              <div class="number-stepper-wrap" style="flex: 1;">
+                <input class="form-input num goal-topup-input" data-id="${g.id}" type="number" min="1" step="any" placeholder="Сумма пополнения...">
+                <div class="input-spin-steppers">
+                  <button type="button" class="spin-step-btn" data-step="500" title="Увеличить на 500 ₽" aria-label="Увеличить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                  <button type="button" class="spin-step-btn" data-step="-500" title="Уменьшить на 500 ₽" aria-label="Уменьшить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
               <button class="btn-primary goal-topup-btn" data-id="${g.id}" style="padding: 0 14px; height: 36px; font-size: 12px;">
                 + Отложить
               </button>
@@ -2964,7 +3065,17 @@ function renderModal() {
           <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px;">
             <div class="form-group">
               <label class="form-label">Сумма (${currencySymbols[profile.currency] || '₽'})</label>
-              <input class="form-input num" id="form-amount" type="number" min="0.01" step="any" placeholder="0" required>
+              <div class="number-stepper-wrap">
+                <input class="form-input num" id="form-amount" type="number" min="0.01" step="any" placeholder="0" required>
+                <div class="input-spin-steppers">
+                  <button type="button" class="spin-step-btn" data-target="form-amount" data-step="100" title="Увеличить на 100" aria-label="Увеличить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                  <button type="button" class="spin-step-btn" data-target="form-amount" data-step="-100" title="Уменьшить на 100" aria-label="Уменьшить">
+                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
               <div id="tx-rub-equivalent" style="font-size: 11px; color: var(--accent-jade); margin-top: 4px; display: none;"></div>
             </div>
             <div class="form-group">
@@ -3620,7 +3731,15 @@ function bindInteractiveEvents() {
   const btnProfileLogout = document.getElementById('btn-profile-logout');
   if (btnProfileLogout) {
     btnProfileLogout.onclick = async () => {
-      if (confirm('Вы действительно хотите выйти из аккаунта?')) {
+      const confirmed = await showConfirmDialog({
+        title: 'Выход из аккаунта',
+        message: 'Вы действительно хотите завершить текущую сессию в FinKaif OS?',
+        confirmText: 'Выйти',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '🚪'
+      });
+      if (confirmed) {
         await api('auth/logout', { method: 'POST' }).catch(() => {});
         localStorage.removeItem('finkaif_token');
         me = null;
@@ -4274,7 +4393,15 @@ function bindInteractiveEvents() {
   if (btnModalDelete) {
     btnModalDelete.onclick = async () => {
       if (!editingTxId) return;
-      if (confirm('Вы уверены, что хотите удалить эту операцию?')) {
+      const confirmed = await showConfirmDialog({
+        title: 'Удаление операции',
+        message: 'Вы уверены, что хотите удалить эту операцию? Запись будет безвозвратно удалена из истории.',
+        confirmText: 'Удалить операцию',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '🗑️'
+      });
+      if (confirmed) {
         try {
           await api('transactions/' + editingTxId, { method: 'DELETE' });
           const modal = document.getElementById('tx-modal');
@@ -4376,8 +4503,14 @@ function bindInteractiveEvents() {
           const lim = Number(budget.limit_amount);
           const newTotal = spentThisMonth + amount;
           if (newTotal > lim) {
-            const overspend = newTotal - lim;
-            const ok = confirm(`⚠️ Внимание! Превышение лимита бюджета!\n\nКатегория «${category}» имеет установленный лимит ${money(lim)} в месяц.\nУже израсходовано в этом месяце: ${money(spentThisMonth)}.\n\nС сохранением этой записи (${money(amount)}) расходы превысят лимит на ${money(overspend)}!\n\nВы точно хотите зафиксировать этот расход сверх лимита?`);
+            const ok = await showConfirmDialog({
+              title: 'Превышение лимита бюджета',
+              message: `Категория «${category}» имеет установленный лимит ${money(lim)} в месяц.\nУже израсходовано: ${money(spentThisMonth)}.\n\nС сохранением этой записи (${money(amount)}) перерасход составит ${money(overspend)}!\n\nВы точно хотите зафиксировать этот расход сверх лимита?`,
+              confirmText: 'Зафиксировать расход',
+              cancelText: 'Отмена',
+              danger: true,
+              icon: '⚠️'
+            });
             if (!ok) return;
           }
         }
@@ -4529,8 +4662,15 @@ function bindInteractiveEvents() {
   $$('.tx-delete-btn').forEach(btn => {
     btn.onclick = async e => {
       e.stopPropagation();
-      const id = btn.getAttribute('data-id');
-      if (confirm('Удалить эту операцию?')) {
+      const confirmed = await showConfirmDialog({
+        title: 'Удалить операцию?',
+        message: 'Эта операция будет безвозвратно удалена из вашей финансовой истории.',
+        confirmText: 'Удалить',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '🗑️'
+      });
+      if (confirmed) {
         try {
           await api('transactions/' + id, { method: 'DELETE' });
           await refreshAllData();
@@ -4786,7 +4926,15 @@ function bindInteractiveEvents() {
   $$('.budget-delete-btn').forEach(btn => {
     btn.onclick = async () => {
       const id = btn.getAttribute('data-id');
-      if (confirm('Удалить этот лимит?')) {
+      const confirmed = await showConfirmDialog({
+        title: 'Удалить лимит бюджета?',
+        message: 'Контроль лимита для этой категории будет снят.',
+        confirmText: 'Удалить лимит',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '📊'
+      });
+      if (confirmed) {
         try {
           await api('budgets/' + id, { method: 'DELETE' });
           await refreshAllData();
@@ -4825,7 +4973,15 @@ function bindInteractiveEvents() {
   $$('.goal-delete-btn').forEach(btn => {
     btn.onclick = async () => {
       const id = btn.getAttribute('data-id');
-      if (confirm('Удалить эту цель?')) {
+      const confirmed = await showConfirmDialog({
+        title: 'Удалить цель накопления?',
+        message: 'Цель накопления и статистика по ней будут удалены.',
+        confirmText: 'Удалить цель',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '🎯'
+      });
+      if (confirmed) {
         try {
           await api('goals/' + id, { method: 'DELETE' });
           await refreshAllData();
@@ -4987,8 +5143,16 @@ function bindInteractiveEvents() {
   // Clear Chat History
   const btnClearChat = document.getElementById('btn-clear-chat');
   if (btnClearChat) {
-    btnClearChat.onclick = () => {
-      if (confirm('Очистить историю диалога с ментором?')) {
+    btnClearChat.onclick = async () => {
+      const confirmed = await showConfirmDialog({
+        title: 'Очистить историю диалога?',
+        message: 'Все сообщения и персональные рекомендации ментора будут очищены.',
+        confirmText: 'Очистить историю',
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '💬'
+      });
+      if (confirmed) {
         data.chat = [];
         renderApp();
       }
@@ -5112,8 +5276,41 @@ async function boot() {
   renderApp();
 }
 
-// Analytics Metric Popovers (Tooltips & Explanations)
+// Global Click Delegation (Steppers, Popovers, etc.)
 document.addEventListener('click', (e) => {
+  const spinBtn = e.target.closest('.spin-step-btn');
+  if (spinBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    let targetInput = null;
+    if (spinBtn.dataset.target) {
+      targetInput = document.getElementById(spinBtn.dataset.target);
+    }
+    if (!targetInput) {
+      targetInput = spinBtn.closest('.number-stepper-wrap')?.querySelector('input');
+    }
+    if (targetInput) {
+      const step = Number(spinBtn.dataset.step) || (spinBtn.dataset.dir === 'down' ? -100 : 100);
+      let curVal = Number(targetInput.value) || 0;
+      let newVal = curVal + step;
+      if (targetInput.min !== '' && !isNaN(Number(targetInput.min))) {
+        newVal = Math.max(Number(targetInput.min), newVal);
+      }
+      if (targetInput.max !== '' && !isNaN(Number(targetInput.max))) {
+        newVal = Math.min(Number(targetInput.max), newVal);
+      }
+      if (Math.abs(step) >= 1) {
+        newVal = Math.round(newVal);
+      } else {
+        newVal = Math.round(newVal * 100) / 100;
+      }
+      targetInput.value = newVal;
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return;
+  }
+
   const btn = e.target.closest('.metric-info-btn');
   const closeBtn = e.target.closest('.popover-close');
 
