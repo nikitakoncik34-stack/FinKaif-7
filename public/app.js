@@ -522,73 +522,223 @@ const compactMoney = (num, force = false) => {
 
 // Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
 
-// Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
+// Smart Natural Language Financial Parser (with Full Russian Slang, Livestock/Pets, Composite Numbers & 0ms Latency)
 function parseQuickTxInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
 
-  const lower = text.toLowerCase();
+  const lower = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
   let cleanWords = ' ' + text + ' ';
   let amount = 0;
+  let matchedNumStr = '';
 
-  const matchAndRemove = (regex, extractVal) => {
-    const m = cleanWords.match(regex);
-    if (m) {
-      amount = extractVal(m);
-      cleanWords = cleanWords.replace(m[0], ' ');
-      return true;
+  // 1. Extract amount using advanced compound Russian number & slang recognizer
+  // A. "X с половиной [миллиарда/миллиона/тысяч/ляма]"
+  const sPolovinoi = lower.match(/(?:^|[^а-яa-z0-9])(один|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|\d+(?:[.,]\d+)?)\s+с\s+половиной\s*(миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*|тысяч[а-я]*|тыщ[а-я]*|косар[а-я]*|куск[а-я]*)(?:$|[^а-яa-z0-9])/i);
+  if (sPolovinoi) {
+    const wordMap = { 'один': 1, 'два': 2, 'две': 2, 'три': 3, 'четыре': 4, 'пять': 5, 'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10 };
+    const base = wordMap[sPolovinoi[1]] || parseFloat(sPolovinoi[1].replace(',', '.'));
+    const unit = sPolovinoi[2].toLowerCase();
+    let mult = 1000;
+    if (/миллиард|млрд|ярд/.test(unit)) mult = 1000000000;
+    else if (/миллион|млн|лям|лимон/.test(unit)) mult = 1000000;
+    amount = Math.round((base + 0.5) * mult);
+    matchedNumStr = sPolovinoi[0].trim();
+  }
+
+  // B. "полтора / полторы" + scale
+  if (!amount) {
+    const poltora = lower.match(/(?:^|[^а-яa-z0-9])полтор[ыа]\s*(миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*|тысяч[а-я]*|тыщ[а-я]*|косар[а-я]*|куск[а-я]*)(?:$|[^а-яa-z0-9])/i);
+    if (poltora) {
+      const unit = poltora[1].toLowerCase();
+      let mult = 1000;
+      if (/миллиард|млрд|ярд/.test(unit)) mult = 1000000000;
+      else if (/миллион|млн|лям|лимон/.test(unit)) mult = 1000000;
+      amount = Math.round(1.5 * mult);
+      matchedNumStr = poltora[0].trim();
     }
-    return false;
-  };
+  }
 
-  // 1. Slang & Colloquial Amounts
-  // "пол-ляма" / "полляма"
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])пол[- ]?лям[а-я]*(?:$|[^а-яёa-z0-9])/i, () => 500000) ||
-  // "N ляма / лямов"
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:лям[а-я]*|лимон[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000000)) ||
-  // "лям" / "лимон"
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:лям[а-я]*|лимон[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 1000000) ||
-  // "N косарей / кусков / штук / тонн"
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
-  // Fixed Slang Denominations
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 40000) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 50000) ||
-  // "сотка тысяч / к" -> 100 000
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)\s*(?:тыс[а-я]*|тыщ[а-я]*|к\b|k\b)(?:$|[^а-яёa-z0-9])/i, () => 100000) ||
-  // "сотка рублей" -> 100
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)\s*(?:руб[а-я]*|р\b)(?:$|[^а-яёa-z0-9])/i, () => 100) ||
-  // "сотка" в контексте доходов/упали/зарплаты/баланса = 100 000 ₽
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)(?:$|[^а-яёa-z0-9])/i, () => {
-    if (/(?:руб|кофе|билет|проезд|чай|булк|чипс|жвачк)/i.test(lower)) return 100;
-    return 100000;
-  }) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яёa-z0-9])/i, () => 500) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яёa-z0-9])/i, () => 2000) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яёa-z0-9])/i, () => 3000) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятерк[а-я]|пятёрк[а-я])(?:$|[^а-яёa-z0-9])/i, () => 5000) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:чирик[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 10000) ||
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:косарь|косаря|кусок|штука)(?:$|[^а-яёa-z0-9])/i, () => 1000) ||
-  // Standard k / к / тыс / тысяч
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс[а-я]*|тыщ[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
-  // Standard numbers
-  matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(/\s+/g, '').replace(',', '.'))));
+  // C. "полмиллиона", "пол-ляма", "полтыщи"
+  if (!amount) {
+    const polMil = lower.match(/(?:^|[^а-яa-z0-9])(?:полмиллион[а-я]*|пол[- ]?лям[а-я]*)(?:$|[^а-яa-z0-9])/i);
+    if (polMil) {
+      amount = 500000;
+      matchedNumStr = polMil[0].trim();
+    }
+  }
+  if (!amount) {
+    const polTys = lower.match(/(?:^|[^а-яa-z0-9])(?:полтыщ[а-я]*|пол[- ]?тысяч[а-я]*)(?:$|[^а-яa-z0-9])/i);
+    if (polTys) {
+      amount = 500;
+      matchedNumStr = polTys[0].trim();
+    }
+  }
+
+  // D. Digits with explicit multiplier:
+  // Billions: 1.5 млрд, 2 арбуза, 1ккк
+  if (!amount) {
+    const digBillion = lower.match(/(?:^|[^а-яa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|арбуз[а-я]*|ккк|kkk)(?:$|[^а-яa-z0-9])/i);
+    if (digBillion) {
+      amount = Math.round(parseFloat(digBillion[1].replace(',', '.')) * 1000000000);
+      matchedNumStr = digBillion[0].trim();
+    }
+  }
+
+  // Millions: 1.5 млн, 1.5 ляма, 2.5кк, 10 лимонов, 5 миллионов
+  if (!amount) {
+    const digMillion = lower.match(/(?:^|[^а-яa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*|кк|kk)(?:$|[^а-яa-z0-9])/i);
+    if (digMillion) {
+      amount = Math.round(parseFloat(digMillion[1].replace(',', '.')) * 1000000);
+      matchedNumStr = digMillion[0].trim();
+    }
+  }
+
+  // Thousands: 85 тысяч, 15 тыщ, 3 косаря, 100к
+  if (!amount) {
+    const digThousand = lower.match(/(?:^|[^а-яa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:тысяч[а-я]*|тыщ[а-я]*|тыс[а-я]*|косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*|к\b|k\b)(?:$|[^а-яa-z0-9])/i);
+    if (digThousand) {
+      amount = Math.round(parseFloat(digThousand[1].replace(',', '.')) * 1000);
+      matchedNumStr = digThousand[0].trim();
+    }
+  }
+
+  // Hundreds: 25 сотен
+  if (!amount) {
+    const digHundreds = lower.match(/(?:^|[^а-яa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:сот[ен|ни]|сотен)(?:$|[^а-яa-z0-9])/i);
+    if (digHundreds) {
+      amount = Math.round(parseFloat(digHundreds[1].replace(',', '.')) * 100);
+      matchedNumStr = digHundreds[0].trim();
+    }
+  }
+
+  // E. Russian compound text words ("триста пятьдесят тысяч", "миллион рублей", "сорок пять тысяч")
+  if (!amount) {
+    const ONES = { 'один': 1, 'одна': 1, 'одно': 1, 'одну': 1, 'два': 2, 'две': 2, 'три': 3, 'четыре': 4, 'пять': 5, 'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9 };
+    const TEENS = { 'десять': 10, 'одиннадцать': 11, 'двенадцать': 12, 'тринадцать': 13, 'четырнадцать': 14, 'пятнадцать': 15, 'шестнадцать': 16, 'семнадцать': 17, 'восемнадцать': 18, 'девятнадцать': 19 };
+    const TENS = { 'двадцать': 20, 'тридцать': 30, 'сорок': 40, 'пятьдесят': 50, 'шестьдесят': 60, 'семьдесят': 70, 'восемьдесят': 80, 'девяносто': 90 };
+    const HUNDREDS = { 'сто': 100, 'двести': 200, 'триста': 300, 'четыреста': 400, 'пятьсот': 500, 'шестьсот': 600, 'семьсот': 700, 'восемьсот': 800, 'девятьсот': 900 };
+    const MULTIPLIERS = [
+      { regex: /^(?:миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|арбуз[а-я]*)$/i, scale: 1000000000 },
+      { regex: /^(?:миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*)$/i, scale: 1000000 },
+      { regex: /^(?:тысяч[а-я]*|тыщ[а-я]*|тыс[а-я]*|косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*)$/i, scale: 1000 },
+      { regex: /^(?:сот[ен|ни]|сотен)$/i, scale: 100 }
+    ];
+
+    const words = text.toLowerCase().replace(/ё/g, 'е').replace(/[^\sа-яa-z0-9]/gi, ' ').trim().split(/\s+/);
+    for (let i = 0; i < words.length; i++) {
+      let currentTotal = 0;
+      let currentGroup = 0;
+      let hasMultiplier = false;
+      const matchedTokens = [];
+
+      for (let j = i; j < words.length; j++) {
+        const w = words[j];
+        let val = null;
+        let isScale = false;
+        let scaleVal = 1;
+
+        for (const m of MULTIPLIERS) {
+          if (m.regex.test(w)) {
+            isScale = true;
+            scaleVal = m.scale;
+            break;
+          }
+        }
+
+        if (isScale) {
+          if (currentGroup === 0 && currentTotal === 0) currentGroup = 1;
+          currentTotal += currentGroup * scaleVal;
+          currentGroup = 0;
+          hasMultiplier = true;
+          matchedTokens.push(w);
+          continue;
+        }
+
+        if (HUNDREDS[w] !== undefined) val = HUNDREDS[w];
+        else if (TENS[w] !== undefined) val = TENS[w];
+        else if (TEENS[w] !== undefined) val = TEENS[w];
+        else if (ONES[w] !== undefined) val = ONES[w];
+
+        if (val !== null) {
+          currentGroup += val;
+          matchedTokens.push(w);
+        } else {
+          break;
+        }
+      }
+
+      const finalSum = currentTotal + currentGroup;
+      if (finalSum > 0 && (hasMultiplier || matchedTokens.length >= 2 || finalSum >= 100)) {
+        amount = finalSum;
+        matchedNumStr = matchedTokens.join(' ');
+        break;
+      }
+    }
+  }
+
+  // F. Slang fixed denominations
+  if (!amount) {
+    const slangRules = [
+      { re: /(?:^|[^а-яa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 40000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 50000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен)\s*(?:тыс[а-я]*|тыщ[а-я]*|к\b|k\b)(?:$|[^а-яa-z0-9])/i, val: 100000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен)\s*(?:руб[а-я]*|р\b)(?:$|[^а-яa-z0-9])/i, val: 100 },
+      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен)(?:$|[^а-яa-z0-9])/i, val: /(?:руб|кофе|билет|проезд|чай|булк|чипс|жвачк)/i.test(lower) ? 100 : 100000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яa-z0-9])/i, val: 500 },
+      { re: /(?:^|[^а-яa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яa-z0-9])/i, val: 2000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яa-z0-9])/i, val: 3000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:пятерк[а-я]|пятёрк[а-я])(?:$|[^а-яa-z0-9])/i, val: 5000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:чирик[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 10000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:косарь|косаря|кусок|штука)(?:$|[^а-яa-z0-9])/i, val: 1000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 1000000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|арбуз[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 1000000000 }
+    ];
+
+    for (const s of slangRules) {
+      const m = lower.match(s.re);
+      if (m) {
+        amount = s.val;
+        matchedNumStr = m[0].trim();
+        break;
+      }
+    }
+  }
+
+  // G. Standard digits fallback
+  if (!amount) {
+    const stdNum = lower.match(/(?:^|[^а-яa-z0-9])(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яa-z0-9])/i);
+    if (stdNum) {
+      const cleanNum = stdNum[1].replace(/\s+/g, '').replace(',', '.');
+      const val = Math.round(parseFloat(cleanNum));
+      if (!isNaN(val) && val > 0) {
+        amount = val;
+        matchedNumStr = stdNum[0].trim();
+      }
+    }
+  }
+
+  // Remove matched number from description string
+  if (matchedNumStr) {
+    cleanWords = cleanWords.replace(new RegExp(matchedNumStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
+  }
 
   // 2. Relative Dates
   let occurred_on = toDateIso(new Date());
   let dateLabel = 'Сегодня';
 
-  if (/(?:^|[^а-яёa-z0-9])позавчера(?:$|[^а-яёa-z0-9])/i.test(cleanWords)) {
+  if (/(?:^|[^а-яa-z0-9])позавчера(?:$|[^а-яa-z0-9])/i.test(cleanWords)) {
     const d = new Date();
     d.setDate(d.getDate() - 2);
     occurred_on = toDateIso(d);
     dateLabel = 'Позавчера';
-    cleanWords = cleanWords.replace(/(?:^|[^а-яёa-z0-9])позавчера(?:$|[^а-яёa-z0-9])/gi, ' ');
-  } else if (/(?:^|[^а-яёa-z0-9])вчера(?:$|[^а-яёa-z0-9])/i.test(cleanWords)) {
+    cleanWords = cleanWords.replace(/(?:^|[^а-яa-z0-9])позавчера(?:$|[^а-яa-z0-9])/gi, ' ');
+  } else if (/(?:^|[^а-яa-z0-9])вчера(?:$|[^а-яa-z0-9])/i.test(cleanWords)) {
     const d = new Date();
     d.setDate(d.getDate() - 1);
     occurred_on = toDateIso(d);
     dateLabel = 'Вчера';
-    cleanWords = cleanWords.replace(/(?:^|[^а-яёa-z0-9])вчера(?:$|[^а-яёa-z0-9])/gi, ' ');
+    cleanWords = cleanWords.replace(/(?:^|[^а-яa-z0-9])вчера(?:$|[^а-яa-z0-9])/gi, ' ');
   } else {
     const daysMatch = cleanWords.match(/(\d+)\s*(?:дн[яей]+|дня)\s*назад/i);
     if (daysMatch) {
@@ -606,15 +756,15 @@ function parseQuickTxInput(raw) {
   let category = 'Прочее';
   let iconEmoji = '💳';
 
-  // Comprehensive Income Regex Patterns (все глаголы заработка, получения и переводов)
+  // Comprehensive Income Regex Patterns
   const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|упал|прилетел|залетел|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
 
   if (isIncome) {
     type = 'income';
-    if (/фриланс|проект|клиент|заказ|шабашк|халтур|подработк|смен[аы]|дизайн|верстк|разработк|сайт/i.test(lower)) {
+    if (/фриланс|проект|клиент|заказ|шабашк|халтур|калым|подработк|смен[аы]|дизайн|верстк|разработк|сайт/i.test(lower)) {
       category = 'Фриланс';
       iconEmoji = '💼';
-    } else if (/дивиденд|купон|процент|вклад|акци|инвест|крипт/i.test(lower)) {
+    } else if (/дивиденд|купон|процент|вклад|акци|инвест|крипт|биток|eth|usdt|тон\b/i.test(lower)) {
       category = 'Инвестиции';
       iconEmoji = '📈';
     } else if (/продал|авито|юла|сбыт/i.test(lower)) {
@@ -623,7 +773,7 @@ function parseQuickTxInput(raw) {
     } else if (/подар|день рожден|др\b|чаев|донат/i.test(lower)) {
       category = 'Подарки';
       iconEmoji = '🎁';
-    } else if (/кэшбэк|бонус|возврат/i.test(lower)) {
+    } else if (/кэшбэк|бонус|возврат|вычет/i.test(lower)) {
       category = 'Кэшбэк';
       iconEmoji = '💳';
     } else if (/долг|вернули|отдали/i.test(lower)) {
@@ -633,71 +783,94 @@ function parseQuickTxInput(raw) {
       category = 'Зарплата';
       iconEmoji = '💰';
     }
-  }
-  // Transport & Car
-  else if (/такс|uber|убер|яндекс.*гоу|яндекс.*такси|карш|каршеринг|ситидрайв|заправил|бенз|азс|лукойл|газпром|роснефть|мойка|помыл тачк|помыл машин|шиномонтаж|метро|проездной|тройк|автобус|электричк|сапсан|парковк|штраф/i.test(lower)) {
+  } else {
     type = 'expense';
-    category = 'Транспорт';
-    iconEmoji = '🚕';
-  }
-  // Coffee & Drinks
-  else if (/кофе|кофей|латте|капуч|флэт|раф|эспрессо|чай|булочн|выпечк|пекарн|круассан/i.test(lower)) {
-    type = 'expense';
-    category = 'Кафе';
-    iconEmoji = '☕';
-  }
-  // Dining, Fast food, Bars
-  else if (/шавух|шаверм|шаурм|пицц|додо|бургер|макдак|вкусно.*точк|кфс|kfc|ролл|суши|обед|ужин|завтрак|ланч|пивас|пиво|сидр|бар|паб|рестик|ресторан|кальян|посидели|скинул.*кент|скинул.*шав|покушать|доставк/i.test(lower)) {
-    type = 'expense';
-    category = 'Рестораны';
-    iconEmoji = '🍽️';
-  }
-  // Gadgets & Tech
-  else if (/плойк|соньк|playstation|ps5|xbox|иксбокс|видяха|видеокарт|айфон|iphone|эйрподс|airpods|макбук|macbook|ноут|монитор|комп|пк|техник|гаджет/i.test(lower)) {
-    type = 'expense';
-    category = 'Техника';
-    iconEmoji = '💻';
-  }
-  // Subscriptions & Online Services
-  else if (/спотик|spotify|яндекс плюс|плюс|телег|telegram.*prem|нетфликс|netflix|ютуб|youtube|впн|vpn|хостинг|сервер|айклауд|icloud|облако|подписк/i.test(lower)) {
-    type = 'expense';
-    category = 'Подписки';
-    iconEmoji = '📱';
-  }
-  // Shopping & Clothes
-  else if (/шмот|педал|кросс|кед|ботинк|худи|куртк|пуховик|джинс|вб|вайлдберриз|wildberries|озон|ozon|зарин|лайм|lime|шопинг|покупк/i.test(lower)) {
-    type = 'expense';
-    category = 'Покупки';
-    iconEmoji = '🛍️';
-  }
-  // Health & Sports
-  else if (/зал|спортзал|фитнес|трен[яе]|абонемент|протеин|аптек|таблетк|витамин|врач|доктор|стоматолог|зуб|анализ|здоровь/i.test(lower)) {
-    type = 'expense';
-    category = 'Здоровье';
-    iconEmoji = '🏥';
-  }
-  // Home & Utilities
-  else if (/аренд|квартир|хат|жкх|коммуналк|свет|интернет|вайфай|клининг|уборк/i.test(lower)) {
-    type = 'expense';
-    category = 'Жилье';
-    iconEmoji = '🏠';
-  }
-  // Groceries fallback
-  else if (/продукт|магазин|пятерочк|перекресток|магнит|вкусвилл|лента|ашан|хлеб|молоко|мясо|еда/i.test(lower)) {
-    type = 'expense';
-    category = 'Продукты';
-    iconEmoji = '🛒';
+    // Animals / Livestock / Pets / Farming (корова, бык, скот, ферма, корм, собака, кот, ветклиника)
+    if (/коров[а-я]*|бык[а-я]*|телят[а-я]*|теленок|телк[а-я]*|коз[а-я]*|свин[а-я]*|хрюш[а-я]*|поросят[а-я]*|лошад[а-я]*|кон[яеь][а-я]*|жереб[а-я]*|овц[а-я]*|баран[а-я]*|ягнят[а-я]*|кур[а-я]*|петух[а-я]*|цыплят[а-я]*|гус[а-я]*|утк[а-я]*|индюк[а-я]*|скот[а-я]*|ферм[а-я]*|пасек[а-я]*|пчел[а-я]*|улей|питом[а-я]*|собак[а-я]*|щен[а-я]*|пес[а-я]*|пёсел[а-я]*|кошк[а-я]*|кот[а-я]*|котят[а-я]*|котейк[а-я]*|хомяк[а-я]*|попуга[а-я]*|рыбк[а-я]*|аквариум[а-я]*|грызун[а-я]*|корм[а-я]*|ветеринар[а-я]*|ветклиник[а-я]*|груминг[а-я]*|поводок|лоток|наполнитель/i.test(lower)) {
+      category = 'Питомцы';
+      iconEmoji = '🐾';
+    }
+    // Gadgets, Gaming & Tech
+    else if (/плойк|соньк|playstation|ps5|ps4|xbox|иксбокс|нинтендо|switch|стимдек|видяха|видюх|видеокарт|rtx|geforce|проц|процессор|ссд|ssd|оперативк|монитор|моник|клав|мышк|айфон|iphone|эйрподс|airpods|макбук|macbook|ipad|айпад|эппл.*вотч|ноут|ноутбук|комп|пк|системник|телевизор|телик|техник|гаджет|наушник|колонк|алис[а]|станци[яи]|пылесос|стиралк|холодильник|микроволновк/i.test(lower)) {
+      category = 'Техника';
+      iconEmoji = '💻';
+    }
+    // Transport, Auto & Fuel
+    else if (/такс|uber|убер|яндекс.*гоу|яндекс.*такси|карш|каршеринг|делимобиль|ситидрайв|белк[а]|заправил|бенз|дизель|солярк|азс|лукойл|газпром|роснефть|татнефть|тебойл|мойка|самомойк|детейлинг|помыл тачк|помыл машин|шиномонтаж|переобул|резин[аы]|балансировк|метро|проездной|тройк|стрелк|автобус|маршрутк|трамвай|электричк|мцд|мцк|сапсан|ласточк|ржд|поезд|самолет|авиабилет|побед|аэрофлот|s7|парковк|штраф|гибдд|платка|осаго|каско/i.test(lower)) {
+      category = 'Транспорт';
+      iconEmoji = '🚕';
+    }
+    // Coffee, Bakery & Drinks
+    else if (/кофе|кофей|латте|капуч|флэт|раф|эспрессо|американо|матча|чай|булочн|выпечк|пекарн|круассан|слойк|булк/i.test(lower)) {
+      category = 'Кафе';
+      iconEmoji = '☕';
+    }
+    // Dining, Fast food, Delivery, Bars
+    else if (/шав[ауе][а-я]*|шаверм|шаурм|донер|кебаб|пицц|додо|папа.*джонс|бургер|макдак|мак\b|вкусно.*точк|вит\b|кфс|kfc|ростикс|ролл|суши|якитори|тануки|обед|ужин|завтрак|ланч|бизнес.*ланч|столовк|столов[ая]|пивас|пиво|пивко|крафт|сидр|сидрери|вино|бар\b|паб\b|рестик|ресторан|кальян|посидели|скинул.*кент|скинул.*шав|покушать|доставк|самокат|лавка|купер|деливери/i.test(lower)) {
+      category = 'Рестораны';
+      iconEmoji = '🍽️';
+    }
+    // Subscriptions & Digital Services
+    else if (/спотик|spotify|эппл.*мьюзик|apple.*music|яндекс.*плюс|плюс\b|телег|telegram.*prem|tg.*prem|нетфликс|netflix|ютуб|youtube|кинопоиск|иви|ivi|окко|okko|кион|kion|premier|start|впн|vpn|хостинг|сервер|vps|vds|домен|айклауд|icloud|гугл.*диск|облако|подписк|chatgpt|gpt|midjourney|github|figma/i.test(lower)) {
+      category = 'Подписки';
+      iconEmoji = '📱';
+    }
+    // Shopping, Clothes & Marketplaces
+    else if (/шмот|педал|тяги|кросс|кед|сникер|ботинк|худи|зипк|толстовк|свитшот|куртк|пуховик|пальто|джинс|штаны|брюк|футболк|мерч|вб\b|вэбэ|вайлдберриз|wildberries|озон|ozon|яндекс.*маркет|маркетплейс|мегамаркет|авито|цум|гум|стокманн|зарин|лайм|lime|befree|lamoda|ламода|косметик|духи|парфюм|золот.*яблок|зя\b|летуаль|шопинг|покупк/i.test(lower)) {
+      category = 'Покупки';
+      iconEmoji = '🛍️';
+    }
+    // Health, Fitness & Medical
+    else if (/зал\b|качалк|спортзал|фитнес|трен[яе]|тренировк|тренер|персоналк|абонемент|протеин|креатин|бцаа|аптек|таблетк|колес[а]|витамин|омег[а]|врач|доктор|терапевт|стоматолог|зуб|пломб|брекет|элайнер|мрт|кт|узи|анализ|инвитро|гемотест|kdl|здоровь|массаж|психолог|остиопат|спа\b/i.test(lower)) {
+      category = 'Здоровье';
+      iconEmoji = '🏥';
+    }
+    // Housing, Renovation & Utilities
+    else if (/аренд|квартир|хат|ипотек|жкх|коммуналк|квартплат|свет|электричеств|вод[аы]|отоплен|газ\b|домофон|капремонт|интернет|вайфай|провайдер|ростелеком|домру|клининг|уборк|ремонт|стройк|обои|краск|плитк|ламинат|сантехник|леруа|лемана.*про|петрович|оби|obi|мебель|икеа|ikea|hoff|диван|кровать|шкаф|стол|матрас/i.test(lower)) {
+      category = 'Жилье';
+      iconEmoji = '🏠';
+    }
+    // Groceries & Supermarkets
+    else if (/продукт|магазин|пятерочк|пятак|перекресток|магнит|вкусвилл|лента|ашан|дикси|спар|spar|метро|глобус|хлеб|молоко|сыр|мясо|яйца|масло|овощ|фрукт|еда/i.test(lower)) {
+      category = 'Продукты';
+      iconEmoji = '🛒';
+    }
+    // Entertainment, Gaming & Hobbies
+    else if (/стим\b|steam|донат|скин|батлпас|battle.*pass|бп\b|вбакс|v-bucks|кино|фильм|сеанс|театр|спектакль|концерт|фест|фестивал|стендап|квест|боулинг|бильярд|страйкбол|парк|аттракцион|зоопарк|аквапарк|баня|сауна|настолк|игры/i.test(lower)) {
+      category = 'Развлечения';
+      iconEmoji = '🎉';
+    }
+    // Investments & Crypto
+    else if (/акци|облигац|офз|брокер|тинькофф.*инвест|бкс|крипт|биткоин|биток|btc|эфир|eth|usdt|тезер|тон\b|ton\b|байбит|bybit|бинанс|binance/i.test(lower)) {
+      category = 'Инвестиции';
+      iconEmoji = '📈';
+    }
   }
 
-  // Clean description
-  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'у', 'меня', 'тысяч', 'тысячи', 'тыщ']);
-  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал', 'упал', 'прилетел', 'залетел'];
+  // Clean description: remove stop words and action prefixes
+  const stopWords = new Set([
+    'за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'к', 'ко',
+    'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера',
+    'я', 'мне', 'у', 'меня', 'мы', 'нам',
+    'тысяч', 'тысячи', 'тыщ', 'тыс', 'миллион', 'миллиона', 'миллионов', 'млн', 'лям', 'лямов', 'лимон', 'лимонов',
+    'миллиард', 'миллиарда', 'миллиардов', 'млрд', 'ярд', 'ярдов', 'арбуз', 'арбузов',
+    'косарь', 'косаря', 'косарей', 'кусок', 'куска', 'кусков', 'штука', 'штуки', 'штук', 'тонна', 'тонн',
+    'сотка', 'сотку', 'сотен', 'полтос', 'полтинник', 'сорокет', 'пятихатка', 'двушка', 'трешка', 'пятерка', 'чирик',
+    'баксов', 'долларов', 'евро', 'юаней', 'usdt'
+  ]);
+  const actionPrefixes = [
+    'получил', 'получила', 'заработал', 'заработала', 'поднял', 'подняла', 'срубил', 'срубила',
+    'купил', 'купила', 'потратил', 'потратила', 'взял', 'взяла', 'скинул', 'скинула',
+    'перевел', 'перевела', 'перечислил', 'перечислила', 'капнул', 'капнуло', 'начислили', 'начислил',
+    'отдал', 'отдала', 'упал', 'упали', 'упало', 'прилетел', 'прилетело', 'прилетели', 'залетел', 'залетело',
+    'оплатил', 'оплатила'
+  ];
 
   const remainingWords = cleanWords
     .trim()
     .split(/\s+/)
     .filter(w => {
-      const low = w.toLowerCase().replace(/[^а-яёa-z0-9]/gi, '');
+      const low = w.toLowerCase().replace(/[^а-яa-z0-9]/gi, '');
       if (!low) return false;
       if (stopWords.has(low)) return false;
       if (actionPrefixes.some(p => low.startsWith(p))) return false;
@@ -849,6 +1022,9 @@ const categoryIcons = {
   'Техника': '💻',
   'Жилье': '🏠',
   'ЖКХ': '⚡',
+  'Питомцы': '🐾',
+  'Животные': '🐾',
+  'Хозяйство': '🌾',
   'Путешествия': '✈️',
   'Образование': '📚',
   'Развлечения': '🎉',
@@ -868,6 +1044,8 @@ const getCategoryIcon = (cat, type) => {
     if (/долг|возврат/i.test(c)) return '🤝';
     return '💰';
   }
+  if (/питом|животн|коров|бык|собак|кошк|корм|вет/i.test(c)) return '🐾';
+  if (/хозяйств|ферм/i.test(c)) return '🌾';
   if (/транспорт|такси|авто|машин|бензин|метро/i.test(c)) return '🚕';
   if (/кофе|кафе|пекарн/i.test(c)) return '☕';
   if (/ресторан|бар|пицц|бургер|еда|доставк/i.test(c)) return '🍽️';
