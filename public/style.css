@@ -4240,7 +4240,7 @@ input[type="number"] {
   background: rgba(10, 16, 23, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: var(--r-md);
-  padding: 12px 38px 12px 42px;
+  padding: 12px 76px 12px 42px;
   font-family: inherit;
   font-size: 14px;
   color: #FFFFFF;
@@ -4259,25 +4259,36 @@ input[type="number"] {
   box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.15);
 }
 
-.btn-clear-quick {
+.quick-input-right-actions {
   position: absolute;
-  right: 12px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+
+.btn-clear-quick {
+  position: static;
   background: rgba(255, 255, 255, 0.08);
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text-muted);
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  display: flex;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all var(--t-fast);
+  flex-shrink: 0;
 }
 
 .btn-clear-quick:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #FFFFFF;
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: var(--accent-coral);
+  transform: scale(1.08);
 }
 
 .btn-submit-express {
@@ -4360,6 +4371,24 @@ input[type="number"] {
 .preview-pill.desc {
   color: var(--text-secondary);
   font-style: italic;
+}
+
+.preview-pill.ai-tag {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(59, 130, 246, 0.2));
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  animation: pulseAiBadge 2s infinite ease-in-out;
+}
+
+@keyframes pulseAiBadge {
+  0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+  70% { box-shadow: 0 0 8px 2px rgba(168, 85, 247, 0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
 }
 
 /* 1-Tap Quick Spend Pills (Монетки) */
@@ -5683,8 +5712,8 @@ input[type="number"] {
    VOICE INPUT (MICROPHONE) & SOUND WAVE ANIMATIONS
    ========================================================================== */
 .btn-voice-express {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -5696,7 +5725,7 @@ input[type="number"] {
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   outline: none;
   flex-shrink: 0;
-  margin-left: 4px;
+  margin: 0;
 }
 
 .btn-voice-express:hover {
