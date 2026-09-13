@@ -1266,11 +1266,6 @@ function renderMasthead() {
           </button>
         </div>
 
-        <button class="btn-primary" id="btn-quick-new">
-          ${icon('plus', 14)}
-          <span>Записать</span>
-        </button>
-
         <div class="user-btn" id="user-profile-btn" title="Профиль, аватарка и настройки">
           <div class="user-avatar">${avatarDisplay}</div>
           <span class="user-name-text">${esc(userName)}</span>
