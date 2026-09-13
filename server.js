@@ -80,6 +80,7 @@ function parseTxFallback(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
 
+  const lower = text.toLowerCase();
   let cleanWords = ' ' + text + ' ';
   let amount = 0;
 
@@ -99,6 +100,15 @@ function parseTxFallback(raw) {
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*)(?:$|[^а-яёa-z0-9])/i, (m) => Math.round(parseFloat(m[1].replace(',', '.')) * 1000)) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 40000) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яёa-z0-9])/i, () => 50000) ||
+  // "сотка тысяч / к" -> 100 000
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)\s*(?:тыс[а-я]*|тыщ[а-я]*|к\b|k\b)(?:$|[^а-яёa-z0-9])/i, () => 100000) ||
+  // "сотка рублей" -> 100
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)\s*(?:руб[а-я]*|р\b)(?:$|[^а-яёa-z0-9])/i, () => 100) ||
+  // "сотка" в контексте доходов/упали/зарплаты/баланса = 100 000 ₽
+  matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:сотка|сотку|сотен)(?:$|[^а-яёa-z0-9])/i, () => {
+    if (/(?:руб|кофе|билет|проезд|чай|булк|чипс|жвачк)/i.test(lower)) return 100;
+    return 100000;
+  }) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яёa-z0-9])/i, () => 500) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яёa-z0-9])/i, () => 2000) ||
   matchAndRemove(/(?:^|[^а-яёa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яёa-z0-9])/i, () => 3000) ||
@@ -120,11 +130,10 @@ function parseTxFallback(raw) {
     occurred_on = toIso(d);
   }
 
-  const lower = text.toLowerCase();
   let type = 'expense';
   let category = 'Прочее';
 
-  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
+  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|упал|прилетел|залетел|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
 
   if (isIncome) {
     type = 'income';
@@ -173,8 +182,8 @@ function parseTxFallback(raw) {
   }
 
   // Clean description
-  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'тысяч', 'тысячи', 'тыщ']);
-  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал'];
+  const stopWords = new Set(['за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера', 'я', 'мне', 'у', 'меня', 'тысяч', 'тысячи', 'тыщ']);
+  const actionPrefixes = ['получил', 'заработ', 'купил', 'потрат', 'поднял', 'скинул', 'перевел', 'перечисл', 'капнул', 'начисл', 'отдал', 'упал', 'прилетел', 'залетел'];
 
   const remainingWords = cleanWords
     .trim()
@@ -493,7 +502,7 @@ app.post("/api/subscriptions", auth, async (req, res) => {
   }
 });
 
-app.post("/api/parse-tx", auth, async (req, res) => {
+app.post("/api/parse-tx", async (req, res) => {
   try {
     const { text } = req.body || {};
     if (!text || !String(text).trim()) {
@@ -510,17 +519,21 @@ app.post("/api/parse-tx", auth, async (req, res) => {
 Твоя задача — извлечь параметры операции из русской разговорной фразы со сленгом.
 
 КРИТИЧЕСКИ ВАЖНО — ТОЧНОЕ ОПРЕДЕЛЕНИЕ ТИПА (income vs expense):
-1. "type": "income" (ДОХОД / ПОСТУПЛЕНИЕ) — если деньги получены, заработаны, начислены, подняты или пришли:
-   - Примеры: «получил», «заработал», «мне перевели / скинули», «поднял», «выплатили», «пришли деньги / кэш», «капнул аванс», «начислили зарплату», «продал на авито», «подарили на др», «вернули долг».
+1. "type": "income" (ДОХОД / ПОСТУПЛЕНИЕ) — если деньги получены, заработаны, начислены, подняты, пришли, упали или капнули:
+   - Примеры: «у меня сотка сегодня упала», «упала сотка», «сотка прилетела», «капнула сотка», «получил», «заработал», «мне перевели / скинули», «поднял», «выплатили», «пришли деньги / кэш», «капнул аванс», «начислили зарплату», «продал на авито», «подарили на др», «вернули долг».
 2. "type": "expense" (РАСХОД / ТРАТА) — если деньги потрачены или отданы:
    - Примеры: «купил», «потратил», «заправил», «скинул кенту за еду», «оплатил», «взял шмот», «сходили в ресторан».
 
 СУММА И СЛЕНГ (amount):
-- косарь / кусок / штука / тонна = 1000
-- двушка = 2000, трешка / трояк = 3000, пятихатка = 500, пятерка = 5000, чирик = 10000
-- сорокет = 40000, полтос / полтинник = 50000, сотка = 100000
-- пол-ляма = 500000, лям / лимон = 1000000
-- 15к / 15 тыс / 15 тысяч = 15000
+- В современном финансовом контексте в России «сотка» в контексте дохода/поступлений («сотка упала», «заработал сотку», «получил сотку», «сотка прилетела») — это 100 000 ₽ (сто тысяч рублей)!
+- «сотка рублей» или «100р» — это 100 ₽.
+- «сотка тысяч», «сотка к», «100к» — это 100 000 ₽.
+- «полтос» / «полтинник» при доходе — это 50 000 ₽.
+- «сорокет» = 40 000 ₽.
+- «косарь» / «кусок» / «штука» / «тонна» = 1 000 ₽.
+- «двушка» = 2 000 ₽, «трешка» / «трояк» = 3 000 ₽, «пятихатка» = 500 ₽, «пятерка» = 5 000 ₽, «чирик» = 10 000 ₽.
+- «пол-ляма» = 500 000 ₽, «лям» / «лимон» = 1 000 000 ₽.
+- «15к» / «15 тыс» / «15 тысяч» = 15 000 ₽.
 
 КАТЕГОРИИ:
 - Для income: Зарплата, Фриланс, Инвестиции, Подарки, Продажи, Возврат долга, Прочее.
@@ -1078,10 +1091,14 @@ ${goalsSummary}
    [ACTION:transactions:tx-all:Посмотреть все операции]`;
 }
 
-async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+const GEMINI_MODELS = [
+  process.env.GEMINI_MODEL,
+  "gemini-2.5-flash-lite",
+  "gemini-flash-latest",
+  "gemini-2.5-flash"
+].filter(Boolean);
 
+async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
   const contents = [];
   let lastRole = null;
 
@@ -1116,35 +1133,43 @@ async function callGemini(apiKey, systemPrompt, userMessage, history = []) {
     },
     contents,
     generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 8192
+      temperature: 0.2,
+      maxOutputTokens: 2048,
+      thinkingConfig: { thinkingBudget: 0 }
     }
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
+  let lastErr = null;
+  for (const model of GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error?.message || "Ошибка Gemini API");
+      const data = await response.json();
+      if (!response.ok) {
+        lastErr = new Error(data.error?.message || `Gemini ${model} error`);
+        console.warn(`Gemini model ${model} error notice:`, data.error?.message?.slice(0, 120));
+        continue;
+      }
+
+      const candidate = data.candidates?.[0];
+      if (!candidate) continue;
+
+      const parts = candidate.content?.parts || [];
+      const validParts = parts.filter(p => !p.thought);
+      const fullText = (validParts.length > 0 ? validParts : parts).map(p => p.text || "").join("").trim();
+      if (fullText) return fullText;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`Gemini request to ${model} error:`, err.message);
+    }
   }
 
-  const candidate = data.candidates?.[0];
-  if (!candidate) {
-    throw new Error("Пустой ответ от Gemini");
-  }
-
-  const parts = candidate.content?.parts || [];
-  const validParts = parts.filter(p => !p.thought);
-  const fullText = (validParts.length > 0 ? validParts : parts).map(p => p.text || "").join("").trim();
-  if (!fullText) {
-    throw new Error("Пустой текст ответа Gemini");
-  }
-
-  return fullText;
+  throw lastErr || new Error("Не удалось получить ответ от Gemini API");
 }
 
 const assistantHandler = async (req, res) => {
