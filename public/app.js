@@ -406,6 +406,78 @@ async function executeAssistantAction(actType, actData) {
         await refreshAllData();
         renderApp();
       }
+    } else if (actType === 'delete_goal' || actType === 'clear_goals') {
+      const gName = String(actData.name || '').trim().toLowerCase();
+      const gId = actData.id;
+      if (actType === 'clear_goals' || gName === 'all' || gName === 'все' || gName === 'все цели') {
+        const allGoals = [...(data.goals || [])];
+        for (const g of allGoals) {
+          try { await api('goals/' + g.id, { method: 'DELETE' }); } catch (_) {}
+        }
+      } else {
+        let targetGoal = null;
+        if (gId) {
+          targetGoal = (data.goals || []).find(g => String(g.id) === String(gId));
+        } else if (gName) {
+          targetGoal = (data.goals || []).find(g => {
+            const name = (g.name || '').toLowerCase();
+            return name === gName || name.includes(gName) || gName.includes(name);
+          });
+        }
+        if (!targetGoal && (data.goals || []).length > 0 && (!gName || gName === 'последнюю' || gName === 'последняя')) {
+          targetGoal = data.goals[data.goals.length - 1];
+        }
+        if (targetGoal) {
+          await api('goals/' + targetGoal.id, { method: 'DELETE' });
+        }
+      }
+      await refreshAllData();
+      renderApp();
+    } else if (actType === 'delete_budget' || actType === 'clear_budgets') {
+      const bCat = String(actData.category || '').trim().toLowerCase();
+      const bId = actData.id;
+      if (actType === 'clear_budgets' || bCat === 'all' || bCat === 'все' || bCat === 'все бюджеты') {
+        const allBudgets = [...(data.budgets || [])];
+        for (const b of allBudgets) {
+          try { await api('budgets/' + b.id, { method: 'DELETE' }); } catch (_) {}
+        }
+      } else {
+        let targetBudget = null;
+        if (bId) {
+          targetBudget = (data.budgets || []).find(b => String(b.id) === String(bId));
+        } else if (bCat) {
+          targetBudget = (data.budgets || []).find(b => {
+            const cat = (b.category || '').toLowerCase();
+            return cat === bCat || cat.includes(bCat) || bCat.includes(cat);
+          });
+        }
+        if (targetBudget) {
+          await api('budgets/' + targetBudget.id, { method: 'DELETE' });
+        }
+      }
+      await refreshAllData();
+      renderApp();
+    } else if (actType === 'delete_tx') {
+      const txId = actData.id;
+      let targetTx = null;
+      if (txId) {
+        targetTx = (data.transactions || []).find(t => String(t.id) === String(txId));
+      } else if (actData.last || (!actData.amount && !actData.description)) {
+        targetTx = (data.transactions || [])[0];
+      } else {
+        const amt = Number(actData.amount) || 0;
+        const desc = String(actData.description || '').toLowerCase();
+        targetTx = (data.transactions || []).find(t => {
+          const matchAmt = amt > 0 ? Math.abs(Number(t.amount) - amt) < 0.01 : true;
+          const matchDesc = desc ? (t.description || '').toLowerCase().includes(desc) || (t.category || '').toLowerCase().includes(desc) : true;
+          return matchAmt && matchDesc;
+        });
+      }
+      if (targetTx) {
+        await api('transactions/' + targetTx.id, { method: 'DELETE' });
+        await refreshAllData();
+        renderApp();
+      }
     }
   } catch (err) {
     console.warn('Agentic action execution notice:', err.message);
@@ -526,6 +598,74 @@ const formatAssistantMessage = (raw) => {
             <div class="action-card-footer">
               <button type="button" class="btn-action-navigate" data-nav-tab="goals">
                 <span>Открыть цели</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (act.type === 'delete_goal' || act.type === 'clear_goals') {
+        const isAll = act.type === 'clear_goals' || String(act.data.name || '').toLowerCase() === 'all' || String(act.data.name || '').toLowerCase() === 'все';
+        return `
+          <div class="chat-action-card delete">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">🗑️</span>
+                <span class="action-badge-label">Цель удалена</span>
+              </div>
+              <span class="action-status-pill danger">✓ Удалено из системы</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">${isAll ? 'Все цели удалены' : esc(act.data.name || 'Финансовая цель')}</div>
+              <div class="action-main-subtitle">${isAll ? 'Портфель целей полностью очищен' : 'Цель снята с отслеживания и удалена из портфеля'}</div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="goals">
+                <span>Раздел «Цели»</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (act.type === 'delete_budget' || act.type === 'clear_budgets') {
+        const isAll = act.type === 'clear_budgets' || String(act.data.category || '').toLowerCase() === 'all' || String(act.data.category || '').toLowerCase() === 'все';
+        return `
+          <div class="chat-action-card delete">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">🗑️</span>
+                <span class="action-badge-label">Лимит бюджета удален</span>
+              </div>
+              <span class="action-status-pill danger">✓ Лимит снят</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">${isAll ? 'Все бюджетные лимиты сняты' : esc(act.data.category || 'Категория')}</div>
+              <div class="action-main-subtitle">Ограничение трат снято, автоконтроль категории отключен</div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="budgets">
+                <span>Раздел «Бюджеты»</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (act.type === 'delete_tx') {
+        return `
+          <div class="chat-action-card delete">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">🗑️</span>
+                <span class="action-badge-label">Операция удалена</span>
+              </div>
+              <span class="action-status-pill danger">✓ Запись стёрта</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">${act.data.amount ? money(act.data.amount) : 'Операция'}</div>
+              <div class="action-main-subtitle">${esc(act.data.description || 'Последняя транзакция')} • Баланс скорректирован</div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="transactions">
+                <span>История операций</span>
                 <span class="action-arrow">→</span>
               </button>
             </div>
@@ -1366,6 +1506,9 @@ function icon(name, size = 16) {
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
     calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line>',
+    fileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>',
+    cpu: '<rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>',
     mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
     shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
@@ -1800,6 +1943,450 @@ function renderSubscriptionModal() {
             <button type="submit" class="btn-primary" id="btn-save-sub-modal">${icon('plus', 13)} Добавить в радар</button>
           </div>
         </form>
+      </div>
+    </div>
+  `;
+}
+
+/* ==========================================================================
+   BANK STATEMENT IMPORT ENGINE & AI INTEGRATION ARCHITECTURE
+   ========================================================================== */
+
+// Configurable External AI Ingestion Hook
+window.FINKAIF_AI_IMPORT_CONFIG = {
+  apiEndpoint: localStorage.getItem('finkaif_ai_import_endpoint') || '',
+  apiKey: localStorage.getItem('finkaif_ai_import_key') || '',
+  modelName: localStorage.getItem('finkaif_ai_import_model') || 'custom-fin-llm',
+
+  save(endpoint, key, model) {
+    this.apiEndpoint = (endpoint || '').trim();
+    this.apiKey = (key || '').trim();
+    this.modelName = (model || '').trim();
+    localStorage.setItem('finkaif_ai_import_endpoint', this.apiEndpoint);
+    localStorage.setItem('finkaif_ai_import_key', this.apiKey);
+    localStorage.setItem('finkaif_ai_import_model', this.modelName);
+  },
+
+  hasCustomAI() {
+    return Boolean(this.apiEndpoint);
+  }
+};
+
+let bankImportParsed = [];
+let bankImportSelectedPreset = 'auto';
+
+function autoCategorizeDescription(desc) {
+  if (!desc) return 'Прочее';
+  const low = desc.toLowerCase();
+
+  if (/кофе|пекарн|шоколадниц|кофейн|старбакс|surf coffee|дринкит|stars coffee|one price|раф|латте|капуч|булочн/i.test(low)) return 'Кафе';
+  if (/додо|макдоналдс|вкусно и точка|бургер кинг|kfc|ростикс|теремок|доставка|яндекс еда|деливери|купер|ресторан|бар\b|паб\b|суши|пицц|шоп|лавка|чайхон/i.test(low)) return 'Рестораны';
+  if (/пятерочк|перекресток|магнит|дикси|лента|ашан|окей|вкусвилл|чижик|метро|спар|spar|верный|красное и белое|к&б|бристоль|ярче|азбука вкуса|самокат|супермаркет|продукты|мясо|молоко|хлеб/i.test(low)) return 'Продукты';
+  if (/такси|uber|яндекс go|ситимобил|каршеринг|делимобиль|ситидрайв|лукойл|газпромнефть|роснефть|татнефть|тебойл|азс|бензин|метрополитен|тройка|ржд|аэрофлот|победа|s7|парковка|платные дороги/i.test(low)) return 'Транспорт';
+  if (/аптек|горздрав|ригла|планета здоровья|вита|доктор|клиника|инвитро|гемотест|стоматолог|здоровье|фитнес|world class|ddx|тренажер/i.test(low)) return 'Здоровье';
+  if (/вайлдберриз|wildberries|озон|ozon|яндекс маркет|мегамаркет|авито|lamoda|aliexpress|золотое яблоко|летуаль|рив гош|befree|lime|zarina|одежда|обувь/i.test(low)) return 'Покупки';
+  if (/подписк|яндекс плюс|кинопоиск|иви|окко|vk combo|spotify|apple|telegram|ютуб|youtube|chatgpt|vpn|облако|icloud/i.test(low)) return 'Подписки';
+  if (/жкх|квартплат|мосэнергосбыт|ростелеком|мтс|билайн|мегафон|т-мобайл|интернет|аренда|петрович|леруа|лемана про|домофон/i.test(low)) return 'Жилье';
+  if (/кино|театр|концерт|парк|игры|steam|playstation|xbox|развлечения/i.test(low)) return 'Развлечения';
+  if (/зарплат|аванс|оклад|расчет|преми|гонорар|зачисление зарплаты|вознаграждение/i.test(low)) return 'Зарплата';
+  if (/дивиденд|купон|брокер|вклад|процент по вкладу|выплата процентов/i.test(low)) return 'Инвестиции';
+  if (/перевод от|пополнение счета|сбп/i.test(low)) return 'Поступления';
+
+  return 'Прочее';
+}
+
+function splitCsvLine(line, delimiter) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === delimiter && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseBankAmount(str) {
+  if (typeof str === 'number') return str;
+  if (!str) return 0;
+  const clean = String(str).replace(/[\s\u00A0₽$€₸]/g, '').replace(',', '.');
+  const val = parseFloat(clean);
+  return isNaN(val) ? 0 : val;
+}
+
+function parseBankDate(raw) {
+  if (!raw) return toDateIso(getMskDate());
+  const s = String(raw).trim().split(/\s+/)[0];
+  const dotM = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (dotM) {
+    let year = parseInt(dotM[3], 10);
+    if (year < 100) year += 2000;
+    const month = dotM[2].padStart(2, '0');
+    const day = dotM[1].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const isoM = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoM) {
+    return `${isoM[1]}-${isoM[2].padStart(2, '0')}-${isoM[3].padStart(2, '0')}`;
+  }
+  const slashM = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slashM) {
+    let year = parseInt(slashM[3], 10);
+    if (year < 100) year += 2000;
+    return `${year}-${slashM[2].padStart(2, '0')}-${slashM[1].padStart(2, '0')}`;
+  }
+  return toDateIso(getMskDate());
+}
+
+function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
+  const text = String(content || '').trim();
+  if (!text) return [];
+
+  // Check JSON format
+  if (text.startsWith('[') || (text.startsWith('{') && text.includes('"transactions"'))) {
+    try {
+      const parsed = JSON.parse(text);
+      const list = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
+      return list.map(item => ({
+        occurred_on: parseBankDate(item.date || item.occurred_on),
+        amount: Math.abs(parseBankAmount(item.amount)),
+        type: item.type === 'income' ? 'income' : (parseBankAmount(item.amount) > 0 && item.type !== 'expense' ? 'income' : 'expense'),
+        category: item.category || autoCategorizeDescription(item.description),
+        description: item.description || item.category || 'Операция из выписки',
+        selected: true
+      })).filter(x => x.amount > 0);
+    } catch (_) {}
+  }
+
+  // Check 1C / Client-Bank TXT format (ВТБ, Сбер, Альфа 1С экспорт)
+  if (text.includes('1CClientBankExchange') || text.includes('СекцияДокумент')) {
+    const docs = text.split(/СекцияДокумент\s*=/i);
+    const results = [];
+    for (let i = 1; i < docs.length; i++) {
+      const doc = docs[i];
+      const dateM = doc.match(/Дата(?:Документа)?\s*=\s*([^\r\n]+)/i);
+      const amtM = doc.match(/Сумма\s*=\s*([^\r\n]+)/i);
+      const purpM = doc.match(/НазначениеПлатежа\s*=\s*([^\r\n]+)/i);
+      const payerM = doc.match(/Плательщик\s*=\s*([^\r\n]+)/i);
+      const recipM = doc.match(/Получатель\s*=\s*([^\r\n]+)/i);
+
+      const amt = amtM ? parseBankAmount(amtM[1]) : 0;
+      if (amt > 0) {
+        const desc = (purpM ? purpM[1] : (recipM ? recipM[1] : (payerM ? payerM[1] : 'Банковский платеж'))).trim();
+        const isIncome = doc.includes('Платежное требование') || /зачисление|возврат|поступление|оплата от покупателя/i.test(desc);
+        results.push({
+          occurred_on: dateM ? parseBankDate(dateM[1]) : toDateIso(getMskDate()),
+          amount: amt,
+          type: isIncome ? 'income' : 'expense',
+          category: autoCategorizeDescription(desc),
+          description: desc,
+          selected: true
+        });
+      }
+    }
+    if (results.length > 0) return results;
+  }
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const sample = lines.slice(0, 5).join('\n');
+  const semiCount = (sample.match(/;/g) || []).length;
+  const commaCount = (sample.match(/,/g) || []).length;
+  const tabCount = (sample.match(/\t/g) || []).length;
+  let delimiter = ';';
+  if (tabCount > semiCount && tabCount > commaCount) delimiter = '\t';
+  else if (commaCount > semiCount) delimiter = ',';
+
+  let headerIdx = -1;
+  let headers = [];
+  for (let i = 0; i < Math.min(10, lines.length); i++) {
+    const cols = splitCsvLine(lines[i], delimiter).map(c => c.toLowerCase().replace(/['"]/g, '').trim());
+    if (cols.some(c => c.includes('дата') || c.includes('date') || c.includes('сумма') || c.includes('amount'))) {
+      headerIdx = i;
+      headers = cols;
+      break;
+    }
+  }
+
+  if (headerIdx === -1) {
+    headerIdx = 0;
+    headers = splitCsvLine(lines[0], delimiter).map(c => c.toLowerCase().replace(/['"]/g, '').trim());
+  }
+
+  let dateIdx = headers.findIndex(c => c.includes('дата операции') || c.includes('дата платежа') || c.includes('дата') || c.includes('date'));
+  let amtIdx = headers.findIndex(c => c.includes('сумма операции') || c.includes('сумма платежа') || c.includes('сумма') || c.includes('amount'));
+  let catIdx = headers.findIndex(c => c.includes('категория') || c.includes('category'));
+  let descIdx = headers.findIndex(c => c.includes('описание') || c.includes('назначение') || c.includes('контрагент') || c.includes('merchant') || c.includes('получатель'));
+  let statusIdx = headers.findIndex(c => c.includes('статус') || c.includes('status'));
+
+  if (dateIdx === -1) dateIdx = 0;
+  if (amtIdx === -1) amtIdx = headers.findIndex((_, idx) => idx !== dateIdx);
+  if (descIdx === -1) descIdx = headers.findIndex((_, idx) => idx !== dateIdx && idx !== amtIdx && idx !== catIdx);
+
+  const results = [];
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const row = splitCsvLine(lines[i], delimiter);
+    if (row.length <= 1) continue;
+
+    if (statusIdx !== -1 && row[statusIdx]) {
+      const st = row[statusIdx].toLowerCase();
+      if (st.includes('отказ') || st.includes('failed') || st.includes('ошибка') || st.includes('отклонен')) {
+        continue;
+      }
+    }
+
+    const rawAmt = row[amtIdx] || '0';
+    const numAmt = parseBankAmount(rawAmt);
+    if (!numAmt || Math.abs(numAmt) < 0.01) continue;
+
+    const rawDate = row[dateIdx] || '';
+    const date = parseBankDate(rawDate);
+    const rawDesc = descIdx !== -1 && row[descIdx] ? row[descIdx].replace(/^["']|["']$/g, '').trim() : '';
+    const rawCat = catIdx !== -1 && row[catIdx] ? row[catIdx].replace(/^["']|["']$/g, '').trim() : '';
+
+    let type = 'expense';
+    if (numAmt > 0) {
+      if (String(rawAmt).includes('+') || (!String(rawAmt).includes('-') && (rawCat.includes('Пополнения') || rawCat.includes('Зарплата') || /зарплат|перевод от|пополнение/i.test(rawDesc)))) {
+        type = 'income';
+      }
+    } else {
+      type = 'expense';
+    }
+
+    if (numAmt > 0 && (rawCat.toLowerCase().includes('доход') || /зарплат|аванс|дивиденд|преми|пополнение/i.test(rawDesc))) {
+      type = 'income';
+    }
+
+    const absAmt = Math.abs(numAmt);
+    const finalDesc = rawDesc || rawCat || 'Операция по карте';
+    const finalCat = (rawCat && rawCat.length > 2 && rawCat !== 'Другое' && rawCat !== 'Прочее') ? rawCat : autoCategorizeDescription(finalDesc);
+
+    results.push({
+      occurred_on: date,
+      amount: absAmt,
+      type,
+      category: finalCat,
+      description: finalDesc,
+      selected: true
+    });
+  }
+
+  return results;
+}
+
+async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto') {
+  if (window.FINKAIF_AI_IMPORT_CONFIG && window.FINKAIF_AI_IMPORT_CONFIG.hasCustomAI()) {
+    try {
+      const endpoint = window.FINKAIF_AI_IMPORT_CONFIG.apiEndpoint;
+      const headers = { 'Content-Type': 'application/json' };
+      if (window.FINKAIF_AI_IMPORT_CONFIG.apiKey) {
+        headers['Authorization'] = `Bearer ${window.FINKAIF_AI_IMPORT_CONFIG.apiKey}`;
+      }
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          filename: fileName,
+          content: fileContent,
+          preset: bankPreset,
+          model: window.FINKAIF_AI_IMPORT_CONFIG.modelName
+        })
+      });
+      if (response.ok) {
+        const json = await response.json();
+        const list = Array.isArray(json) ? json : (json.transactions || json.items || []);
+        if (list.length > 0) {
+          return {
+            engine: 'ai',
+            transactions: list.map(item => ({
+              occurred_on: parseBankDate(item.date || item.occurred_on),
+              amount: Math.abs(parseBankAmount(item.amount)),
+              type: item.type === 'income' ? 'income' : 'expense',
+              category: item.category || autoCategorizeDescription(item.description),
+              description: item.description || 'Импортированная операция',
+              selected: true
+            }))
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Custom AI parse failed, falling back to smart engine:', e);
+    }
+  }
+
+  const items = parseStatementBuiltin(fileContent, fileName, bankPreset);
+  return {
+    engine: 'smart',
+    transactions: items
+  };
+}
+
+function openBankImportModal() {
+  const m = document.getElementById('import-bank-modal');
+  if (m) {
+    m.style.display = 'flex';
+  }
+}
+
+function closeBankImportModal() {
+  const m = document.getElementById('import-bank-modal');
+  if (m) {
+    m.style.display = 'none';
+  }
+}
+
+function renderImportBankModal() {
+  const hasAi = window.FINKAIF_AI_IMPORT_CONFIG && window.FINKAIF_AI_IMPORT_CONFIG.hasCustomAI();
+
+  return `
+    <div id="import-bank-modal" class="modal-backdrop" style="display: none;">
+      <div class="modal-card import-modal-card">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="modal-header-icon-badge">
+              ${icon('upload', 18)}
+            </div>
+            <div>
+              <h3 class="modal-title">Импорт банковской выписки</h3>
+              <p class="modal-subtitle">Загрузите файл выписки (.CSV, .TXT, .TSV, .JSON) для мгновенного переноса операций</p>
+            </div>
+          </div>
+          <button type="button" class="btn-icon" id="btn-close-import-modal">${icon('close', 16)}</button>
+        </div>
+
+        <!-- Bank Preset Selector Bar -->
+        <div class="import-presets-bar">
+          <span class="import-presets-lbl">Банк:</span>
+          <div class="import-bank-pills">
+            <button type="button" class="import-bank-pill active" data-bank="auto">Все банки (Авто)</button>
+            <button type="button" class="import-bank-pill" data-bank="tinkoff">Т-Банк (Тинькофф)</button>
+            <button type="button" class="import-bank-pill" data-bank="sber">СберБанк</button>
+            <button type="button" class="import-bank-pill" data-bank="alfa">Альфа-Банк</button>
+            <button type="button" class="import-bank-pill" data-bank="vtb">ВТБ / 1C</button>
+          </div>
+          <button type="button" class="btn-ai-config-toggle" id="btn-toggle-ai-config" title="Настройки внешнего API нейросети">
+            ${icon('cpu', 13)}
+            <span>AI-движок</span>
+          </button>
+        </div>
+
+        <!-- AI Settings Drawer (Collapsible) -->
+        <div id="import-ai-config-drawer" class="import-ai-drawer" style="display: none;">
+          <div class="import-ai-drawer-head">
+            <div class="ai-drawer-title">
+              <span class="ai-pulse-dot"></span>
+              <span>Подключение внешнего AI для распознавания выписок</span>
+            </div>
+            <span class="ai-drawer-hint">Здесь можно указать API адрес и токен обученной нейросети</span>
+          </div>
+          <div class="ai-config-grid">
+            <div>
+              <label class="form-label">API Endpoint URL</label>
+              <input class="form-input" id="ai-import-endpoint" placeholder="https://your-ai-service.com/v1/parse-statement" value="${esc(window.FINKAIF_AI_IMPORT_CONFIG.apiEndpoint)}">
+            </div>
+            <div>
+              <label class="form-label">API Key / Токен</label>
+              <input class="form-input" id="ai-import-key" type="password" placeholder="sk-..." value="${esc(window.FINKAIF_AI_IMPORT_CONFIG.apiKey)}">
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+            <span class="ai-status-note">Текущий статус: ${hasAi ? '🟢 Внешний AI подключен' : '⚡ Работает встроенный Smart Engine (готов к подключению API)'}</span>
+            <button type="button" class="btn-secondary" id="btn-save-ai-config" style="height: 32px; font-size: 12px;">Сохранить настройки AI</button>
+          </div>
+        </div>
+
+        <!-- Upload Drop Zone -->
+        <div id="import-dropzone" class="import-drop-zone">
+          <input type="file" id="bank-file-input" accept=".csv,.txt,.tsv,.json" style="display: none;">
+          <div class="drop-zone-icon">
+            ${icon('fileText', 32)}
+          </div>
+          <div class="drop-zone-title">Перетащите файл выписки сюда</div>
+          <div class="drop-zone-subtitle">или <span class="drop-browse-link">выберите на устройстве</span></div>
+          <div class="drop-zone-badges">
+            <span class="drop-badge">Т-Банк (CSV)</span>
+            <span class="drop-badge">Сбер (CSV/TXT)</span>
+            <span class="drop-badge">Альфа (CSV)</span>
+            <span class="drop-badge">ВТБ & 1C</span>
+            <span class="drop-badge">Универсальный CSV</span>
+          </div>
+        </div>
+
+        <!-- Preview & Action Section (Hidden initially) -->
+        <div id="import-preview-section" class="import-preview-section" style="display: none;">
+          <!-- Stats Strip -->
+          <div class="import-stats-strip">
+            <div class="import-stat-item">
+              <span class="import-stat-lbl">Всего операций</span>
+              <span class="import-stat-val num" id="import-stat-count">0</span>
+            </div>
+            <div class="import-stat-item">
+              <span class="import-stat-lbl">Поступления</span>
+              <span class="import-stat-val num inc" id="import-stat-inc">+0 ₽</span>
+            </div>
+            <div class="import-stat-item">
+              <span class="import-stat-lbl">Списания</span>
+              <span class="import-stat-val num exp" id="import-stat-exp">-0 ₽</span>
+            </div>
+            <div class="import-stat-item engine-item">
+              <span class="import-stat-lbl">Движок</span>
+              <span class="import-stat-val" id="import-stat-engine">⚡ Smart Engine</span>
+            </div>
+          </div>
+
+          <!-- Preview Table Controls -->
+          <div class="import-table-controls">
+            <label class="import-select-all-label">
+              <input type="checkbox" id="import-select-all-cb" checked>
+              <span id="import-selected-count-label">Выбрано: 0 операций</span>
+            </label>
+            <span class="import-table-hint">Снимите галочки с операций, которые не нужно загружать</span>
+          </div>
+
+          <!-- Table Container -->
+          <div class="import-table-wrap">
+            <table class="import-table">
+              <thead>
+                <tr>
+                  <th style="width: 36px;"></th>
+                  <th style="width: 100px;">Дата</th>
+                  <th style="width: 140px;">Категория</th>
+                  <th>Описание / Назначение</th>
+                  <th style="width: 120px; text-align: right;">Сумма</th>
+                </tr>
+              </thead>
+              <tbody id="import-table-tbody">
+                <!-- Dynamic rows -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Footer Action Buttons -->
+          <div class="import-footer-actions">
+            <button type="button" class="btn-secondary" id="btn-import-change-file">
+              Выбрать другой файл
+            </button>
+            <button type="button" class="btn-primary" id="btn-import-submit">
+              ${icon('check', 16)}
+              <span id="btn-import-submit-label">Импортировать операции</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   `;
@@ -3294,7 +3881,11 @@ function renderTransactionsView() {
         <h1 class="view-title">История операций</h1>
         <p class="view-subtitle">Полный журнал поступлений и списаний средств с быстрым поиском и итогами.</p>
       </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button class="btn-secondary" id="btn-import-bank" title="Импортировать выписку банка (Т-Банк, Сбер, Альфа, ВТБ...)">
+          ${icon('upload', 14)}
+          <span>Импорт выписки</span>
+        </button>
         <button class="btn-secondary" id="btn-export-csv" title="Выгрузить операции в формате CSV (Excel)">
           ${icon('download', 14)}
           <span>Экспорт CSV</span>
@@ -3375,9 +3966,20 @@ function renderTransactionsView() {
           </div>
         `;
       }).join('') : `
-        <div style="text-align: center; padding: 60px 20px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
-          <div style="color: var(--text-muted); margin-bottom: 8px;">Операции не найдены</div>
-          <p style="color: var(--text-secondary); font-size: 13px;">Попробуйте изменить поисковый запрос или фильтр.</p>
+        <div style="text-align: center; padding: 50px 20px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
+          <div style="font-size: 32px; margin-bottom: 12px;">💳</div>
+          <div style="color: #FFFFFF; font-weight: 700; font-size: 16px; margin-bottom: 6px;">Операции пока не добавлены</div>
+          <p style="color: var(--text-secondary); font-size: 13px; max-width: 440px; margin: 0 auto 18px;">Вы можете быстро загрузить выписку из банка файлом (.CSV, .TXT, .TSV, .JSON) или внести операцию вручную.</p>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button type="button" class="btn-primary" id="btn-empty-import-bank">
+              ${icon('upload', 14)}
+              <span>Импортировать выписку банка</span>
+            </button>
+            <button type="button" class="btn-secondary" id="btn-first-op">
+              ${icon('plus', 14)}
+              <span>Добавить вручную</span>
+            </button>
+          </div>
         </div>
       `}
     </div>
@@ -3486,7 +4088,7 @@ function renderBudgetsView() {
         <span class="num" style="font-size: 13px; font-weight: 700; color: ${overallPct > 90 ? 'var(--accent-coral)' : 'var(--accent-jade)'};">${overallPct}% использовано</span>
       </div>
       <div class="progress-bar-track" style="height: 10px; margin-bottom: 12px;">
-        <div class="progress-bar-fill ${overallPct > 90 ? 'danger' : ''}" style="width: ${overallPct}%;"></div>
+        <div class="progress-bar-fill ${overallPct > 90 ? 'danger' : ''}" style="width: ${Math.max(0, Math.min(100, overallPct))}%; --target-width: ${Math.max(0, Math.min(100, overallPct))}%;"></div>
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 13px;">
         <span style="color: var(--text-muted);">Израсходовано: <strong class="num" style="color: #FFFFFF;">${money(totalSpent)}</strong></span>
@@ -3566,7 +4168,7 @@ function renderBudgetsView() {
             </div>
 
             <div class="progress-bar-track" style="margin: 14px 0 10px; position: relative;">
-              <div class="progress-bar-fill ${isExceeded ? 'danger' : (pct > 80 ? 'warning' : '')}" style="width: ${pct}%;"></div>
+              <div class="progress-bar-fill ${isExceeded ? 'danger' : (pct > 80 ? 'warning' : '')}" style="width: ${Math.max(0, Math.min(100, pct))}%; --target-width: ${Math.max(0, Math.min(100, pct))}%;"></div>
               <div class="budget-day-marker" style="left: ${((elapsedDays / daysInMonth) * 100).toFixed(1)}%;" title="Сегодня ${elapsedDays}-й день из ${daysInMonth}"></div>
             </div>
 
@@ -3641,7 +4243,7 @@ function renderGoalsView() {
         <span class="num" style="font-size: 13px; font-weight: 700; color: var(--accent-jade);">${overallPct}% накоплено</span>
       </div>
       <div class="progress-bar-track" style="height: 10px; margin-bottom: 12px;">
-        <div class="progress-bar-fill" style="width: ${overallPct}%;"></div>
+        <div class="progress-bar-fill" style="width: ${Math.max(0, Math.min(100, overallPct))}%; --target-width: ${Math.max(0, Math.min(100, overallPct))}%;"></div>
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 13px;">
         <span style="color: var(--text-muted);">Накоплено: <strong class="num" style="color: #FFFFFF;">${money(totalSaved)}</strong></span>
@@ -3704,7 +4306,7 @@ function renderGoalsView() {
             </div>
 
             <div class="progress-bar-track" style="margin: 16px 0 12px;">
-              <div class="progress-bar-fill" style="width: ${pct}%;"></div>
+              <div class="progress-bar-fill" style="width: ${Math.max(0, Math.min(100, pct))}%; --target-width: ${Math.max(0, Math.min(100, pct))}%;"></div>
             </div>
 
             <div class="goal-meta-row num">
@@ -4523,6 +5125,7 @@ function renderApp() {
       ${renderProfileModal()}
       ${renderPaydayModal()}
       ${renderSubscriptionModal()}
+      ${renderImportBankModal()}
     </div>
   `;
 
@@ -5561,6 +6164,10 @@ function bindInteractiveEvents() {
   if (btnQuickNew) btnQuickNew.onclick = () => openTxModal('expense');
   if (btnFirstOp) btnFirstOp.onclick = () => openTxModal('expense');
   if (btnAddTxView) btnAddTxView.onclick = () => openTxModal('expense');
+  const btnImportBank = document.getElementById('btn-import-bank');
+  if (btnImportBank) btnImportBank.onclick = () => openBankImportModal();
+  const btnEmptyImportBank = document.getElementById('btn-empty-import-bank');
+  if (btnEmptyImportBank) btnEmptyImportBank.onclick = () => openBankImportModal();
   const btnExportCsv = document.getElementById('btn-export-csv');
   if (btnExportCsv) {
     btnExportCsv.onclick = () => {
@@ -6739,6 +7346,20 @@ function bindInteractiveEvents() {
           if (catM && catM[1]) cat = catM[1].trim();
           cat = cat.charAt(0).toUpperCase() + cat.slice(1);
           answer += `\n\n[ACTION_EXEC:create_budget:{"category":"${cat}","limit_amount":${detectedAmt}}]`;
+        } else if (/(?:удали|стереть|сними|убери|закрой)\s+(?:цель|накопление|цели)/i.test(qLower)) {
+          let gName = '';
+          const nameM = text.match(/(?:цель|накопление|цели)\s+([а-яёa-z0-9\s-]+?)(?:\s*$|\s*[.,!])/i);
+          if (nameM && nameM[1]) gName = nameM[1].replace(/(?:удали|стереть|сними|убери|закрой)/gi, '').trim();
+          if (/(?:все|всё|все цели)/i.test(qLower)) gName = 'all';
+          answer += `\n\n[ACTION_EXEC:delete_goal:{"name":"${gName || 'последнюю'}"}]`;
+        } else if (/(?:удали|стереть|сними|убери|отмени)\s+(?:бюджет|лимит)/i.test(qLower)) {
+          let cat = '';
+          const catM = text.match(/(?:на|для|по|категори[июя]?|бюджет|лимит)\s+([а-яёa-z0-9\s-]+?)(?:\s*$|\s*[.,!])/i);
+          if (catM && catM[1]) cat = catM[1].replace(/(?:бюджет|лимит|удали|сними|убери|отмени)/gi, '').trim();
+          if (/(?:все|всё|все бюджеты|все лимиты)/i.test(qLower)) cat = 'all';
+          answer += `\n\n[ACTION_EXEC:delete_budget:{"category":"${cat || 'Прочее'}"}]`;
+        } else if (/(?:удали|стереть|отмени)\s+(?:последнюю\s+)?(?:операцию|трату|расход|транзакцию|запись)/i.test(qLower)) {
+          answer += `\n\n[ACTION_EXEC:delete_tx:{"last":true}]`;
         }
       }
 
@@ -6869,6 +7490,14 @@ function bindInteractiveEvents() {
   $$('.chat-action-btn').forEach(btn => {
     btn.onclick = () => {
       const actTab = btn.getAttribute('data-action-tab');
+      const actTarget = btn.getAttribute('data-action-target');
+      if (actTarget === 'tx-import') {
+        tab = 'transactions';
+        window.location.hash = tab;
+        renderApp();
+        setTimeout(openBankImportModal, 80);
+        return;
+      }
       if (actTab) {
         tab = actTab;
         window.location.hash = tab;
@@ -6963,6 +7592,252 @@ function bindInteractiveEvents() {
         input.value = promptText;
         const form = document.getElementById('assistant-form');
         if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    };
+  }
+
+  bindBankImportModalEvents();
+}
+
+function bindBankImportModalEvents() {
+  const importModal = document.getElementById('import-bank-modal');
+  const btnCloseImport = document.getElementById('btn-close-import-modal');
+  const btnToggleAi = document.getElementById('btn-toggle-ai-config');
+  const aiDrawer = document.getElementById('import-ai-config-drawer');
+  const btnSaveAi = document.getElementById('btn-save-ai-config');
+  const dropZone = document.getElementById('import-dropzone');
+  const fileInput = document.getElementById('bank-file-input');
+  const previewSection = document.getElementById('import-preview-section');
+  const btnChangeFile = document.getElementById('btn-import-change-file');
+  const btnSubmitImport = document.getElementById('btn-import-submit');
+  const selectAllCb = document.getElementById('import-select-all-cb');
+
+  if (btnCloseImport) {
+    btnCloseImport.onclick = closeBankImportModal;
+  }
+  if (importModal) {
+    importModal.onclick = (e) => {
+      if (e.target === importModal) closeBankImportModal();
+    };
+  }
+
+  if (btnToggleAi && aiDrawer) {
+    btnToggleAi.onclick = () => {
+      aiDrawer.style.display = aiDrawer.style.display === 'none' ? 'block' : 'none';
+    };
+  }
+
+  if (btnSaveAi) {
+    btnSaveAi.onclick = () => {
+      const ep = document.getElementById('ai-import-endpoint');
+      const key = document.getElementById('ai-import-key');
+      window.FINKAIF_AI_IMPORT_CONFIG.save(ep ? ep.value : '', key ? key.value : '', 'custom-fin-llm');
+      const note = importModal ? importModal.querySelector('.ai-status-note') : null;
+      if (note) {
+        note.innerText = window.FINKAIF_AI_IMPORT_CONFIG.hasCustomAI()
+          ? '🟢 Внешний AI подключен'
+          : '⚡ Работает встроенный Smart Engine (готов к подключению API)';
+      }
+      alert('Настройки AI сохранены! При наличии эндпоинта выписки будут обрабатываться вашей нейросетью.');
+    };
+  }
+
+  $$('.import-bank-pill').forEach(pill => {
+    pill.onclick = async () => {
+      $$('.import-bank-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      bankImportSelectedPreset = pill.getAttribute('data-bank') || 'auto';
+      if (window._currentBankFileContent) {
+        await processBankFile(window._currentBankFileContent, window._currentBankFileName || 'statement.csv');
+      }
+    };
+  });
+
+  if (dropZone && fileInput) {
+    dropZone.onclick = () => fileInput.click();
+
+    dropZone.ondragover = (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    };
+    dropZone.ondragleave = () => {
+      dropZone.classList.remove('dragover');
+    };
+    dropZone.ondrop = async (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        const file = e.dataTransfer.files[0];
+        handleFileSelect(file);
+      }
+    };
+
+    fileInput.onchange = (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFileSelect(e.target.files[0]);
+      }
+    };
+  }
+
+  async function handleFileSelect(file) {
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const text = ev.target.result;
+      window._currentBankFileContent = text;
+      window._currentBankFileName = file.name;
+      await processBankFile(text, file.name);
+    };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  async function processBankFile(content, fileName) {
+    const res = await parseBankStatement(content, fileName, bankImportSelectedPreset);
+    bankImportParsed = res.transactions;
+
+    if (!bankImportParsed || bankImportParsed.length === 0) {
+      alert('Не удалось распознать операции в данном файле. Проверьте формат выписки (CSV, TXT, TSV или JSON).');
+      return;
+    }
+
+    if (dropZone) dropZone.style.display = 'none';
+    if (previewSection) previewSection.style.display = 'flex';
+
+    const engineEl = document.getElementById('import-stat-engine');
+    if (engineEl) {
+      engineEl.innerText = res.engine === 'ai' ? '🤖 Custom AI Engine' : '⚡ Smart Engine';
+    }
+
+    renderBankPreviewRows();
+  }
+
+  function renderBankPreviewRows() {
+    const tbody = document.getElementById('import-table-tbody');
+    if (!tbody) return;
+
+    let incSum = 0;
+    let expSum = 0;
+    let selCount = 0;
+
+    tbody.innerHTML = bankImportParsed.map((tx, idx) => {
+      if (tx.selected) {
+        selCount++;
+        if (tx.type === 'income') incSum += tx.amount;
+        else expSum += tx.amount;
+      }
+
+      const isInc = tx.type === 'income';
+      return `
+        <tr class="${tx.selected ? '' : 'unselected'}">
+          <td>
+            <input type="checkbox" class="bank-tx-cb" data-idx="${idx}" ${tx.selected ? 'checked' : ''}>
+          </td>
+          <td class="num" style="white-space: nowrap; font-size: 12px; color: var(--text-muted);">${tx.occurred_on}</td>
+          <td>
+            <span class="import-cat-badge">${esc(tx.category)}</span>
+          </td>
+          <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(tx.description)}">
+            ${esc(tx.description)}
+          </td>
+          <td class="num" style="text-align: right; font-weight: 700; color: ${isInc ? 'var(--accent-jade)' : 'var(--accent-coral)'};">
+            ${isInc ? '+' : '−'}${money(tx.amount)}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    const countEl = document.getElementById('import-stat-count');
+    const incEl = document.getElementById('import-stat-inc');
+    const expEl = document.getElementById('import-stat-exp');
+    const selCountLbl = document.getElementById('import-selected-count-label');
+    const submitBtnLbl = document.getElementById('btn-import-submit-label');
+
+    if (countEl) countEl.innerText = String(bankImportParsed.length);
+    if (incEl) incEl.innerText = `+${money(incSum)}`;
+    if (expEl) expEl.innerText = `−${money(expSum)}`;
+    if (selCountLbl) selCountLbl.innerText = `Выбрано: ${selCount} из ${bankImportParsed.length}`;
+    if (submitBtnLbl) submitBtnLbl.innerText = `Импортировать (${selCount})`;
+
+    tbody.querySelectorAll('.bank-tx-cb').forEach(cb => {
+      cb.onchange = () => {
+        const idx = parseInt(cb.getAttribute('data-idx'), 10);
+        if (bankImportParsed[idx]) {
+          bankImportParsed[idx].selected = cb.checked;
+        }
+        renderBankPreviewRows();
+      };
+    });
+  }
+
+  if (selectAllCb) {
+    selectAllCb.onchange = () => {
+      const isChecked = selectAllCb.checked;
+      bankImportParsed.forEach(tx => tx.selected = isChecked);
+      renderBankPreviewRows();
+    };
+  }
+
+  if (btnChangeFile) {
+    btnChangeFile.onclick = () => {
+      if (dropZone) dropZone.style.display = 'flex';
+      if (previewSection) previewSection.style.display = 'none';
+      if (fileInput) fileInput.value = '';
+      bankImportParsed = [];
+      window._currentBankFileContent = null;
+    };
+  }
+
+  if (btnSubmitImport) {
+    btnSubmitImport.onclick = async () => {
+      const selected = bankImportParsed.filter(tx => tx.selected);
+      if (selected.length === 0) {
+        alert('Выберите хотя бы одну операцию для импорта.');
+        return;
+      }
+
+      btnSubmitImport.disabled = true;
+      const submitBtnLbl = document.getElementById('btn-import-submit-label');
+      if (submitBtnLbl) submitBtnLbl.innerText = 'Импортирование...';
+
+      try {
+        const txList = selected.map(tx => ({
+          type: tx.type,
+          amount: tx.amount,
+          category: tx.category,
+          description: tx.description,
+          occurred_on: tx.occurred_on
+        }));
+
+        let bulkOk = false;
+        try {
+          const res = await api('transactions/bulk', {
+            method: 'POST',
+            body: JSON.stringify({ transactions: txList })
+          });
+          if (res && res.ok) bulkOk = true;
+        } catch (_) {}
+
+        if (!bulkOk) {
+          for (const tx of txList) {
+            await api('transactions', {
+              method: 'POST',
+              body: JSON.stringify(tx)
+            });
+          }
+        }
+
+        closeBankImportModal();
+        bankImportParsed = [];
+        window._currentBankFileContent = null;
+
+        await refreshAllData();
+        tab = 'transactions';
+        renderApp();
+
+        alert(`✅ Успешно импортировано ${selected.length} операций! Журнал и баланс обновлены.`);
+      } catch (err) {
+        alert('Ошибка при импорте: ' + err.message);
+      } finally {
+        if (btnSubmitImport) btnSubmitImport.disabled = false;
       }
     };
   }
