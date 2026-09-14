@@ -6737,3 +6737,141 @@ document.addEventListener('mouseout', (e) => {
 
 window.addEventListener('hashchange', syncHash);
 window.addEventListener('DOMContentLoaded', boot);
+
+// ==========================================================================
+// FINKAIF DESIGN PROTOCOL v9.0 — MOTION JAVASCRIPT ENGINE
+// ==========================================================================
+
+// ── Mouse-follow spotlight on interactive cards ──────────────────────────
+(function initSpotlight() {
+  const CARD_SELECTOR = [
+    '.stat-card', '.hero-balance-card', '.budget-card', '.goal-card',
+    '.quick-action-btn', '.tx-card', '.create-card', '.analytics-metric-card',
+    '.analytics-card', '.sub-card', '.pulse-cat-card', '.tx-summary-card'
+  ].join(',');
+
+  function bindSpotlight(card) {
+    if (card.__fk_spotlight) return;
+    card.__fk_spotlight = true;
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
+      card.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
+    });
+  }
+
+  // Bind existing + observe new cards
+  document.querySelectorAll(CARD_SELECTOR).forEach(bindSpotlight);
+
+  const obs = new MutationObserver(mutations => {
+    mutations.forEach(m => m.addedNodes.forEach(node => {
+      if (node.nodeType !== 1) return;
+      if (node.matches && node.matches(CARD_SELECTOR)) bindSpotlight(node);
+      node.querySelectorAll && node.querySelectorAll(CARD_SELECTOR).forEach(bindSpotlight);
+    }));
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+})();
+
+// ── Scroll-driven masthead glass intensity ───────────────────────────────
+(function initMastheadScroll() {
+  const masthead = document.querySelector('.masthead');
+  if (!masthead) return;
+
+  let ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      const scrolled = window.scrollY > 20;
+      masthead.classList.toggle('scrolled', scrolled);
+      ticking = false;
+    });
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll(); // Run once immediately
+})();
+
+// ── Number pop micro-animation when value changes ───────────────────────
+(function initNumberPop() {
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      const el = m.target;
+      if (!el || el.__fk_popping) return;
+      // Only animate financial value elements
+      if (!el.matches || !el.matches('.hero-balance-figure, .stat-amount, .tx-amount, .metric-value, .sim-badge-val')) return;
+      el.__fk_popping = true;
+      el.style.transition = 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.22s ease';
+      el.style.transform = 'scale(1.07)';
+      setTimeout(() => {
+        el.style.transform = 'scale(1)';
+        setTimeout(() => { el.__fk_popping = false; }, 220);
+      }, 120);
+    });
+  });
+
+  // Watch for text changes in value elements
+  function bindNumberWatcher(el) {
+    if (el.__fk_numbound) return;
+    el.__fk_numbound = true;
+    observer.observe(el, { characterData: true, subtree: true, childList: true });
+  }
+
+  function scanAndBind() {
+    document.querySelectorAll('.hero-balance-figure, .stat-amount, .metric-value').forEach(bindNumberWatcher);
+  }
+
+  scanAndBind();
+  // Re-scan after renders
+  const appEl = document.getElementById('app');
+  if (appEl) {
+    new MutationObserver(scanAndBind).observe(appEl, { childList: true, subtree: false });
+  }
+})();
+
+// ── Tab switch ripple on nav items ───────────────────────────────────────
+(function initTabRipple() {
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.nav-item, .mobile-nav-btn, .period-tab, .filter-tab, .analytics-period-btn');
+    if (!btn) return;
+    const ripple = document.createElement('span');
+    ripple.style.cssText = `
+      position:absolute;pointer-events:none;border-radius:50%;
+      width:40px;height:40px;margin-top:-20px;margin-left:-20px;
+      background:rgba(45,212,191,0.22);
+      transform:scale(0);animation:rippleOut 0.45s ease-out forwards;
+    `;
+    const rect = btn.getBoundingClientRect();
+    ripple.style.left = `${e.clientX - rect.left}px`;
+    ripple.style.top  = `${e.clientY - rect.top}px`;
+
+    if (!document.querySelector('#fk-ripple-style')) {
+      const s = document.createElement('style');
+      s.id = 'fk-ripple-style';
+      s.textContent = '@keyframes rippleOut{to{transform:scale(3.5);opacity:0}}';
+      document.head.appendChild(s);
+    }
+
+    btn.style.overflow = 'hidden';
+    btn.style.position = btn.style.position || 'relative';
+    btn.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 500);
+  });
+})();
+
+// ── Quick-express preview re-entrance: repaint pills on each update ──────
+(function initPreviewEntrance() {
+  const previewEl = document.getElementById('quick-parse-preview');
+  if (!previewEl) return;
+
+  new MutationObserver(() => {
+    previewEl.querySelectorAll('.preview-pill').forEach((pill, i) => {
+      pill.style.animation = 'none';
+      pill.offsetHeight; // force reflow
+      pill.style.animation = '';
+      pill.style.animationDelay = `${i * 45}ms`;
+    });
+  }).observe(previewEl, { childList: true });
+})();
+
