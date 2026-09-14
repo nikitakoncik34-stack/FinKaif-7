@@ -1367,7 +1367,13 @@ function icon(name, size = 16) {
     calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01M12 10h.01M8 10h.01M12 14h.01M8 14h.01M12 18h.01M8 18h.01"></path>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
     mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line>',
-    calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>'
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
+    pulse: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>',
+    scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="M7 21h10"></path><path d="M12 3v18"></path><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path>',
+    arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
+    chevronRight: '<polyline points="9 18 15 12 9 6"></polyline>',
+    target: '<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>'
   };
 
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
@@ -3799,20 +3805,23 @@ function renderAssistantView() {
     <!-- Assistant Quick Toolbar Strip -->
     <div class="assistant-toolbar-strip">
       <div class="assistant-mode-pills">
-        <button class="assistant-mode-pill" data-prompt="Полная экспресс-диагностика FinScore">
-          <span>🩺</span> <span>Аудит FinScore</span>
+        <button type="button" class="assistant-mode-pill" data-prompt="Полная экспресс-диагностика FinScore">
+          <span class="pill-icon-badge">${icon('pulse', 13)}</span> <span>Аудит FinScore</span>
         </button>
-        <button class="assistant-mode-pill" data-prompt="Когда я смогу выйти на FIRE (пассивный доход)?">
-          <span>🔥</span> <span>FIRE & Свобода</span>
+        <button type="button" class="assistant-mode-pill" data-prompt="Когда я смогу выйти на FIRE (пассивный доход)?">
+          <span class="pill-icon-badge">${icon('flame', 13)}</span> <span>FIRE & Свобода</span>
         </button>
-        <button class="assistant-mode-pill" data-prompt="Где я теряю больше всего денег и как оптимизировать?">
-          <span>🕵️‍♂️</span> <span>Детектив утечек</span>
+        <button type="button" class="assistant-mode-pill" data-prompt="Создай цель на отпуск 150000 рублей">
+          <span class="pill-icon-badge">${icon('target', 13)}</span> <span>Создать цель</span>
         </button>
-        <button class="assistant-mode-pill" data-prompt="Прогноз капитала через 5 лет со сложным процентом">
-          <span>🔮</span> <span>Прогноз 5 лет</span>
+        <button type="button" class="assistant-mode-pill" data-prompt="Поставь бюджет на рестораны 25000">
+          <span class="pill-icon-badge">${icon('budgets', 13)}</span> <span>Лимит бюджета</span>
         </button>
-        <button class="assistant-mode-pill" data-prompt="Проведи полный аудит моих регулярных подписок и повторяющихся платежей: посчитай сумму за год и найди скрытые утечки бюджета">
-          <span>📅</span> <span>Аудит подписок</span>
+        <button type="button" class="assistant-mode-pill" data-prompt="Где я теряю больше всего денег и как оптимизировать?">
+          <span class="pill-icon-badge">${icon('search', 13)}</span> <span>Детектив утечек</span>
+        </button>
+        <button type="button" class="assistant-mode-pill" data-prompt="Прогноз капитала через 5 лет со сложным процентом">
+          <span class="pill-icon-badge">${icon('trendUp', 13)}</span> <span>Прогноз 5 лет</span>
         </button>
       </div>
 
@@ -3921,55 +3930,36 @@ function renderAssistantView() {
     <div class="assistant-layout">
       <!-- Quick Prompt Suggestions Sidebar -->
       <div class="assistant-sidebar">
-        <div class="assistant-sidebar-title">СТРАТЕГИИ И ВОПРОСЫ</div>
+        <div class="assistant-sidebar-title">СТРАТЕГИИ И ДЕЙСТВИЯ</div>
         <div class="assistant-suggestions">
-          <button class="suggestion-chip" data-prompt="Когда я смогу выйти на FIRE (пассивный доход)?">
-            <span class="chip-sparkle">🔥</span>
-            <div>
-              <div class="chip-title">FIRE & Свобода</div>
-              <div class="chip-sub">Срок до пассивного дохода</div>
-            </div>
-          </button>
-          <button class="suggestion-chip" data-prompt="Где я теряю больше всего денег и как оптимизировать?">
-            <span class="chip-sparkle">🕵️‍♂️</span>
-            <div>
-              <div class="chip-title">Детектив утечек</div>
-              <div class="chip-sub">Поиск эмоциональных трат</div>
-            </div>
-          </button>
-          <button class="suggestion-chip" data-prompt="На сколько месяцев мне хватит подушки безопасности?">
-            <span class="chip-sparkle">🛡️</span>
-            <div>
-              <div class="chip-title">Запас прочности (Runway)</div>
-              <div class="chip-sub">Стресс-тест на случай ЧП</div>
-            </div>
-          </button>
-          <button class="suggestion-chip" data-prompt="Прогноз капитала через 5 лет со сложным процентом">
-            <span class="chip-sparkle">🔮</span>
-            <div>
-              <div class="chip-title">Сложный процент</div>
-              <div class="chip-sub">Рост капитала за 1, 3, 5 лет</div>
-            </div>
-          </button>
-          <button class="suggestion-chip" data-prompt="Как распределить доход по правилу 50/30/20?">
-            <span class="chip-sparkle">⚖️</span>
-            <div>
-              <div class="chip-title">Ритуал 50/30/20</div>
-              <div class="chip-sub">Сначала заплати себе</div>
-            </div>
-          </button>
-          <button class="suggestion-chip" data-prompt="Полная экспресс-диагностика FinScore">
-            <span class="chip-sparkle">🩺</span>
-            <div>
-              <div class="chip-title">Аудит FinScore</div>
-              <div class="chip-sub">Оценка финансового здоровья</div>
-            </div>
-          </button>
+          ${[
+            { theme: 'fire', iconName: 'flame', title: 'FIRE & Свобода', sub: 'Срок до пассивного дохода', prompt: 'Когда я смогу выйти на FIRE (пассивный доход)?' },
+            { theme: 'goal', iconName: 'target', title: 'Создать цель', sub: '«Отпуск 150к», «Авто 500к»', prompt: 'Создай цель на отпуск 150000 рублей' },
+            { theme: 'budget', iconName: 'budgets', title: 'Поставить бюджет', sub: '«Кафе 25к», «Продукты 40к»', prompt: 'Поставь бюджет на рестораны 25000' },
+            { theme: 'leaks', iconName: 'search', title: 'Детектив утечек', sub: 'Поиск скрытых трат', prompt: 'Где я теряю больше всего денег и как оптимизировать?' },
+            { theme: 'runway', iconName: 'shield', title: 'Запас прочности', sub: 'Стресс-тест подушки безопасности', prompt: 'На сколько месяцев мне хватит подушки безопасности?' },
+            { theme: 'growth', iconName: 'trendUp', title: 'Сложный процент', sub: 'Рост капитала за 1, 3, 5 лет', prompt: 'Прогноз капитала через 5 лет со сложным процентом' },
+            { theme: 'ritual', iconName: 'scale', title: 'Ритуал 50/30/20', sub: 'Сначала заплати себе', prompt: 'Как распределить доход по правилу 50/30/20?' },
+            { theme: 'finscore', iconName: 'pulse', title: 'Аудит FinScore', sub: 'Оценка финансового здоровья', prompt: 'Полная экспресс-диагностика FinScore' }
+          ].map(p => `
+            <button type="button" class="suggestion-chip" data-prompt="${esc(p.prompt)}">
+              <div class="chip-icon-box chip-theme-${p.theme}">
+                ${icon(p.iconName, 17)}
+              </div>
+              <div class="chip-content">
+                <div class="chip-title">${p.title}</div>
+                <div class="chip-sub">${p.sub}</div>
+              </div>
+              <div class="chip-arrow">
+                ${icon('chevronRight', 14)}
+              </div>
+            </button>
+          `).join('')}
         </div>
 
         <div class="assistant-note-card">
           <div style="font-weight: 700; color: #FFFFFF; font-size: 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-            <span>🛡️</span> <span>Защита данных</span>
+            <span style="color: var(--accent-jade); display: flex;">${icon('shield', 13)}</span> <span>Защита данных</span>
           </div>
           <div style="font-size: 11px; color: var(--text-muted); line-height: 1.45;">FinKaif оперирует обезличенными суммами категорий без передачи паспортных или банковских данных.</div>
         </div>
@@ -4002,9 +3992,43 @@ function renderAssistantView() {
                 <div class="orb-ring-2"></div>
               </div>
               <h3 style="font-size: 18px; font-weight: 800; color: #FFFFFF; margin-bottom: 6px;">FinKaif Brain 3.0 готов к работе</h3>
-              <p style="font-size: 13px; color: var(--text-secondary); max-width: 440px; margin: 0 auto; line-height: 1.5;">
-                Задайте вопрос о сроке выхода на FIRE, поиске скрытых утечек денег, моделировании сложного процента или расчете финансовой подушки.
+              <p style="font-size: 13px; color: var(--text-secondary); max-width: 460px; margin: 0 auto 16px auto; line-height: 1.5;">
+                Персональный финансовый интеллект: сценарии FIRE, сложный процент, аудит утечек и мгновенные действия на сайте.
               </p>
+              <div class="chat-empty-quick-prompts">
+                <button type="button" class="empty-prompt-card suggestion-chip" data-prompt="Создай цель на отпуск 150000 рублей">
+                  <div class="chip-icon-box chip-theme-goal">${icon('target', 16)}</div>
+                  <div class="empty-prompt-text">
+                    <span class="empty-prompt-title">Создать цель</span>
+                    <span class="empty-prompt-sub">«Отпуск 150 000 ₽»</span>
+                  </div>
+                  <div class="chip-arrow">${icon('chevronRight', 12)}</div>
+                </button>
+                <button type="button" class="empty-prompt-card suggestion-chip" data-prompt="Поставь бюджет на рестораны 25000">
+                  <div class="chip-icon-box chip-theme-budget">${icon('budgets', 16)}</div>
+                  <div class="empty-prompt-text">
+                    <span class="empty-prompt-title">Поставить бюджет</span>
+                    <span class="empty-prompt-sub">«Рестораны 25 000 ₽»</span>
+                  </div>
+                  <div class="chip-arrow">${icon('chevronRight', 12)}</div>
+                </button>
+                <button type="button" class="empty-prompt-card suggestion-chip" data-prompt="Когда я смогу выйти на FIRE (пассивный доход)?">
+                  <div class="chip-icon-box chip-theme-fire">${icon('flame', 16)}</div>
+                  <div class="empty-prompt-text">
+                    <span class="empty-prompt-title">FIRE & Свобода</span>
+                    <span class="empty-prompt-sub">Срок до пассивного дохода</span>
+                  </div>
+                  <div class="chip-arrow">${icon('chevronRight', 12)}</div>
+                </button>
+                <button type="button" class="empty-prompt-card suggestion-chip" data-prompt="Где я теряю больше всего денег и как оптимизировать?">
+                  <div class="chip-icon-box chip-theme-leaks">${icon('search', 16)}</div>
+                  <div class="empty-prompt-text">
+                    <span class="empty-prompt-title">Детектив утечек</span>
+                    <span class="empty-prompt-sub">Поиск скрытых трат</span>
+                  </div>
+                  <div class="chip-arrow">${icon('chevronRight', 12)}</div>
+                </button>
+              </div>
             </div>
           `}
 
@@ -4026,15 +4050,27 @@ function renderAssistantView() {
           ` : ''}
         </div>
 
-        <form class="chat-input-bar" id="assistant-form">
-          <button type="button" class="btn-voice-assistant" id="btn-voice-assistant" title="Голосовой ввод: нажмите и говорите" aria-label="Голосовой ввод">
-            ${icon('mic', 16)}
-          </button>
-          <input id="assistant-input" placeholder="Спросите совет или командуйте: «Создай цель на отпуск 150к», «Поставь бюджет на кафе 20к»..." required autocomplete="off">
-          <button type="submit" class="chat-send-btn" id="chat-send-btn" title="Отправить сообщение">
-            ${icon('send', 15)}
-          </button>
-        </form>
+        <!-- Prominent Elevated Chat Command Capsule -->
+        <div class="chat-input-container">
+          <form class="chat-input-bar" id="assistant-form">
+            <button type="button" class="btn-voice-assistant" id="btn-voice-assistant" title="Голосовой ввод: нажмите и говорите" aria-label="Голосовой ввод">
+              ${icon('mic', 16)}
+            </button>
+            <div class="input-field-wrapper">
+              <input id="assistant-input" placeholder="Спросите совет или командуйте: «Создай цель на отпуск 150к», «Поставь бюджет на кафе 20к»..." required autocomplete="off">
+            </div>
+            <button type="submit" class="chat-send-btn" id="chat-send-btn" title="Отправить сообщение (Enter)">
+              ${icon('send', 15)}
+            </button>
+          </form>
+          <div class="chat-input-meta">
+            <span class="input-meta-hint">
+              <span class="meta-dot"></span>
+              FinKaif Brain 3.0 • Голосовое управление и действия на сайте
+            </span>
+            <span class="input-meta-kbd"><kbd>Enter ↵</kbd></span>
+          </div>
+        </div>
       </div>
     </div>
   `;
