@@ -552,7 +552,7 @@ const compactMoney = (num, force = false) => {
 
 // Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
 
-// Smart Natural Language Financial Parser (with Full Russian Slang, Livestock/Pets, Composite Numbers & 0ms Latency)
+// // Smart Natural Language Financial Parser (with Full Russian Slang, Livestock/Pets, Composite Numbers & 0ms Latency)
 function parseQuickTxInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
@@ -563,7 +563,7 @@ function parseQuickTxInput(raw) {
   let matchedNumStr = '';
 
   // 1. Extract amount using advanced compound Russian number & slang recognizer
-  // A. "X с половиной [миллиарда/миллиона/тысяч/ляма]"
+  // A. "X с половиной [миллиарда/миллиона/тысяч/ляма/косаря/куска]"
   const sPolovinoi = lower.match(/(?:^|[^а-яa-z0-9])(один|два|две|три|четыре|пять|шесть|семь|восемь|девять|десять|\d+(?:[.,]\d+)?)\s+с\s+половиной\s*(миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*|тысяч[а-я]*|тыщ[а-я]*|косар[а-я]*|куск[а-я]*)(?:$|[^а-яa-z0-9])/i);
   if (sPolovinoi) {
     const wordMap = { 'один': 1, 'два': 2, 'две': 2, 'три': 3, 'четыре': 4, 'пять': 5, 'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10 };
@@ -624,9 +624,9 @@ function parseQuickTxInput(raw) {
     }
   }
 
-  // Thousands: 85 тысяч, 15 тыщ, 3 косаря, 100к
+  // Thousands: 85 тысяч, 15 тыщ, 3 косаря, 100к, 50к
   if (!amount) {
-    const digThousand = lower.match(/(?:^|[^а-яa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:тысяч[а-я]*|тыщ[а-я]*|тыс[а-я]*|косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*|к\b|k\b)(?:$|[^а-яa-z0-9])/i);
+    const digThousand = lower.match(/(?:^|[^а-яa-z0-9])(\d+(?:[.,]\d+)?)\s*(?:тысяч[а-я]*|тыщ[а-я]*|тыс[а-я]*|косар[а-я]*|куск[а-я]*|штук[а-я]*|тонн[а-я]*|к|k)(?:$|[^а-яa-z0-9])/i);
     if (digThousand) {
       amount = Math.round(parseFloat(digThousand[1].replace(',', '.')) * 1000);
       matchedNumStr = digThousand[0].trim();
@@ -642,7 +642,7 @@ function parseQuickTxInput(raw) {
     }
   }
 
-  // E. Russian compound text words ("триста пятьдесят тысяч", "миллион рублей", "сорок пять тысяч")
+  // E. Russian compound text words ("триста пятьдесят тысяч", "миллион рублей")
   if (!amount) {
     const ONES = { 'один': 1, 'одна': 1, 'одно': 1, 'одну': 1, 'два': 2, 'две': 2, 'три': 3, 'четыре': 4, 'пять': 5, 'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9 };
     const TEENS = { 'десять': 10, 'одиннадцать': 11, 'двенадцать': 12, 'тринадцать': 13, 'четырнадцать': 14, 'пятнадцать': 15, 'шестнадцать': 16, 'семнадцать': 17, 'восемнадцать': 18, 'девятнадцать': 19 };
@@ -709,18 +709,19 @@ function parseQuickTxInput(raw) {
 
   // F. Slang fixed denominations
   if (!amount) {
+    const isIncomeContext = /(?:заработ|получил|поднял|срубил|выплат|перечисл|начисл|скинули|пришл|приход|капнул|упал|прилетел|доход|выручк|прибыл|гонорар|преми|бонус|оклад|зарплат|аванс|получк|фриланс)/i.test(lower);
     const slangRules = [
       { re: /(?:^|[^а-яa-z0-9])(?:сорокет[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 40000 },
       { re: /(?:^|[^а-яa-z0-9])(?:полтос[а-я]*|полтинник[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 50000 },
-      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен)\s*(?:тыс[а-я]*|тыщ[а-я]*|к\b|k\b)(?:$|[^а-яa-z0-9])/i, val: 100000 },
-      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен)\s*(?:руб[а-я]*|р\b)(?:$|[^а-яa-z0-9])/i, val: 100 },
-      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен)(?:$|[^а-яa-z0-9])/i, val: /(?:руб|кофе|билет|проезд|чай|булк|чипс|жвачк)/i.test(lower) ? 100 : 100000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен|соточк[а-я]*)\s*(?:тыс[а-я]*|тыщ[а-я]*|к\b|k\b)(?:$|[^а-яa-z0-9])/i, val: 100000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен|соточк[а-я]*)\s*(?:руб[а-я]*|р\b)(?:$|[^а-яa-z0-9])/i, val: 100 },
+      { re: /(?:^|[^а-яa-z0-9])(?:сотка|сотку|сотен|соточк[а-я]*)(?:$|[^а-яa-z0-9])/i, val: isIncomeContext ? 100000 : (/(?:руб|кофе|билет|проезд|чай|булк|чипс|жвачк)/i.test(lower) ? 100 : 100000) },
       { re: /(?:^|[^а-яa-z0-9])(?:пятихат[а-я]*|пять сотен)(?:$|[^а-яa-z0-9])/i, val: 500 },
       { re: /(?:^|[^а-яa-z0-9])(?:двушк[а-я]|две штуки)(?:$|[^а-яa-z0-9])/i, val: 2000 },
       { re: /(?:^|[^а-яa-z0-9])(?:трешк[а-я]|трёшк[а-я]|трояк)(?:$|[^а-яa-z0-9])/i, val: 3000 },
       { re: /(?:^|[^а-яa-z0-9])(?:пятерк[а-я]|пятёрк[а-я])(?:$|[^а-яa-z0-9])/i, val: 5000 },
       { re: /(?:^|[^а-яa-z0-9])(?:чирик[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 10000 },
-      { re: /(?:^|[^а-яa-z0-9])(?:косарь|косаря|кусок|штука)(?:$|[^а-яa-z0-9])/i, val: 1000 },
+      { re: /(?:^|[^а-яa-z0-9])(?:косарь[а-я]*|косар[яей]*|кусок[а-я]*|куск[а-я]*|штук[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 1000 },
       { re: /(?:^|[^а-яa-z0-9])(?:миллион[а-я]*|млн[а-я]*|лям[а-я]*|лимон[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 1000000 },
       { re: /(?:^|[^а-яa-z0-9])(?:миллиард[а-я]*|млрд[а-я]*|ярд[а-я]*|арбуз[а-я]*)(?:$|[^а-яa-z0-9])/i, val: 1000000000 }
     ];
@@ -807,7 +808,7 @@ function parseQuickTxInput(raw) {
   let iconEmoji = '💳';
 
   // Comprehensive Income Regex Patterns
-  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел|перечисл|начисл|скинули|закинули|пришл|приход|капнул|упал|прилетел|залетел|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
+  const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел.*мне|перечисл|начисл|скинули|закинули|пришл|приход|капнул|упал[а-я]*\s+ден|прилетел|залетел|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
 
   if (isIncome) {
     type = 'income';
@@ -835,69 +836,70 @@ function parseQuickTxInput(raw) {
     }
   } else {
     type = 'expense';
-    // Animals / Livestock / Pets / Farming (корова, бык, скот, ферма, корм, собака, кот, ветклиника)
-    if (/коров[а-я]*|бык[а-я]*|телят[а-я]*|теленок|телк[а-я]*|коз[а-я]*|свин[а-я]*|хрюш[а-я]*|поросят[а-я]*|лошад[а-я]*|кон[яеь][а-я]*|жереб[а-я]*|овц[а-я]*|баран[а-я]*|ягнят[а-я]*|кур[а-я]*|петух[а-я]*|цыплят[а-я]*|гус[а-я]*|утк[а-я]*|индюк[а-я]*|скот[а-я]*|ферм[а-я]*|пасек[а-я]*|пчел[а-я]*|улей|питом[а-я]*|собак[а-я]*|щен[а-я]*|пес[а-я]*|пёсел[а-я]*|кошк[а-я]*|кот[а-я]*|котят[а-я]*|котейк[а-я]*|хомяк[а-я]*|попуга[а-я]*|рыбк[а-я]*|аквариум[а-я]*|грызун[а-я]*|корм[а-я]*|ветеринар[а-я]*|ветклиник[а-я]*|груминг[а-я]*|поводок|лоток|наполнитель/i.test(lower)) {
-      category = 'Питомцы';
-      iconEmoji = '🐾';
+
+    // A. Coffee, Bakery & Hot Drinks (Кафе)
+    if (/кофе|кофей[а-я]*|латте|капуч[а-я]*|флэт.*уайт|раф[а-я]*|эспрессо|американо|матча|какао|чай\b|чаёк|чаек|булочн[а-я]*|пекарн[а-я]*|круассан[а-я]*|слойк[а-я]*|чизкейк[а-я]*|десерт[а-я]*|пончик[а-я]*|донат[а-я]*|синнабон[а-я]*|эклер[а-я]*|пирожн[а-я]*|торт[а-я]*/i.test(lower)) {
+      category = 'Кафе';
+      iconEmoji = '☕';
     }
-    // Gadgets, Gaming & Tech
-    else if (/плойк|соньк|playstation|ps5|ps4|xbox|иксбокс|нинтендо|switch|стимдек|видяха|видюх|видеокарт|rtx|geforce|проц|процессор|ссд|ssd|оперативк|монитор|моник|клав|мышк|айфон|iphone|эйрподс|airpods|макбук|macbook|ipad|айпад|эппл.*вотч|ноут|ноутбук|комп|пк|системник|телевизор|телик|техник|гаджет|наушник|колонк|алис[а]|станци[яи]|пылесос|стиралк|холодильник|микроволновк/i.test(lower)) {
-      category = 'Техника';
-      iconEmoji = '💻';
+    // B. Fast food, Asian/Caucasian/European dishes, Dining out & Delivery (Рестораны)
+    else if (/шав[ауе][а-я]*|шаверм[а-я]*|шаурм[а-я]*|донер[а-я]*|кебаб[а-я]*|шашлык[а-я]*|люля|пицц[а-я]*|додо|папа.*джонс|бургер[а-я]*|воппер|бигмак|макдак|мак\b|вкусно.*точк|вит\b|кфс|kfc|ростикс|наггетс[а-я]*|стрипс[а-я]*|хот[- ]?дог[а-я]*|ролл[а-я]*|суши|сет.*ролл|филадельфи[а-я]*|калифорни[а-я]*|якитори|тануки|том.*ям|том.*кха|фо.*бо|фо.*га|рамен[а-я]*|рамэн[а-я]*|вок[а-я]*|лапш[а-я]*.*вок|пад.*тай|удон|соба|фунчоз[а-я]*|димсам[а-я]*|бао|хинкал[а-я]*|хачапур[а-я]*|плов[а-я]*|лагман[а-я]*|мант[а-я]*|самс[а-я]*|шурп[а-я]*|чебурек[а-я]*|беляш[а-я]*|борщ[а-я]*|солянк[а-я]*|харчо|ух[а-я]\b|крем[- ]?суп|суп[- ]?пюре|лапш[а-я]*.*курин|карбонар[а-я]*|болоньез[а-я]*|лазань[а-я]*|ризотто|стейк[а-я]*|рибай|медальон[а-я]*|тартар[а-я]*|карпаччо|цезар[а-я]*|оливье|греческ.*салат|бизнес[- ]?ланч[а-я]*|ланч[а-я]*|обед[а-я]*|ужин[а-я]*|завтрак[а-я]*|столовк[а-я]*|столов[а-я]*|рестик[а-я]*|ресторан[а-я]*|кафешк[а-я]*|бистро|трактир|чайхон[а-я]*|фудкорт|посидели|покушать|пожрать|пообедать|поужинать|доставк.*еды|яндекс.*еда|деливери|купер.*еда|пиво|пивас|пивко|крафт|сидр|сидрери[а-я]*|вино|бар\b|паб\b|кальян[а-я]*/i.test(lower)) {
+      category = 'Рестораны';
+      iconEmoji = '🍽️';
     }
-    // Transport, Auto & Fuel
+    // C. Groceries & Supermarkets & Staples at home (Продукты)
+    else if (/макарон[а-я]*|спагетти|паст[а-я]*|вермишел[а-я]*|рожк[а-я]*|гречк[а-я]*|греч[а-я]*|рис[а-я]*|пшен[а-я]*|овсянк[а-я]*|геркулес[а-я]*|хлопь[а-я]*|круп[а-я]*|булгур[а-я]*|кускус[а-я]*|киноа|чечевиц[а-я]*|фасол[а-я]*|горох[а-я]*|мук[а-я]*|сахар[а-я]*|сол[иь][а-я]*|сод[а-я]*|крахмал[а-я]*|дрожж[а-я]*|специ[а-я]*|приправ[а-я]*|масл[а-я]*|подсолнечн[а-я]*|оливков[а-я]*|сливочн.*масл[а-я]*|майонез[а-я]*|мазик[а-я]*|кетчуп[а-я]*|соус[а-я]*|томатн.*паст[а-я]*|горчиц[а-я]*|хрен[а-я]*|уксус[а-я]*|консерв[а-я]*|тушенк[а-я]*|шпрот[а-я]*|сайр[а-я]*|тун[ец][а-я]*|паштет[а-я]*|горошек[а-я]*|кукуруз[а-я]*|колбас[а-я]*|сосиск[а-я]*|сардельк[а-я]*|ветчин[а-я]*|сервелат[а-я]*|карбонад[а-я]*|бекон[а-я]*|мяс[а-я]*|фарш[а-я]*|котлет[а-я]*|говядин[а-я]*|свинин[а-я]*|телятин[а-я]*|баранин[а-я]*|индейк[а-я]*|куриц[а-я]*|кур[а-я]*|курин[а-я]*|цыплят[а-я]*|цыпленок|грудк[а-я]*|филе|бедрышк[а-я]*|окороч[а-я]*|крылышк[а-я]*|пельмен[а-я]*|вареник[а-я]*|рыб[а-я]*|лосос[а-я]*|семг[а-я]*|сёмг[а-я]*|форел[а-я]*|селедк[а-я]*|минта[а-я]*|треск[а-я]*|скумбри[а-я]*|креветк[а-я]*|кальмар[а-я]*|крабов.*палочк[а-я]*|молок[а-я]*|молочк[а-я]*|творог[а-я]*|творож[а-я]*|сыр[а-я]*|сырок[а-я]*|сырочк[а-я]*|сметан[а-я]*|кефир[а-я]*|ряженк[а-я]*|йогурт[а-я]*|сливк[а-я]*|сгущенк[а-я]*|сгущёнк[а-я]*|яйц[а-я]*|яичк[а-я]*|яиц|овощ[а-я]*|картох[а-я]*|картошк[а-я]*|картофел[а-я]*|помидор[а-я]*|томат[а-я]*|огур[ец][а-я]*|капуст[а-я]*|морков[а-я]*|морковк[а-я]*|лук[а-я]*|чеснок[а-я]*|зелен[а-я]*|укроп[а-я]*|петрушк[а-я]*|салат[а-я]*|свекл[а-я]*|свёкл[а-я]*|кабач[а-я]*|баклажан[а-я]*|перец|перц[а-я]*|гриб[а-я]*|шампиньон[а-я]*|фрукт[а-я]*|яблок[а-я]*|банан[а-я]*|апельсин[а-я]*|мандарин[а-я]*|лимон[а-я]*|груш[а-я]*|виноград[а-я]*|персик[а-я]*|нектарин[а-я]*|ягод[а-я]*|клубник[а-я]*|малин[а-я]*|черник[а-я]*|голубик[а-я]*|арбуз[а-я]*|дыня|дыни|ананас[а-я]*|авокадо|манго|хлеб[а-я]*|хлебушек|батон[а-я]*|лаваш[а-я]*|булк[а-я]*|булочк[а-я]*|багет[а-я]*|тост[а-я]*|сухар[а-я]*|печень[а-я]*|пряник[а-я]*|вафл[а-я]*|конфет[а-я]*|шоколад[а-я]*|шоколадк[а-я]*|батончик[а-я]*|чипс[а-я]*|снек[а-я]*|снэк[а-я]*|сухарик[а-я]*|семечк[а-я]*|орех[а-я]*|арахис[а-я]*|мармелад[а-я]*|зефир[а-я]*|минералк[а-я]*|газировк[а-я]*|лимонад[а-я]*|сочок|соки|сок\b|магазин[а-я]*|супермаркет[а-я]*|гипермаркет[а-я]*|гастроном[а-я]*|универсам[а-я]*|пятерочк[а-я]*|пятёрочк[а-я]*|пятак[а-я]*|магнит[а-я]*|перекресток[а-я]*|перекрёсток[а-я]*|перек[а-я]*|вкусвилл[а-я]*|лент[а-я]*|ашан[а-я]*|дикси|спар\b|spar\b|глобус[а-я]*|чижик[а-я]*|красное.*белое|кб\b|к&б|бристол[а-я]*|ярче|верный|азбук[а-я].*вкус[а-я]*|окей|самокат.*продукт|лавка.*продукт|сбермаркет|продукт[а-я]*|еда домой|покушать домой|закупился|покупки домой/i.test(lower)) {
+      category = 'Продукты';
+      iconEmoji = '🛒';
+    }
+    // D. Transport, Auto & Fuel
     else if (/такс|uber|убер|яндекс.*гоу|яндекс.*такси|карш|каршеринг|делимобиль|ситидрайв|белк[а]|заправил|бенз|дизель|солярк|азс|лукойл|газпром|роснефть|татнефть|тебойл|мойка|самомойк|детейлинг|помыл тачк|помыл машин|шиномонтаж|переобул|резин[аы]|балансировк|метро|проездной|тройк|стрелк|автобус|маршрутк|трамвай|электричк|мцд|мцк|сапсан|ласточк|ржд|поезд|самолет|авиабилет|побед|аэрофлот|s7|парковк|штраф|гибдд|платка|осаго|каско/i.test(lower)) {
       category = 'Транспорт';
       iconEmoji = '🚕';
     }
-    // Coffee, Bakery & Drinks
-    else if (/кофе|кофей|латте|капуч|флэт|раф|эспрессо|американо|матча|чай|булочн|выпечк|пекарн|круассан|слойк|булк/i.test(lower)) {
-      category = 'Кафе';
-      iconEmoji = '☕';
+    // E. Animals / Pets
+    else if (/коров[а-я]*|бык[а-я]*|телят[а-я]*|теленок|телк[а-я]*|коз[а-я]*|свин[а-я]*|хрюш[а-я]*|поросят[а-я]*|лошад[а-я]*|кон[яеь][а-я]*|жереб[а-я]*|овц[а-я]*|баран[а-я]*|ягнят[а-я]*|кур[а-я]*|петух[а-я]*|цыплят[а-я]*|гус[а-я]*|утк[а-я]*|индюк[а-я]*|скот[а-я]*|ферм[а-я]*|пасек[а-я]*|пчел[а-я]*|улей|питом[а-я]*|собак[а-я]*|щен[а-я]*|пес[а-я]*|пёсел[а-я]*|кошк[а-я]*|кот[а-я]*|котят[а-я]*|котейк[а-я]*|хомяк[а-я]*|попуга[а-я]*|рыбк[а-я]*|аквариум[а-я]*|грызун[а-я]*|корм[а-я]*|ветеринар[а-я]*|ветклиник[а-я]*|груминг[а-я]*|поводок|лоток|наполнитель/i.test(lower)) {
+      category = 'Питомцы';
+      iconEmoji = '🐾';
     }
-    // Dining, Fast food, Delivery, Bars
-    else if (/шав[ауе][а-я]*|шаверм|шаурм|донер|кебаб|пицц|додо|папа.*джонс|бургер|макдак|мак\b|вкусно.*точк|вит\b|кфс|kfc|ростикс|ролл|суши|якитори|тануки|обед|ужин|завтрак|ланч|бизнес.*ланч|столовк|столов[ая]|пивас|пиво|пивко|крафт|сидр|сидрери|вино|бар\b|паб\b|рестик|ресторан|кальян|посидели|скинул.*кент|скинул.*шав|покушать|доставк|самокат|лавка|купер|деливери/i.test(lower)) {
-      category = 'Рестораны';
-      iconEmoji = '🍽️';
+    // F. Tech & Gaming
+    else if (/плойк|соньк|playstation|ps5|ps4|xbox|иксбокс|нинтендо|switch|стимдек|видяха|видюх|видеокарт|rtx|geforce|проц|процессор|ссд|ssd|оперативк|монитор|моник|клав|мышк|айфон|iphone|эйрподс|airpods|макбук|macbook|ipad|айпад|эппл.*вотч|ноут|ноутбук|комп|пк|системник|телевизор|телик|техник|гаджет|наушник|колонк|алис[а]|станци[яи]|пылесос|стиралк|холодильник|микроволновк/i.test(lower)) {
+      category = 'Техника';
+      iconEmoji = '💻';
     }
-    // Subscriptions & Digital Services
+    // G. Subscriptions
     else if (/спотик|spotify|эппл.*мьюзик|apple.*music|яндекс.*плюс|плюс\b|телег|telegram.*prem|tg.*prem|нетфликс|netflix|ютуб|youtube|кинопоиск|иви|ivi|окко|okko|кион|kion|premier|start|впн|vpn|хостинг|сервер|vps|vds|домен|айклауд|icloud|гугл.*диск|облако|подписк|chatgpt|gpt|midjourney|github|figma/i.test(lower)) {
       category = 'Подписки';
       iconEmoji = '📱';
     }
-    // Shopping, Clothes & Marketplaces
+    // H. Shopping & Clothes
     else if (/шмот|педал|тяги|кросс|кед|сникер|ботинк|худи|зипк|толстовк|свитшот|куртк|пуховик|пальто|джинс|штаны|брюк|футболк|мерч|вб\b|вэбэ|вайлдберриз|wildberries|озон|ozon|яндекс.*маркет|маркетплейс|мегамаркет|авито|цум|гум|стокманн|зарин|лайм|lime|befree|lamoda|ламода|косметик|духи|парфюм|золот.*яблок|зя\b|летуаль|шопинг|покупк/i.test(lower)) {
       category = 'Покупки';
       iconEmoji = '🛍️';
     }
-    // Health, Fitness & Medical
+    // I. Health & Sports
     else if (/зал\b|качалк|спортзал|фитнес|трен[яе]|тренировк|тренер|персоналк|абонемент|протеин|креатин|бцаа|аптек|таблетк|колес[а]|витамин|омег[а]|врач|доктор|терапевт|стоматолог|зуб|пломб|брекет|элайнер|мрт|кт|узи|анализ|инвитро|гемотест|kdl|здоровь|массаж|психолог|остиопат|спа\b/i.test(lower)) {
       category = 'Здоровье';
       iconEmoji = '🏥';
     }
-    // Housing, Renovation & Utilities
+    // J. Housing & Utilities
     else if (/аренд|квартир|хат|ипотек|жкх|коммуналк|квартплат|свет|электричеств|вод[аы]|отоплен|газ\b|домофон|капремонт|интернет|вайфай|провайдер|ростелеком|домру|клининг|уборк|ремонт|стройк|обои|краск|плитк|ламинат|сантехник|леруа|лемана.*про|петрович|оби|obi|мебель|икеа|ikea|hoff|диван|кровать|шкаф|стол|матрас/i.test(lower)) {
       category = 'Жилье';
       iconEmoji = '🏠';
     }
-    // Groceries & Supermarkets
-    else if (/продукт|магазин|пятерочк|пятак|перекресток|магнит|вкусвилл|лента|ашан|дикси|спар|spar|метро|глобус|хлеб|молоко|сыр|мясо|яйца|масло|овощ|фрукт|еда/i.test(lower)) {
-      category = 'Продукты';
-      iconEmoji = '🛒';
-    }
-    // Entertainment, Gaming & Hobbies
+    // K. Entertainment
     else if (/стим\b|steam|донат|скин|батлпас|battle.*pass|бп\b|вбакс|v-bucks|кино|фильм|сеанс|театр|спектакль|концерт|фест|фестивал|стендап|квест|боулинг|бильярд|страйкбол|парк|аттракцион|зоопарк|аквапарк|баня|сауна|настолк|игры/i.test(lower)) {
       category = 'Развлечения';
       iconEmoji = '🎉';
     }
-    // Investments & Crypto
+    // L. Investments
     else if (/акци|облигац|офз|брокер|тинькофф.*инвест|бкс|крипт|биткоин|биток|btc|эфир|eth|usdt|тезер|тон\b|ton\b|байбит|bybit|бинанс|binance/i.test(lower)) {
       category = 'Инвестиции';
       iconEmoji = '📈';
     }
   }
 
-  // Clean description: remove stop words and action prefixes
+  // Clean description: remove stop words, action prefixes, and slang words
   const stopWords = new Set([
     'за', 'на', 'в', 'во', 'из', 'по', 'с', 'со', 'от', 'для', 'к', 'ко',
     'рублей', 'руб', 'рубля', 'р', 'сегодня', 'вчера', 'позавчера',
@@ -905,15 +907,35 @@ function parseQuickTxInput(raw) {
     'тысяч', 'тысячи', 'тыщ', 'тыс', 'миллион', 'миллиона', 'миллионов', 'млн', 'лям', 'лямов', 'лимон', 'лимонов',
     'миллиард', 'миллиарда', 'миллиардов', 'млрд', 'ярд', 'ярдов', 'арбуз', 'арбузов',
     'косарь', 'косаря', 'косарей', 'кусок', 'куска', 'кусков', 'штука', 'штуки', 'штук', 'тонна', 'тонн',
-    'сотка', 'сотку', 'сотен', 'полтос', 'полтинник', 'сорокет', 'пятихатка', 'двушка', 'трешка', 'пятерка', 'чирик',
+    'сотка', 'сотку', 'сотен', 'соточку', 'соточка', 'полтос', 'полтинник', 'сорокет', 'пятихатка', 'пятихат', 'двушка', 'трешка', 'пятерка', 'чирик',
     'баксов', 'долларов', 'евро', 'юаней', 'usdt'
   ]);
   const actionPrefixes = [
     'получил', 'получила', 'заработал', 'заработала', 'поднял', 'подняла', 'срубил', 'срубила',
-    'купил', 'купила', 'потратил', 'потратила', 'взял', 'взяла', 'скинул', 'скинула',
-    'перевел', 'перевела', 'перечислил', 'перечислила', 'капнул', 'капнуло', 'начислили', 'начислил',
-    'отдал', 'отдала', 'упал', 'упали', 'упало', 'прилетел', 'прилетело', 'прилетели', 'залетел', 'залетело',
-    'оплатил', 'оплатила'
+    'купил', 'купила', 'купили', 'потратил', 'потратила', 'потратили', 'взял', 'взяла', 'взяли',
+    'зацепил', 'зацепила', 'скинул', 'скинула', 'скинули', 'перевел', 'перевела', 'перевели',
+    'перечислил', 'перечислила', 'капнул', 'капнуло', 'начислили', 'начислил', 'отдал', 'отдала',
+    'упал', 'упали', 'упало', 'прилетел', 'прилетело', 'прилетели', 'залетел', 'залетело',
+    'оплатил', 'оплатила', 'оплатили', 'закупился', 'закупились'
+  ];
+
+  const canonicalMap = [
+    { re: /^макарон/i, name: 'Макароны' },
+    { re: /^греч[ка]*$/i, name: 'Гречка' },
+    { re: /^шав[уае][а-я]*$/i, name: 'Шаурма' },
+    { re: /^хинкал/i, name: 'Хинкали' },
+    { re: /^хачапур/i, name: 'Хачапури' },
+    { re: /^бургер/i, name: 'Бургер' },
+    { re: /^додо/i, name: 'Додо Пицца' },
+    { re: /^том\s*ям/i, name: 'Том ям' },
+    { re: /^фо\s*бо/i, name: 'Фо бо' },
+    { re: /^рамен/i, name: 'Рамен' },
+    { re: /^плов/i, name: 'Плов' },
+    { re: /^борщ/i, name: 'Борщ' },
+    { re: /^пятерочк|^пятёрочк/i, name: 'Пятёрочка' },
+    { re: /^перекресток|^перекрёсток/i, name: 'Перекрёсток' },
+    { re: /^вкусвилл/i, name: 'ВкусВилл' },
+    { re: /^магнит/i, name: 'Магнит' }
   ];
 
   const remainingWords = cleanWords
@@ -929,7 +951,12 @@ function parseQuickTxInput(raw) {
 
   let cleanDesc = remainingWords.join(' ').trim();
   if (cleanDesc) {
-    cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+    const matchedCanonical = canonicalMap.find(c => c.re.test(cleanDesc));
+    if (matchedCanonical) {
+      cleanDesc = matchedCanonical.name;
+    } else {
+      cleanDesc = cleanDesc.charAt(0).toUpperCase() + cleanDesc.slice(1);
+    }
   }
 
   return {
@@ -1795,7 +1822,7 @@ function renderHomeView() {
   const terminalBeaconHtml = `
     <div id="home-terminal-beacon" class="home-terminal-beacon" style="left: ${((beaconPt.x / svgW) * 100).toFixed(2)}%; top: ${((beaconPt.y / svgH) * 100).toFixed(2)}%;">
       <div class="terminal-pulse-ring" style="border-color: ${accentColor}; background: ${isDeficit ? 'rgba(251, 113, 133, 0.15)' : 'rgba(45, 212, 191, 0.15)'};"></div>
-      <div class="terminal-core-dot" style="background: ${accentColor}; box-shadow: 0 0 6px ${accentColor};"></div>
+      <div class="terminal-core-dot" style="background: ${accentColor};"></div>
     </div>
   `;
 
@@ -1957,10 +1984,10 @@ function renderHomeView() {
       <div class="quick-express-top">
         <div class="quick-input-wrap">
           <span class="quick-input-icon">${icon('sparkle', 16)}</span>
-          <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»..." autocomplete="off">
+          <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»..." autocomplete="off" aria-label="Быстрая запись расхода или дохода">
           <div class="quick-input-right-actions">
-            <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;" title="Очистить">${icon('close', 12)}</button>
-            <button type="button" class="btn-voice-express" id="btn-voice-express" title="Голосовой ввод: нажмите и говорите">
+            <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;" title="Очистить" aria-label="Очистить поле ввода">${icon('close', 12)}</button>
+            <button type="button" class="btn-voice-express" id="btn-voice-express" title="Голосовой ввод: нажмите и говорите" aria-label="Голосовой ввод расхода или дохода">
               ${icon('mic', 15)}
             </button>
           </div>
@@ -3189,7 +3216,7 @@ function renderBudgetsView() {
         ${allAvailableCats.map(c => `<option value="${esc(c)}">`).join('')}
       </datalist>
 
-      <form id="budget-form" style="display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 12px; margin-top: 12px;">
+      <form id="budget-form" class="budget-form-grid">
         <input class="form-input" id="budget-cat" list="budget-categories-datalist" placeholder="Категория (выберите или введите)" required>
         <div class="number-stepper-wrap">
           <input class="form-input num" id="budget-limit" type="number" min="1" step="any" placeholder="Сумма лимита (₽)" required>
@@ -3240,8 +3267,9 @@ function renderBudgetsView() {
               </button>
             </div>
 
-            <div class="progress-bar-track" style="margin: 14px 0 10px;">
+            <div class="progress-bar-track" style="margin: 14px 0 10px; position: relative;">
               <div class="progress-bar-fill ${isExceeded ? 'danger' : (pct > 80 ? 'warning' : '')}" style="width: ${pct}%;"></div>
+              <div class="budget-day-marker" style="left: ${((elapsedDays / daysInMonth) * 100).toFixed(1)}%;" title="Сегодня ${elapsedDays}-й день из ${daysInMonth}"></div>
             </div>
 
             <div class="budget-stats-row num">
@@ -3326,7 +3354,7 @@ function renderGoalsView() {
     <!-- Add Goal Form -->
     <div class="create-card">
       <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px;">Создать новую цель</h3>
-      <form id="goal-form" style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1fr; gap: 12px;">
+      <form id="goal-form" class="goal-form-grid">
         <input class="form-input" id="goal-name" placeholder="Название (напр. Подушка безопасности)" required>
         <div class="number-stepper-wrap">
           <input class="form-input num" id="goal-target" type="number" min="1" step="any" placeholder="Целевая сумма (₽)" required>
@@ -3761,22 +3789,24 @@ function renderModal() {
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px;">
-            <div class="form-group">
-              <label class="form-label">Сумма (${currencySymbols[profile.currency] || '₽'})</label>
-              <div class="number-stepper-wrap">
-                <input class="form-input num" id="form-amount" type="number" min="0.01" step="any" placeholder="0" required>
-                <div class="input-spin-steppers">
-                  <button type="button" class="spin-step-btn" data-target="form-amount" data-step="100" title="Увеличить на 100" aria-label="Увеличить">
-                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                  </button>
-                  <button type="button" class="spin-step-btn" data-target="form-amount" data-step="-100" title="Уменьшить на 100" aria-label="Уменьшить">
-                    <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1L4 4L7 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                  </button>
-                </div>
-              </div>
-              <div id="tx-rub-equivalent" style="font-size: 11px; color: var(--accent-jade); margin-top: 4px; display: none;"></div>
+          <!-- Swiss Hero Amount Row -->
+          <div class="form-group tx-modal-hero-group">
+            <label class="form-label">Сумма операции</label>
+            <div class="tx-modal-amount-box">
+              <span class="tx-modal-curr-symbol">${currencySymbols[profile.currency] || '₽'}</span>
+              <input class="tx-modal-hero-input num" id="form-amount" type="number" min="0.01" step="any" placeholder="0" required inputmode="decimal">
             </div>
+            <div class="tx-modal-quick-nudges">
+              <button type="button" class="tx-nudge-btn" data-nudge="100">+100</button>
+              <button type="button" class="tx-nudge-btn" data-nudge="500">+500</button>
+              <button type="button" class="tx-nudge-btn" data-nudge="1000">+1 000</button>
+              <button type="button" class="tx-nudge-btn" data-nudge="5000">+5 000</button>
+            </div>
+            <div id="tx-rub-equivalent" style="font-size: 11px; color: var(--accent-jade); margin-top: 4px; display: none;"></div>
+          </div>
+
+          <!-- Date & Time Row -->
+          <div class="tx-modal-datetime-grid">
             <div class="form-group">
               <label class="form-label">Дата</label>
               <input class="form-input" id="form-date" type="date" value="${toDateIso(getMskDate())}" required>
@@ -4887,21 +4917,40 @@ function bindInteractiveEvents() {
     homeWrap.onmousemove = e => handleHomeScrub(e.clientX);
     homeWrap.onmouseleave = resetHomeScrub;
 
-    // Full Mobile Touch Support
+    // Full Mobile Touch Support with Directional Gesture Arbitration
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isHorizontalScrub = false;
+
     homeWrap.addEventListener('touchstart', e => {
       if (e.touches && e.touches.length > 0) {
-        handleHomeScrub(e.touches[0].clientX);
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isHorizontalScrub = false;
       }
     }, { passive: true });
 
     homeWrap.addEventListener('touchmove', e => {
       if (e.touches && e.touches.length > 0) {
-        e.preventDefault(); // lock vertical scroll while scrubbing the chart
-        handleHomeScrub(e.touches[0].clientX);
+        const currentX = e.touches[0].clientX;
+        const currentY = e.touches[0].clientY;
+        const dx = Math.abs(currentX - touchStartX);
+        const dy = Math.abs(currentY - touchStartY);
+
+        // Only lock vertical scroll if user has intentionally dragged horizontally
+        if (!isHorizontalScrub && dx > 10 && dx > dy * 1.25) {
+          isHorizontalScrub = true;
+        }
+
+        if (isHorizontalScrub) {
+          if (e.cancelable) e.preventDefault();
+          handleHomeScrub(currentX);
+        }
       }
     }, { passive: false });
 
     homeWrap.addEventListener('touchend', () => {
+      isHorizontalScrub = false;
       // On desktop mouse leaves, on mobile keep day breakdown readable until tap elsewhere
       setTimeout(() => {
         if (window.innerWidth <= 640) {
@@ -5317,6 +5366,20 @@ function bindInteractiveEvents() {
     };
   }
   if (modalTypeSelect) modalTypeSelect.onchange = updateModalBudgetAlert;
+
+  // Quick Amount Nudges (+100, +500, +1000, +5000)
+  $$('.tx-nudge-btn').forEach(btn => {
+    btn.onclick = () => {
+      const amtEl = document.getElementById('form-amount');
+      if (!amtEl) return;
+      const nudge = Number(btn.getAttribute('data-nudge')) || 0;
+      const curVal = Number(amtEl.value) || 0;
+      amtEl.value = Math.max(0, curVal + nudge);
+      updateModalBudgetAlert();
+      updateRubEq();
+      amtEl.focus();
+    };
+  });
 
   // Modal Form Submit (Create or Update Transaction with Budget Protection)
   const txModalForm = document.getElementById('tx-modal-form');
