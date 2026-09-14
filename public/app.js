@@ -1283,15 +1283,52 @@ function renderMasthead() {
   return `
     <header class="masthead">
       <div class="brand" data-tab="home" title="FinKaif — На главную">
-        <div class="brand-icon">
-          ${icon('sparkle', 18)}
+        <div class="brand-logo-mark">
+          <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="fk-grad-bg" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#121D24"/>
+                <stop offset="100%" stop-color="#080E12"/>
+              </linearGradient>
+              <linearGradient id="fk-grad-pillar" x1="7" y1="7" x2="12" y2="27" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#5EEAD4"/>
+                <stop offset="50%" stop-color="#2DD4BF"/>
+                <stop offset="100%" stop-color="#0D9488"/>
+              </linearGradient>
+              <linearGradient id="fk-grad-wing1" x1="11" y1="7" x2="26" y2="13" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#FFFFFF"/>
+                <stop offset="50%" stop-color="#A7F3D0"/>
+                <stop offset="100%" stop-color="#2DD4BF"/>
+              </linearGradient>
+              <linearGradient id="fk-grad-wing2" x1="11" y1="14" x2="22" y2="19" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#5EEAD4"/>
+                <stop offset="100%" stop-color="#0D9488"/>
+              </linearGradient>
+              <filter id="fk-glow-core" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="1.2" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <!-- Squircle Chassis with subtle specular highlight -->
+            <rect width="34" height="34" rx="10" fill="url(#fk-grad-bg)"/>
+            <rect x="0.5" y="0.5" width="33" height="33" rx="9.5" stroke="rgba(45, 212, 191, 0.28)" stroke-width="1"/>
+            <path d="M6 1.5C11 0.9 23 0.9 28 1.5" stroke="rgba(255, 255, 255, 0.22)" stroke-width="1" stroke-linecap="round"/>
+            <!-- Architectural Kinetic Emblem -->
+            <g filter="url(#fk-glow-core)">
+              <!-- Vertical Core Pillar -->
+              <rect x="8" y="7.5" width="4" height="19" rx="2" fill="url(#fk-grad-pillar)"/>
+              <!-- Upper Aerodynamic Wing -->
+              <path d="M12 7.5H23C24.38 7.5 25.5 8.62 25.5 10C25.5 11.38 24.38 12.5 23 12.5H12V7.5Z" fill="url(#fk-grad-wing1)"/>
+              <!-- Mid Harmonic Wing -->
+              <path d="M12 14.5H19.5C20.6 14.5 21.5 15.4 21.5 16.5C21.5 17.6 20.6 18.5 19.5 18.5H12V14.5Z" fill="url(#fk-grad-wing2)"/>
+              <!-- Kinetic Amber/Jade Precision Spark -->
+              <circle cx="21" cy="24" r="2" fill="#5EEAD4"/>
+            </g>
+          </svg>
         </div>
-        <div style="display: flex; align-items: center;">
-          <span class="brand-name">FinKaif</span>
-          <span class="brand-badge live-badge" title="Синхронизировано с Московским временем (UTC+3)">
-            <span class="live-dot"></span>
-            <span class="live-label">Live MSK</span>
-          </span>
+        <div class="brand-wordmark">
+          <span class="brand-wordmark-fin">Fin</span><span class="brand-wordmark-kaif">Kaif</span>
+          <span class="brand-wordmark-dot"></span>
         </div>
       </div>
 
