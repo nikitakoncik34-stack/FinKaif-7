@@ -2207,16 +2207,22 @@ function calculateStatementPeriod(transactions) {
   };
 }
 
-async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto') {
+async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto', pdfBase64 = null) {
   // 1. Try server-side dedicated Gemini AI endpoint
   try {
+    const reqBody = {
+      filename: fileName,
+      preset: bankPreset
+    };
+    if (pdfBase64) {
+      reqBody.pdf_base64 = pdfBase64;
+    } else {
+      reqBody.content = fileContent;
+    }
+
     const aiRes = await api('ai/parse-statement', {
       method: 'POST',
-      body: JSON.stringify({
-        content: fileContent,
-        filename: fileName,
-        preset: bankPreset
-      })
+      body: JSON.stringify(reqBody)
     });
 
     if (aiRes && aiRes.success && Array.isArray(aiRes.transactions) && aiRes.transactions.length > 0) {
@@ -2243,14 +2249,14 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
     console.warn('Server AI parse notice:', err.message);
   }
 
-  // 2. Builtin Fallback Smart Engine
-  const items = parseStatementBuiltin(fileContent, fileName, bankPreset);
+  // 2. Builtin Fallback Smart Engine (for text / CSV / 1C / Excel)
+  const items = fileContent ? parseStatementBuiltin(fileContent, fileName, bankPreset) : [];
   const period = calculateStatementPeriod(items);
   let detectedBank = 'Банк РФ';
-  if (bankPreset === 'tinkoff' || /тинькофф|т-банк|tinkoff/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'Т-Банк';
-  else if (bankPreset === 'sber' || /сбер|sber/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'СберБанк';
-  else if (bankPreset === 'alfa' || /альфа|alfa/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'Альфа-Банк';
-  else if (bankPreset === 'vtb' || /втб|vtb|1cclientbank/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'ВТБ / 1C';
+  if (bankPreset === 'tinkoff' || /тинькофф|т-банк|tinkoff/i.test(fileName + ' ' + (fileContent || '').slice(0, 1000))) detectedBank = 'Т-Банк';
+  else if (bankPreset === 'sber' || /сбер|sber/i.test(fileName + ' ' + (fileContent || '').slice(0, 1000))) detectedBank = 'СберБанк';
+  else if (bankPreset === 'alfa' || /альфа|alfa/i.test(fileName + ' ' + (fileContent || '').slice(0, 1000))) detectedBank = 'Альфа-Банк';
+  else if (bankPreset === 'vtb' || /втб|vtb|1cclientbank/i.test(fileName + ' ' + (fileContent || '').slice(0, 1000))) detectedBank = 'ВТБ / 1C';
 
   return {
     engine: 'smart',
@@ -2286,7 +2292,7 @@ function renderImportBankModal() {
             </div>
             <div>
               <h3 class="modal-title">Импорт банковской выписки</h3>
-              <p class="modal-subtitle">Загрузите файл выписки (.CSV, .TXT, .TSV, .JSON) для мгновенного переноса операций</p>
+              <p class="modal-subtitle">Загрузите файл выписки (.PDF, .XLSX, .CSV, .TXT, .JSON) для автоматического переноса операций</p>
             </div>
           </div>
           <button type="button" class="btn-icon" id="btn-close-import-modal">${icon('close', 16)}</button>
@@ -2302,7 +2308,7 @@ function renderImportBankModal() {
             <button type="button" class="import-bank-pill" data-bank="alfa">Альфа-Банк</button>
             <button type="button" class="import-bank-pill" data-bank="vtb">ВТБ / 1C</button>
           </div>
-          <div class="import-ai-status-pill" title="Искусственный интеллект FinKaif обучен и готов к распознаванию периодов, дат и категорий">
+          <div class="import-ai-status-pill" title="Искусственный интеллект FinKaif обучен и готов к распознаванию PDF, Excel, периодов, дат и категорий">
             <span class="ai-pulse-dot"></span>
             <span class="ai-pill-text">FinKaif AI активен</span>
           </div>
@@ -2310,23 +2316,23 @@ function renderImportBankModal() {
 
         <!-- Upload Drop Zone -->
         <div id="import-dropzone" class="import-drop-zone">
-          <input type="file" id="bank-file-input" accept=".csv,.txt,.tsv,.json" style="display: none;">
+          <input type="file" id="bank-file-input" accept=".csv,.txt,.tsv,.json,.pdf,.xlsx,.xls" style="display: none;">
           <div class="drop-zone-icon">
             ${icon('fileText', 32)}
           </div>
           <div class="drop-zone-title">Перетащите файл выписки сюда</div>
           <div class="drop-zone-subtitle">или <span class="drop-browse-link">выберите на устройстве</span></div>
           <div class="drop-zone-badges">
+            <span class="drop-badge">PDF выписки банков</span>
+            <span class="drop-badge">Excel (.XLSX / .XLS)</span>
             <span class="drop-badge">Т-Банк (CSV)</span>
-            <span class="drop-badge">Сбер (CSV/TXT)</span>
-            <span class="drop-badge">Альфа (CSV)</span>
-            <span class="drop-badge">ВТБ & 1C</span>
-            <span class="drop-badge">Универсальный CSV</span>
+            <span class="drop-badge">Сбер & ВТБ</span>
+            <span class="drop-badge">1C & Универсальный</span>
           </div>
           <div id="import-scanning-overlay" class="import-scanning-overlay" style="display: none;">
             <div class="scanning-spinner"></div>
             <div class="scanning-title">FinKaif AI анализирует выписку...</div>
-            <div class="scanning-sub">Распознаем банк, период, даты и категории операций</div>
+            <div class="scanning-sub">Распознаем файл (PDF / Excel / CSV), период, даты и категории</div>
           </div>
         </div>
 
@@ -7641,8 +7647,10 @@ function bindBankImportModalEvents() {
       $$('.import-bank-pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       bankImportSelectedPreset = pill.getAttribute('data-bank') || 'auto';
-      if (window._currentBankFileContent) {
-        await processBankFile(window._currentBankFileContent, window._currentBankFileName || 'statement.csv');
+      if (window._currentBankPdfBase64) {
+        await processBankFile(null, window._currentBankFileName || 'statement.pdf', window._currentBankPdfBase64);
+      } else if (window._currentBankFileContent) {
+        await processBankFile(window._currentBankFileContent, window._currentBankFileName || 'statement.csv', null);
       }
     };
   });
@@ -7677,26 +7685,78 @@ function bindBankImportModalEvents() {
   }
 
   async function handleFileSelect(file) {
+    const nameLower = file.name.toLowerCase();
+
+    // 1. PDF Statement
+    if (nameLower.endsWith('.pdf')) {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const dataUrl = ev.target.result;
+        const b64 = dataUrl.split(',')[1];
+        window._currentBankFileContent = null;
+        window._currentBankPdfBase64 = b64;
+        window._currentBankFileName = file.name;
+        await processBankFile(null, file.name, b64);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // 2. Excel Statement (.xlsx, .xls)
+    if (nameLower.endsWith('.xlsx') || nameLower.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          let csvText = '';
+          if (window.XLSX && window.XLSX.read) {
+            const data = new Uint8Array(ev.target.result);
+            const workbook = window.XLSX.read(data, { type: 'array' });
+            for (const sheetName of workbook.SheetNames) {
+              const sheet = workbook.Sheets[sheetName];
+              const sCsv = window.XLSX.utils.sheet_to_csv(sheet);
+              if (sCsv && sCsv.trim()) {
+                csvText += `\n--- Лист: ${sheetName} ---\n` + sCsv;
+              }
+            }
+          }
+          if (!csvText) {
+            alert('Не удалось прочитать таблицы из файла Excel.');
+            return;
+          }
+          window._currentBankFileContent = csvText;
+          window._currentBankPdfBase64 = null;
+          window._currentBankFileName = file.name;
+          await processBankFile(csvText, file.name, null);
+        } catch (xErr) {
+          alert('Ошибка чтения файла Excel: ' + xErr.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      return;
+    }
+
+    // 3. Standard Text, CSV, TSV, JSON
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const text = ev.target.result;
       window._currentBankFileContent = text;
+      window._currentBankPdfBase64 = null;
       window._currentBankFileName = file.name;
-      await processBankFile(text, file.name);
+      await processBankFile(text, file.name, null);
     };
     reader.readAsText(file, 'utf-8');
   }
 
-  async function processBankFile(content, fileName) {
+  async function processBankFile(content, fileName, pdfBase64 = null) {
     const scanOverlay = document.getElementById('import-scanning-overlay');
     if (scanOverlay) scanOverlay.style.display = 'flex';
 
     try {
-      const res = await parseBankStatement(content, fileName, bankImportSelectedPreset);
+      const res = await parseBankStatement(content, fileName, bankImportSelectedPreset, pdfBase64);
       bankImportParsed = res.transactions;
 
       if (!bankImportParsed || bankImportParsed.length === 0) {
-        alert('Не удалось распознать операции в данном файле. Проверьте формат выписки (CSV, TXT, TSV или JSON).');
+        alert('Не удалось распознать операции в данном файле. Проверьте формат выписки (PDF, Excel, CSV или TXT).');
         return;
       }
 
@@ -7797,6 +7857,8 @@ function bindBankImportModalEvents() {
       if (fileInput) fileInput.value = '';
       bankImportParsed = [];
       window._currentBankFileContent = null;
+      window._currentBankPdfBase64 = null;
+      window._currentBankFileName = null;
     };
   }
 
