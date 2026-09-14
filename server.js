@@ -703,6 +703,29 @@ app.post("/api/transactions", auth, async (req, res) => {
   }
 });
 
+app.post("/api/transactions/bulk", auth, async (req, res) => {
+  try {
+    const list = Array.isArray(req.body) ? req.body : (req.body.transactions || []);
+    if (!list.length) return res.status(400).json({ error: "Список операций пуст." });
+
+    const inserted = [];
+    for (const x of list) {
+      if (!["income", "expense", "transfer"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
+        continue;
+      }
+      const createdAt = x.created_at ? new Date(x.created_at) : new Date();
+      const r = await db.query(
+        "insert into transactions(user_id,type,category,description,amount,occurred_on,created_at) values($1,$2,$3,$4,$5,$6,$7) returning *",
+        [req.user.id, x.type, String(x.category).trim(), String(x.description || "").trim(), Math.round(Number(x.amount) * 100) / 100, x.occurred_on || getMskIsoDate(), isNaN(createdAt.getTime()) ? new Date() : createdAt]
+      );
+      inserted.push(r.rows[0]);
+    }
+    res.json({ ok: true, count: inserted.length, rows: inserted });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 app.put("/api/transactions/:id", auth, async (req, res) => {
   try {
     const x = req.body;
@@ -1138,6 +1161,41 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
       `[ACTION_EXEC:deposit_goal:{"name":"${goalName}","amount":${amt}}]`;
   }
 
+  // Удаление цели: "Удали цель отпуск", "Сними цель подушка", "Удали все цели"
+  if (/(?:удали|стереть|сними|убери|закрой)\s+(?:цель|накопление|цели)/i.test(q)) {
+    let goalName = '';
+    const gMatch = question.match(/(?:цель|накопление|цели)\s+([а-яёa-z0-9\s-]+?)(?:\s*$|\s*[.,!])/i);
+    if (gMatch && gMatch[1]) {
+      goalName = gMatch[1].replace(/(?:удали|стереть|сними|убери|закрой)/gi, '').trim();
+    }
+    const isAll = /(?:все|всё|все цели)/i.test(q);
+    const targetName = isAll ? 'all' : (goalName || 'последнюю');
+    return `🗑️ **Цель «${isAll ? 'Все цели' : (goalName || 'Финансовая цель')}» успешно удалена!**\n\n` +
+      `Цель снята с мониторинга и удалена из вашего портфеля FinKaif. Доступные ресурсы распределены на оставшиеся приоритеты.\n\n` +
+      `[ACTION_EXEC:delete_goal:{"name":"${targetName}"}]`;
+  }
+
+  // Удаление лимита бюджета: "Удали бюджет на кафе", "Сними лимит продукты", "Удали все бюджеты"
+  if (/(?:удали|стереть|сними|убери|отмени)\s+(?:бюджет|лимит)/i.test(q)) {
+    let category = '';
+    const catMatch = question.match(/(?:на|для|по|категори[июя]?|бюджет|лимит)\s+([а-яёa-z0-9\s-]+?)(?:\s*$|\s*[.,!])/i);
+    if (catMatch && catMatch[1]) {
+      category = catMatch[1].replace(/(?:бюджет|лимит|удали|сними|убери|отмени)/gi, '').trim();
+    }
+    const isAll = /(?:все|всё|все бюджеты|все лимиты)/i.test(q);
+    const targetCat = isAll ? 'all' : (category || 'Прочее');
+    return `🗑️ **Лимит бюджета для «${isAll ? 'Всех категорий' : targetCat}» успешно снят!**\n\n` +
+      `Ограничение трат удалено из модуля «Бюджеты». Вы можете установить новый лимит в любое время.\n\n` +
+      `[ACTION_EXEC:delete_budget:{"category":"${targetCat}"}]`;
+  }
+
+  // Удаление операции: "Удали последнюю операцию", "Отмени транзакцию"
+  if (/(?:удали|стереть|отмени)\s+(?:последнюю\s+)?(?:операцию|трату|расход|транзакцию|запись)/i.test(q)) {
+    return `🗑️ **Последняя операция успешно удалена из журнала!**\n\n` +
+      `Запись стёрта из истории транзакций, баланс капитала и статистика скорректированы.\n\n` +
+      `[ACTION_EXEC:delete_tx:{"last":true}]`;
+  }
+
   // 1. FIRE & RETIREMENT / ФИНАНСОВАЯ НЕЗАВИСИМОСТЬ
   if (/fire|пенси|свобод|пассивн|не работать|капитал на будущее|финансовая независимость/i.test(q)) {
     const annualLivingExp = monthlyExp * 12;
@@ -1523,14 +1581,21 @@ ${goalsSummary}
    [ACTION:analytics:cf:Анализ денежного потока]
    [ACTION:transactions:tx-all:Посмотреть все операции]
 
-9. ⚡ АГЕНТНЫЕ КОМАНДЫ ДЕЙСТВИЯ (ИНТЕРФЕЙС УПРАВЛЕНИЯ ПРИЛОЖЕНИЕМ):
-   Ты умеешь НЕ ПРОСТО говорить, а РЕАЛЬНО СОЗДАВАТЬ объекты в приложении FinKaif! Когда пользователь просит:
+9. ⚡ АГЕНТНЫЕ КОМАНДЫ ДЕЙСТВИЯ (ПОЛНЫЙ ИНТЕРФЕЙС УПРАВЛЕНИЯ СИСТЕМОЙ FINKAIF):
+   Ты умеешь НЕ ПРОСТО говорить, а РЕАЛЬНО УПРАВЛЯТЬ объектами в приложении FinKaif (создавать, пополнять, удалять цели, бюджеты и операции)!
+   Когда пользователь просит:
    • Создать/поставить цель (накопить на что-то, цель на отпуск/машину/подушку) — ОБЯЗАТЕЛЬНО включи в ответ строку:
      [ACTION_EXEC:create_goal:{"name":"Название цели","target_amount":Сумма,"saved_amount":0}]
+   • Удалить цель / снять цель (например, «удали цель Отпуск», «удали цель ...») — ОБЯЗАТЕЛЬНО включи строку:
+     [ACTION_EXEC:delete_goal:{"name":"Название цели"}]
    • Создать/установить лимит бюджета на категорию — ОБЯЗАТЕЛЬНО включи в ответ строку:
      [ACTION_EXEC:create_budget:{"category":"Категория","limit_amount":Сумма}]
+   • Удалить лимит бюджета / снять ограничение с категории (например, «удали бюджет на кафе», «сними лимит с такси») — ОБЯЗАТЕЛЬНО включи строку:
+     [ACTION_EXEC:delete_budget:{"category":"Категория"}]
    • Записать операцию/трату/доход — ОБЯЗАТЕЛЬНО включи в ответ строку:
      [ACTION_EXEC:create_tx:{"type":"expense"|"income","amount":Сумма,"category":"Категория","description":"Описание"}]
+   • Удалить операцию/отменить последнюю операцию (например, «удали последнюю операцию», «отмени расход») — ОБЯЗАТЕЛЬНО включи строку:
+     [ACTION_EXEC:delete_tx:{"last":true}]
    • Пополнить цель деньгами — ОБЯЗАТЕЛЬНО включи строку:
      [ACTION_EXEC:deposit_goal:{"name":"Название цели","amount":Сумма}]
    Клиент FinKaif распознает этот блок и АВТОМАТИЧЕСКИ выполнит действие в базе данных и покажет интерактивную карточку выполнения!`;
