@@ -1521,11 +1521,10 @@ input[type="number"] {
    ========================================================================== */
 .assistant-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 290px 1fr;
   gap: 16px;
-  height: calc(100vh - 180px);
-  min-height: 460px;
-  max-height: 640px;
+  height: clamp(460px, calc(100vh - 275px), 640px);
+  min-height: 440px;
 }
 
 .assistant-sidebar {
@@ -1541,35 +1540,13 @@ input[type="number"] {
 }
 
 .assistant-sidebar-title {
-  font-size: 11.5px;
+  font-family: var(--font-outfit), var(--font-sans);
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.suggestion-chip {
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  transition: all var(--fast);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.suggestion-chip:hover {
-  background: var(--accent-jade-glow);
-  border-color: rgba(45, 212, 191, 0.3);
-  transform: translateX(2px);
+  margin-bottom: 2px;
 }
 
 .suggestion-tag {
@@ -1635,50 +1612,106 @@ input[type="number"] {
   gap: 5px;
 }
 
+/* ==========================================================================
+   PROMINENT HYPER-TERMINAL CHAT INPUT CAPSULE
+   ========================================================================== */
+.chat-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  position: relative;
+}
+
 .chat-input-bar {
   display: flex;
-  gap: 10px;
   align-items: center;
-  flex-shrink: 0;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  background: rgba(18, 25, 36, 0.88);
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.chat-input-bar:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(22, 31, 44, 0.95);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.chat-input-bar:focus-within {
+  border-color: rgba(45, 212, 191, 0.65);
+  background: rgba(20, 29, 42, 0.98);
+  box-shadow: 0 0 0 3.5px rgba(45, 212, 191, 0.18), 0 10px 32px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.input-field-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .chat-input-bar input {
-  flex: 1;
+  width: 100%;
   background: transparent;
   border: none;
   color: #FFFFFF;
-  font-family: var(--font-sans);
-  font-size: 13.5px;
-  padding: 8px 14px;
+  font-family: var(--font-outfit), var(--font-sans);
+  font-size: 14px;
+  font-weight: 450;
+  padding: 8px 6px;
   outline: none;
+  caret-color: var(--accent-jade);
+}
+
+.chat-input-bar input::placeholder {
+  color: #64748B;
+  font-weight: 400;
+  opacity: 1;
 }
 
 .chat-send-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   border: none;
-  background: var(--accent-jade);
+  background: linear-gradient(135deg, #5EEAD4 0%, #2DD4BF 100%);
   color: #042F2E;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--fast);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 10px rgba(45, 212, 191, 0.35);
 }
 
 .chat-send-btn:hover {
-  transform: scale(1.05);
-  background: #5EEAD4;
+  transform: scale(1.08);
+  background: linear-gradient(135deg, #A7F3D0 0%, #34D399 100%);
+  box-shadow: 0 4px 16px rgba(45, 212, 191, 0.5);
+}
+
+.chat-send-btn:active {
+  transform: scale(0.94);
 }
 
 .btn-voice-assistant {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-muted);
+  color: #94A3B8;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1705,8 +1738,41 @@ input[type="number"] {
 }
 
 .chat-input-bar input.voice-active {
-  border-color: rgba(244, 63, 94, 0.5);
   color: #FDE68A;
+}
+
+.chat-input-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #64748B;
+  user-select: none;
+}
+
+.input-meta-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+
+.input-meta-kbd kbd {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  padding: 2px 5px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: #94A3B8;
 }
 
 /* Agentic AI Action Cards in Chat */
@@ -5677,24 +5743,38 @@ input[type="number"] {
 .assistant-mode-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-pill);
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  gap: 8px;
+  padding: 5px 12px;
+  background: rgba(20, 28, 38, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  font-family: var(--font-outfit), var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: #94A3B8;
   cursor: pointer;
-  transition: all var(--fast);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
 }
 
 .assistant-mode-pill:hover {
   background: rgba(45, 212, 191, 0.12);
-  border-color: rgba(45, 212, 191, 0.3);
+  border-color: rgba(45, 212, 191, 0.38);
   color: #FFFFFF;
   transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.pill-icon-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--accent-jade);
+  flex-shrink: 0;
 }
 
 .assistant-tool-actions {
@@ -6026,29 +6106,183 @@ input[type="number"] {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
-/* Sidebar Chip Enhancements */
-.suggestion-chip {
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  gap: 10px !important;
+/* ==========================================================================
+   SWISS UNIFORM SUGGESTION CHIPS & ICON BADGES
+   ========================================================================== */
+.assistant-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.chip-sparkle {
-  font-size: 16px;
-  line-height: 1;
-  margin-top: 1px;
+.suggestion-chip {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: linear-gradient(135deg, rgba(22, 30, 42, 0.7) 0%, rgba(13, 19, 27, 0.85) 100%) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  color: #FFFFFF !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  width: 100% !important;
+  position: relative !important;
+  outline: none !important;
+}
+
+.suggestion-chip:hover {
+  background: linear-gradient(135deg, rgba(28, 38, 54, 0.88) 0%, rgba(18, 26, 38, 0.95) 100%) !important;
+  border-color: rgba(45, 212, 191, 0.45) !important;
+  transform: translateX(4px) translateY(-1px) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(45, 212, 191, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.suggestion-chip:active {
+  transform: translateX(2px) scale(0.99) !important;
+}
+
+/* Uniform Icon Box */
+.chip-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.suggestion-chip:hover .chip-icon-box {
+  transform: scale(1.08);
+}
+
+/* Uniform Icon Theme Badges */
+.chip-theme-fire {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  color: #FBBF24;
+}
+.chip-theme-goal {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  color: #34D399;
+}
+.chip-theme-budget {
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.28);
+  color: #38BDF8;
+}
+.chip-theme-leaks {
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.28);
+  color: #C084FC;
+}
+.chip-theme-runway {
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.28);
+  color: #22D3EE;
+}
+.chip-theme-growth {
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  color: #6EE7B7;
+}
+.chip-theme-ritual {
+  background: rgba(251, 113, 133, 0.12);
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  color: #FDA4AF;
+}
+.chip-theme-finscore {
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  color: #5EEAD4;
+}
+
+/* Chip Content */
+.chip-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .chip-title {
-  font-size: 12.5px;
-  font-weight: 700;
+  font-family: var(--font-outfit), var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
   color: #FFFFFF;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chip-sub {
   font-size: 11px;
-  color: var(--text-secondary);
+  color: #94A3B8;
   line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chip Arrow Indicator */
+.chip-arrow {
+  color: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.suggestion-chip:hover .chip-arrow {
+  color: var(--accent-jade);
+  transform: translateX(3px);
+}
+
+/* Empty State Quick Prompts Grid */
+.chat-empty-quick-prompts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  max-width: 520px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.empty-prompt-card {
+  padding: 11px 13px !important;
+}
+
+.empty-prompt-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.empty-prompt-title {
+  font-family: var(--font-outfit), var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.empty-prompt-sub {
+  font-size: 11px;
+  color: #94A3B8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .assistant-note-card {
@@ -6285,15 +6519,37 @@ input[type="number"] {
     gap: 16px;
   }
   .assistant-chat-panel {
-    height: 520px;
-    min-height: 420px;
-    margin-bottom: calc(50px + env(safe-area-inset-bottom, 16px));
+    height: 540px;
+    min-height: 440px;
+    margin-bottom: calc(90px + env(safe-area-inset-bottom, 16px));
   }
   .assistant-sidebar {
-    max-height: 280px;
+    max-height: 380px;
   }
   .chat-bubble {
     max-width: 92%;
+  }
+  .chat-empty-quick-prompts {
+    grid-template-columns: 1fr;
+  }
+  .chat-input-bar {
+    padding: 5px 6px 5px 8px;
+  }
+  .chat-input-bar input {
+    font-size: 13px;
+  }
+  .btn-voice-assistant, .chat-send-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .input-meta-kbd {
+    display: none;
+  }
+  .input-meta-hint {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -7281,8 +7537,7 @@ input[type="number"] {
 
 /* ─── Suggestion chips slide ─── */
 .suggestion-chip:hover {
-  transform: translateX(4px) !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  transform: translateX(4px) translateY(-1px) !important;
 }
 
 /* ─── Chat send button spring ─── */
