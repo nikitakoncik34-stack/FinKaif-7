@@ -104,16 +104,18 @@ function getMskIsoDate(d = new Date()) {
 }
 
 const GEMINI_API_KEYS = [
-  Buffer.from("QVEuQWI4Uk42S3JXeGdudDl6bDJsd0lHcVlacDBONk1MSHhrVXl4c285aXpwU1VqZEhYSXc=", "base64").toString("utf8"),
+  Buffer.from("QVEuQWI4Uk42SndnMS0tOEFLNkRtR2h5RmZwSVNaUVVuNVNMWWNuWlJETW1FdDJiT25PSnc=", "base64").toString("utf8"),
   process.env.GEMINI_API_KEY,
+  Buffer.from("QVEuQWI4Uk42S3JXeGdudDl6bDJsd0lHcVlacDBONk1MSHhrVXl4c285aXpwU1VqZEhYSXc=", "base64").toString("utf8"),
   Buffer.from("QVEuQWI4Uk42TFRKMGxod1B2QnpuTE5HQkd4cHBta1hiaHZVYXZ1QXAyc2JGaWNDNERTYmc=", "base64").toString("utf8")
 ].filter(Boolean);
 
 const GEMINI_MODELS = [
   process.env.GEMINI_MODEL,
+  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.6-flash",
   "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
   "gemini-flash-latest"
 ].filter(Boolean);
 
@@ -721,6 +723,137 @@ app.post("/api/transactions/bulk", auth, async (req, res) => {
       inserted.push(r.rows[0]);
     }
     res.json({ ok: true, count: inserted.length, rows: inserted });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+const STATEMENT_AI_SYSTEM_PROMPT = `Ты — экспертный финансовый искусственный интеллект FinKaif AI для распознавания и анализа банковских выписок любых банков РФ (Т-Банк, Сбер, Альфа, ВТБ, Райффайзен, 1С, Точка и др.) в любых форматах (CSV, TXT/1C, TSV, JSON, выгрузки таблиц, произвольный текст выписки).
+
+ТВОЯ ЗАДАЧА:
+1. Определить банк (bank_name): "Т-Банк", "Сбербанк", "Альфа-Банк", "ВТБ", "Райффайзенбанк", "Точка" или "1С / Банк-Клиент".
+2. Определить точный период выписки (period: { from: "YYYY-MM-DD", to: "YYYY-MM-DD", label: "ДД.ММ.ГГГГ — ДД.ММ.ГГГГ" }).
+   - Если явного периода в заголовке нет, обязательно вычисли его по минимальной и максимальной дате найденных операций!
+   - Пример label: "01.08.2026 — 31.08.2026".
+3. Посчитать общую сумму доходов (total_income) и расходов (total_expense) в рублях.
+4. Извлечь ВСЕ транзакции:
+   - date: дата в формате "YYYY-MM-DD".
+   - amount: положительное число (number, строго больше 0, без минусов и валют).
+   - type: "income" или "expense".
+     • Поступления, зарплата, пополнения, переводы от кого-то, кэшбэк, проценты — это "income".
+     • Покупки, списания, переводы кому-то, комиссии, снятия, налоги — это "expense".
+   - category: строго одна из официальных категорий FinKaif с эмодзи:
+     • 🛒 Продукты (супермаркеты, гастрономы, еда, доставка продуктов)
+     • ☕ Кафе и рестораны (кофейни, рестораны, фастфуд, доставка блюд)
+     • 🚗 Транспорт (такси, каршеринг, метро, АЗС, парковки, транспортные карты)
+     • 💻 Сервисы и подписки (Яндекс Плюс, связь, софт, интернет, цифровые сервисы)
+     • 🏠 Жилье и ЖКХ (квартплата, ЖКУ, Мосэнергосбыт, аренда)
+     • 💊 Здоровье и аптеки (аптеки, клиники, стоматология, анализы, оптика)
+     • 🛍️ Одежда и шопинг (одежда, обувь, маркетплейсы, электроника, косметика)
+     • 🎉 Развлечения (кино, театры, концерты, квесты, игры, хобби)
+     • 💰 Зарплата (зарплата, аванс, премия, выплата по договору)
+     • 💎 Прочие доходы (переводы от физлиц, дивиденды, проценты, возврат долга)
+     • 📦 Прочие расходы (комиссии банков, налоги, штрафы, переводы другим физлицам)
+   - description: чистое, понятное человеку название торговой точки или назначения платежа (очистить от кодов терминалов, MCC, лишних кавычек и технических номеров).
+
+ОТВЕТ ДОЛЖЕН БЫТЬ СТРОГО В ВАЛИДНОМ ФОРМАТЕ JSON:
+{
+  "bank_name": "...",
+  "period": { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "label": "..." },
+  "total_income": 0,
+  "total_expense": 0,
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "amount": 0,
+      "type": "income" | "expense",
+      "category": "...",
+      "description": "..."
+    }
+  ]
+}`;
+
+async function parseBankStatementWithGemini(fileContent, fileName = '', bankPreset = 'auto') {
+  const truncated = String(fileContent || '').slice(0, 120000);
+  const promptUser = `Распознай эту банковскую выписку (файл: "${fileName}", подсказка банка: "${bankPreset}") и верни JSON со всеми операциями, банком и периодом:\n\n${truncated}`;
+
+  const body = {
+    system_instruction: {
+      parts: [{ text: STATEMENT_AI_SYSTEM_PROMPT }]
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: promptUser }]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 8192
+    }
+  };
+
+  let lastErr = null;
+  for (const apiKey of GEMINI_API_KEYS) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          lastErr = new Error(data.error?.message || `Gemini ${model} error: ${response.status}`);
+          continue;
+        }
+
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) continue;
+
+        const parsed = JSON.parse(rawText);
+        if (parsed && Array.isArray(parsed.transactions) && parsed.transactions.length > 0) {
+          return {
+            success: true,
+            engine: `gemini-ai (${model})`,
+            bank_name: parsed.bank_name || (bankPreset !== 'auto' ? bankPreset : 'Банк РФ'),
+            period: parsed.period || null,
+            total_income: Number(parsed.total_income) || 0,
+            total_expense: Number(parsed.total_expense) || 0,
+            transactions: parsed.transactions
+          };
+        }
+      } catch (err) {
+        lastErr = err;
+        console.warn(`Gemini bank parse error on model ${model}:`, err.message);
+      }
+    }
+  }
+
+  throw lastErr || new Error("Не удалось распознать выписку через Gemini AI");
+}
+
+app.post("/api/ai/parse-statement", auth, async (req, res) => {
+  try {
+    const { content, filename, preset } = req.body || {};
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: "Пустой файл выписки." });
+    }
+
+    try {
+      const result = await parseBankStatementWithGemini(content, filename, preset);
+      return res.json(result);
+    } catch (aiErr) {
+      console.warn("AI Statement parsing notice:", aiErr.message);
+      return res.json({
+        success: false,
+        fallback: true,
+        error: aiErr.message
+      });
+    }
   } catch (e) {
     fail(res, e);
   }
