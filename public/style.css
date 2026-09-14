@@ -6763,6 +6763,485 @@ input[type="number"] {
 }
 
 /* ==========================================================================
+   FINKAIF DESIGN PROTOCOL v9.0 — HARMONIOUS MOTION SYSTEM
+   Stagger entries · Counter animations · Micro-interactions · Shimmer states
+   ========================================================================== */
+
+/* ─── Enhanced easing curves ─── */
+:root {
+  --spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 0.18s var(--spring);
+  --t-mid: 0.32s var(--spring);
+  --t-slow: 0.48s var(--spring);
+}
+
+/* ─── Keyframe Library ─── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.82) translateY(6px); }
+  60%  { transform: scale(1.04) translateY(-1px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes shimmerSweep {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes progressGrow {
+  from { width: 0%; }
+  to   { width: var(--target-width, 100%); }
+}
+
+@keyframes pulseRing {
+  0%   { box-shadow: 0 0 0 0   rgba(45, 212, 191, 0.45); }
+  70%  { box-shadow: 0 0 0 12px rgba(45, 212, 191, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(45, 212, 191, 0); }
+}
+
+@keyframes floatCard {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes chatSlideIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@keyframes staggerFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes liveGlow {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.7); }
+}
+
+@keyframes modalEntrance {
+  from { opacity: 0; transform: scale(0.92) translateY(24px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+@keyframes pillBounce {
+  from { opacity: 0; transform: scale(0.6) translateY(4px); }
+  60%  { transform: scale(1.1) translateY(-2px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
+
+/* ─── Modal entrance enhancement ─── */
+.modal-card {
+  animation: modalEntrance 0.32s var(--spring) both;
+}
+
+/* ─── View container stagger ─── */
+.view-container {
+  animation: fadeSlideUp 0.32s var(--spring) both;
+}
+
+/* ─── Transaction cards stagger-in ─── */
+.tx-list .tx-card:nth-child(1)  { animation: staggerFadeUp 0.28s var(--spring) 0ms   both; }
+.tx-list .tx-card:nth-child(2)  { animation: staggerFadeUp 0.28s var(--spring) 40ms  both; }
+.tx-list .tx-card:nth-child(3)  { animation: staggerFadeUp 0.28s var(--spring) 75ms  both; }
+.tx-list .tx-card:nth-child(4)  { animation: staggerFadeUp 0.28s var(--spring) 105ms both; }
+.tx-list .tx-card:nth-child(5)  { animation: staggerFadeUp 0.28s var(--spring) 130ms both; }
+.tx-list .tx-card:nth-child(6)  { animation: staggerFadeUp 0.28s var(--spring) 150ms both; }
+.tx-list .tx-card:nth-child(n+7){ animation: staggerFadeUp 0.28s var(--spring) 165ms both; }
+
+.tx-date-group:nth-child(1)  { animation: staggerFadeUp 0.32s var(--spring) 0ms   both; }
+.tx-date-group:nth-child(2)  { animation: staggerFadeUp 0.32s var(--spring) 60ms  both; }
+.tx-date-group:nth-child(3)  { animation: staggerFadeUp 0.32s var(--spring) 110ms both; }
+.tx-date-group:nth-child(4)  { animation: staggerFadeUp 0.32s var(--spring) 150ms both; }
+.tx-date-group:nth-child(n+5){ animation: staggerFadeUp 0.32s var(--spring) 180ms both; }
+
+/* ─── Budget cards stagger-in ─── */
+.budget-grid .budget-card:nth-child(1)  { animation: staggerFadeUp 0.3s var(--spring) 0ms   both; }
+.budget-grid .budget-card:nth-child(2)  { animation: staggerFadeUp 0.3s var(--spring) 55ms  both; }
+.budget-grid .budget-card:nth-child(3)  { animation: staggerFadeUp 0.3s var(--spring) 100ms both; }
+.budget-grid .budget-card:nth-child(n+4){ animation: staggerFadeUp 0.3s var(--spring) 135ms both; }
+
+/* ─── Goals cards stagger-in ─── */
+.goals-grid .goal-card:nth-child(1)  { animation: staggerFadeUp 0.3s var(--spring) 0ms   both; }
+.goals-grid .goal-card:nth-child(2)  { animation: staggerFadeUp 0.3s var(--spring) 60ms  both; }
+.goals-grid .goal-card:nth-child(3)  { animation: staggerFadeUp 0.3s var(--spring) 110ms both; }
+.goals-grid .goal-card:nth-child(n+4){ animation: staggerFadeUp 0.3s var(--spring) 150ms both; }
+
+/* ─── Analytics cards stagger ─── */
+.analytics-metrics-strip .analytics-metric-card:nth-child(1) { animation: staggerFadeUp 0.3s var(--spring) 0ms   both; }
+.analytics-metrics-strip .analytics-metric-card:nth-child(2) { animation: staggerFadeUp 0.3s var(--spring) 50ms  both; }
+.analytics-metrics-strip .analytics-metric-card:nth-child(3) { animation: staggerFadeUp 0.3s var(--spring) 95ms  both; }
+.analytics-metrics-strip .analytics-metric-card:nth-child(4) { animation: staggerFadeUp 0.3s var(--spring) 130ms both; }
+.analytics-main-grid .analytics-card:nth-child(1) { animation: staggerFadeUp 0.36s var(--spring) 80ms  both; }
+.analytics-main-grid .analytics-card:nth-child(2) { animation: staggerFadeUp 0.36s var(--spring) 140ms both; }
+
+/* ─── Hero balance card pop-in ─── */
+.hero-balance-card {
+  animation: staggerFadeUp 0.38s var(--spring) 0ms both;
+}
+.stats-strip .stat-card:nth-child(1) { animation: staggerFadeUp 0.3s var(--spring) 60ms  both; }
+.stats-strip .stat-card:nth-child(2) { animation: staggerFadeUp 0.3s var(--spring) 100ms both; }
+
+/* ─── Quick Express Card — animated top border glow ─── */
+.quick-express-card {
+  animation: staggerFadeUp 0.32s var(--spring) 40ms both;
+  transition: border-color 0.28s ease, box-shadow 0.28s ease !important;
+}
+
+.quick-express-card:focus-within {
+  border-color: rgba(45, 212, 191, 0.5) !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(45, 212, 191, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ─── Preview pills pop-in ─── */
+.quick-parse-preview .preview-pill {
+  animation: pillBounce 0.28s var(--bounce) both;
+}
+.quick-parse-preview .preview-pill:nth-child(1) { animation-delay: 0ms; }
+.quick-parse-preview .preview-pill:nth-child(2) { animation-delay: 45ms; }
+.quick-parse-preview .preview-pill:nth-child(3) { animation-delay: 85ms; }
+.quick-parse-preview .preview-pill:nth-child(4) { animation-delay: 120ms; }
+.quick-parse-preview .preview-pill:nth-child(n+5){ animation-delay: 150ms; }
+
+/* ─── Budget progress bar animated fill ─── */
+.progress-fill {
+  animation: progressGrow 0.75s var(--spring) 0.3s both;
+}
+.progress-bar-fill {
+  animation: progressGrow 0.75s var(--spring) 0.35s both;
+}
+
+/* ─── Chat bubbles slide in ─── */
+.chat-bubble.assistant {
+  animation: chatSlideIn 0.26s var(--spring) both;
+}
+.chat-bubble.user {
+  animation: fadeSlideIn 0.22s var(--spring) both;
+}
+
+/* ─── Enhanced button interactions ─── */
+.btn-primary:hover,
+.btn-submit:hover,
+.btn-submit-express:hover,
+.btn-confirm-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-primary:active,
+.btn-submit:active,
+.btn-submit-express:active {
+  transform: scale(0.96) !important;
+  filter: brightness(0.92);
+}
+
+/* ─── Quick action buttons — spring hover ─── */
+.quick-action-btn:hover {
+  transform: translateY(-2px) scale(1.01) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+}
+.quick-action-btn:active {
+  transform: scale(0.96) translateY(0) !important;
+}
+
+/* ─── Category icon subtle scale ─── */
+.category-icon {
+  transition: transform var(--t-fast);
+}
+.tx-card:hover .category-icon {
+  transform: scale(1.1) rotate(-4deg);
+}
+
+/* ─── Balance pill pulse on hover ─── */
+.balance-pill:hover {
+  animation: pulseRing 0.55s ease-out;
+}
+
+/* ─── Stat cards elevated hover ─── */
+.stat-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38), var(--inner-highlight) !important;
+  border-color: var(--border-medium) !important;
+}
+
+/* ─── Goal card subtle float on hover ─── */
+.goal-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ─── Budget card hover ─── */
+.budget-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.32), var(--inner-highlight) !important;
+}
+
+/* ─── Subscription cards hover ─── */
+.sub-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28) !important;
+}
+
+/* ─── Nav item hover — underline shimmer ─── */
+.nav-item {
+  position: relative;
+}
+.nav-item::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 0%;
+  height: 1.5px;
+  background: var(--accent-jade);
+  border-radius: var(--r-pill);
+  transform: translateX(-50%);
+  transition: width 0.22s var(--spring);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.nav-item:hover::after {
+  width: 60%;
+}
+.nav-item.active::after {
+  width: 70%;
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.55);
+}
+
+/* ─── Live dot pulse animation ─── */
+.live-dot,
+.sub-radar-dot {
+  animation: liveGlow 2s ease-in-out infinite;
+}
+
+/* ─── Brand icon hover — richer spring ─── */
+.brand:hover .brand-icon {
+  transform: scale(1.1) rotate(6deg) !important;
+  box-shadow: 0 4px 18px rgba(45, 212, 191, 0.35) !important;
+}
+
+/* ─── Month chips spring ─── */
+.month-chip.active {
+  box-shadow: 0 4px 14px rgba(45, 212, 191, 0.25) !important;
+}
+
+/* ─── Cat chips pop on select ─── */
+.cat-chip.selected {
+  animation: popIn 0.25s var(--bounce) both;
+  box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25);
+}
+
+/* ─── Suggestion chips slide ─── */
+.suggestion-chip:hover {
+  transform: translateX(4px) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+
+/* ─── Chat send button spring ─── */
+.chat-send-btn:hover {
+  transform: scale(1.1) !important;
+}
+.chat-send-btn:active {
+  transform: scale(0.92) !important;
+}
+
+/* ─── Quick pill buttons spring ─── */
+.quick-pill-btn:hover {
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: 0 4px 14px rgba(45, 212, 191, 0.2);
+}
+
+/* ─── Analytics metric cards hover ─── */
+.analytics-metric-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32) !important;
+}
+
+/* ─── Donut cat items hover ─── */
+.donut-cat-item:hover {
+  transform: translateX(4px) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* ─── Budget chip hover spring ─── */
+.budget-chip:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ─── Avatar opt button ─── */
+.avatar-opt-btn.active {
+  animation: popIn 0.22s var(--bounce) both;
+}
+
+/* ─── Deposit chips ─── */
+.deposit-chip:hover {
+  transform: translateY(-2px) scale(1.04) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ─── Mobile nav btn spring ─── */
+@media (max-width: 820px) {
+  .mobile-nav-btn.active {
+    transform: scale(1.05);
+  }
+  .mobile-fab-btn:hover {
+    transform: scale(1.08) translateY(-2px) !important;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.7) !important;
+  }
+}
+
+/* ─── Home quick actions entrance ─── */
+.quick-actions-bar .quick-action-btn:nth-child(1) { animation: staggerFadeUp 0.28s var(--spring) 90ms  both; }
+.quick-actions-bar .quick-action-btn:nth-child(2) { animation: staggerFadeUp 0.28s var(--spring) 125ms both; }
+.quick-actions-bar .quick-action-btn:nth-child(3) { animation: staggerFadeUp 0.28s var(--spring) 155ms both; }
+.quick-actions-bar .quick-action-btn:nth-child(4) { animation: staggerFadeUp 0.28s var(--spring) 180ms both; }
+
+/* ─── View header entrance ─── */
+.view-header {
+  animation: staggerFadeUp 0.28s var(--spring) 0ms both;
+}
+
+/* ─── Form input focus glow ─── */
+.form-input:focus,
+.form-select:focus {
+  border-color: rgba(45, 212, 191, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.14) !important;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+/* ─── Payday split items entrance ─── */
+.payday-split-grid .payday-split-item:nth-child(1) { animation: fadeSlideIn 0.3s var(--spring) 0ms   both; }
+.payday-split-grid .payday-split-item:nth-child(2) { animation: fadeSlideIn 0.3s var(--spring) 60ms  both; }
+.payday-split-grid .payday-split-item:nth-child(3) { animation: fadeSlideIn 0.3s var(--spring) 110ms both; }
+
+/* ─── Subscription cards entrance ─── */
+.sub-radar-grid .sub-card:nth-child(1)  { animation: staggerFadeUp 0.28s var(--spring) 0ms   both; }
+.sub-radar-grid .sub-card:nth-child(2)  { animation: staggerFadeUp 0.28s var(--spring) 55ms  both; }
+.sub-radar-grid .sub-card:nth-child(3)  { animation: staggerFadeUp 0.28s var(--spring) 100ms both; }
+.sub-radar-grid .sub-card:nth-child(n+4){ animation: staggerFadeUp 0.28s var(--spring) 135ms both; }
+
+/* ─── Profile identity banner ─── */
+.profile-identity-banner {
+  animation: staggerFadeUp 0.3s var(--spring) 0ms both;
+}
+
+/* ─── Shimmer skeleton state ─── */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.10) 40%,
+    rgba(255,255,255,0.04) 80%
+  );
+  background-size: 400px 100%;
+  animation: shimmerSweep 1.4s infinite linear;
+  border-radius: var(--r-sm);
+  color: transparent !important;
+}
+
+/* ─── Masthead scrolled top bar glow ─── */
+.masthead.scrolled::before {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(45, 212, 191, 0.8) 50%,
+    transparent 100%
+  );
+}
+
+/* ─── TX card amount on hover ─── */
+.tx-card .tx-amount {
+  transition: transform var(--t-fast), color var(--t-fast);
+}
+.tx-card:hover .tx-amount {
+  transform: translateX(2px);
+}
+
+/* ─── Quick express submit button glow overlay ─── */
+.btn-submit-express {
+  position: relative;
+  overflow: hidden;
+}
+.btn-submit-express::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  pointer-events: none;
+}
+.btn-submit-express:hover::after {
+  opacity: 1;
+}
+
+/* ─── Pulse cat cards entrance ─── */
+.pulse-cats-grid .pulse-cat-card:nth-child(1)  { animation: staggerFadeUp 0.28s var(--spring) 80ms  both; }
+.pulse-cats-grid .pulse-cat-card:nth-child(2)  { animation: staggerFadeUp 0.28s var(--spring) 115ms both; }
+.pulse-cats-grid .pulse-cat-card:nth-child(3)  { animation: staggerFadeUp 0.28s var(--spring) 145ms both; }
+.pulse-cats-grid .pulse-cat-card:nth-child(n+4){ animation: staggerFadeUp 0.28s var(--spring) 175ms both; }
+
+.pulse-cat-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+  border-color: var(--border-medium) !important;
+}
+
+/* ─── TX summary strip cards ─── */
+.tx-summary-strip .tx-summary-card:nth-child(1) { animation: staggerFadeUp 0.26s var(--spring) 0ms   both; }
+.tx-summary-strip .tx-summary-card:nth-child(2) { animation: staggerFadeUp 0.26s var(--spring) 45ms  both; }
+.tx-summary-strip .tx-summary-card:nth-child(3) { animation: staggerFadeUp 0.26s var(--spring) 85ms  both; }
+.tx-summary-strip .tx-summary-card:nth-child(4) { animation: staggerFadeUp 0.26s var(--spring) 115ms both; }
+
+/* ─── Auth card entrance ─── */
+.auth-card {
+  animation: modalEntrance 0.38s var(--spring) both;
+}
+
+/* ─── Cashflow chart card ─── */
+.cashflow-card {
+  animation: staggerFadeUp 0.36s var(--spring) 120ms both;
+}
+
+/* ─── Confirm dialog card enhanced ─── */
+.confirm-dialog-card {
+  animation: modalEntrance 0.28s var(--bounce) both;
+}
+
+/* ─── Payday card enhanced ─── */
+.payday-card {
+  animation: modalEntrance 0.32s var(--bounce) both !important;
+}
+
+/* ─── TX nudge buttons ─── */
+.tx-nudge-btn:hover {
+  transform: translateY(-2px) scale(1.06) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ─── Empty state orb float ─── */
+.chat-empty-icon-orb {
+  animation: floatCard 4s ease-in-out infinite;
+}
+
+/* ─── Donut chart entrance ─── */
+.donut-chart-box {
+  animation: popIn 0.42s var(--bounce) 0.15s both;
+}
+
+/* ==========================================================================
    ACCESSIBILITY: PREFERS-REDUCED-MOTION (IMPECCABLE A11Y COMPLIANCE)
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
