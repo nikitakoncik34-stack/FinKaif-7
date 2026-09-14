@@ -836,15 +836,92 @@ async function parseBankStatementWithGemini(fileContent, fileName = '', bankPres
   throw lastErr || new Error("Не удалось распознать выписку через Gemini AI");
 }
 
+async function parseBankStatementWithGeminiPdf(pdfBase64, fileName = '', bankPreset = 'auto') {
+  const promptUser = `Распознай эту банковскую выписку в формате PDF (файл: "${fileName}", подсказка банка: "${bankPreset}") и верни JSON со всеми операциями, периодом и банком.`;
+
+  const body = {
+    system_instruction: {
+      parts: [{ text: STATEMENT_AI_SYSTEM_PROMPT }]
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inline_data: {
+              mime_type: "application/pdf",
+              data: pdfBase64
+            }
+          },
+          {
+            text: promptUser
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      maxOutputTokens: 8192
+    }
+  };
+
+  let lastErr = null;
+  for (const apiKey of GEMINI_API_KEYS) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          lastErr = new Error(data.error?.message || `Gemini ${model} error: ${response.status}`);
+          continue;
+        }
+
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) continue;
+
+        const parsed = JSON.parse(rawText);
+        if (parsed && Array.isArray(parsed.transactions) && parsed.transactions.length > 0) {
+          return {
+            success: true,
+            engine: `gemini-ai-pdf (${model})`,
+            bank_name: parsed.bank_name || (bankPreset !== 'auto' ? bankPreset : 'Банк РФ'),
+            period: parsed.period || null,
+            total_income: Number(parsed.total_income) || 0,
+            total_expense: Number(parsed.total_expense) || 0,
+            transactions: parsed.transactions
+          };
+        }
+      } catch (err) {
+        lastErr = err;
+        console.warn(`Gemini PDF parse error on model ${model}:`, err.message);
+      }
+    }
+  }
+
+  throw lastErr || new Error("Не удалось распознать PDF выписку через Gemini AI");
+}
+
 app.post("/api/ai/parse-statement", auth, async (req, res) => {
   try {
-    const { content, filename, preset } = req.body || {};
-    if (!content || !String(content).trim()) {
+    const { content, pdf_base64, filename, preset } = req.body || {};
+    if (!content && !pdf_base64) {
       return res.status(400).json({ error: "Пустой файл выписки." });
     }
 
     try {
-      const result = await parseBankStatementWithGemini(content, filename, preset);
+      let result;
+      if (pdf_base64) {
+        result = await parseBankStatementWithGeminiPdf(pdf_base64, filename, preset);
+      } else {
+        result = await parseBankStatementWithGemini(content, filename, preset);
+      }
       return res.json(result);
     } catch (aiErr) {
       console.warn("AI Statement parsing notice:", aiErr.message);
