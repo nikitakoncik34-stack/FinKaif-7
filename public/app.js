@@ -353,17 +353,190 @@ const formatMarkdown = s => {
   return str;
 };
 
+// Cache to track executed agentic actions so they don't execute repeatedly on re-render
+const executedActionCache = new Set();
+
+async function executeAssistantAction(actType, actData) {
+  const actionKey = `${actType}_${JSON.stringify(actData)}`;
+  if (executedActionCache.has(actionKey)) return;
+  executedActionCache.add(actionKey);
+
+  try {
+    if (actType === 'create_goal') {
+      const name = actData.name || 'Финансовая цель';
+      const target_amount = Number(actData.target_amount) || 100000;
+      const saved_amount = Number(actData.saved_amount) || 0;
+      await api('goals', {
+        method: 'POST',
+        body: JSON.stringify({ name, target_amount, saved_amount })
+      });
+      await refreshAllData();
+      renderApp();
+    } else if (actType === 'create_budget') {
+      const category = actData.category || 'Прочие расходы';
+      const limit_amount = Number(actData.limit_amount) || 25000;
+      await api('budgets', {
+        method: 'POST',
+        body: JSON.stringify({ category, limit_amount })
+      });
+      await refreshAllData();
+      renderApp();
+    } else if (actType === 'create_tx') {
+      const type = actData.type === 'income' ? 'income' : 'expense';
+      const amount = Number(actData.amount) || 1000;
+      const category = actData.category || (type === 'income' ? 'Доходы' : 'Разное');
+      const description = actData.description || 'Запись через ассистента';
+      const occurred_on = actData.occurred_on || toDateIso(getMskDate());
+      await api('transactions', {
+        method: 'POST',
+        body: JSON.stringify({ type, amount, category, description, occurred_on })
+      });
+      await refreshAllData();
+      renderApp();
+    } else if (actType === 'deposit_goal') {
+      const gName = String(actData.name || '').toLowerCase();
+      const amt = Number(actData.amount) || 0;
+      const goal = (data.goals || []).find(g => (g.name || '').toLowerCase().includes(gName)) || data.goals[0];
+      if (goal && amt > 0) {
+        const newSaved = Number(goal.saved_amount || 0) + amt;
+        await api('goals/' + goal.id, {
+          method: 'PUT',
+          body: JSON.stringify({ saved_amount: newSaved })
+        });
+        await refreshAllData();
+        renderApp();
+      }
+    }
+  } catch (err) {
+    console.warn('Agentic action execution notice:', err.message);
+  }
+}
+
 // Rich Action Parser and Markdown formatter for Assistant replies
 const formatAssistantMessage = (raw) => {
   if (!raw) return '';
   const actions = [];
-  const cleanText = String(raw).replace(/\[ACTION:([^:]+):([^:]+):([^\]]+)\]/g, (_, actTab, actTarget, actLabel) => {
+  const execActions = [];
+
+  // Parse [ACTION_EXEC:type:json]
+  let cleanText = String(raw).replace(/\[ACTION_EXEC:([^:]+):(\{.+?\})\]/g, (_, actType, actPayload) => {
+    try {
+      const parsed = JSON.parse(actPayload);
+      execActions.push({ type: actType.trim(), data: parsed });
+      // Asynchronously trigger execution
+      setTimeout(() => executeAssistantAction(actType.trim(), parsed), 50);
+    } catch (e) {
+      console.warn('JSON parse error in ACTION_EXEC:', e);
+    }
+    return '';
+  });
+
+  // Parse [ACTION:tab:target:label]
+  cleanText = cleanText.replace(/\[ACTION:([^:]+):([^:]+):([^\]]+)\]/g, (_, actTab, actTarget, actLabel) => {
     actions.push({ tab: actTab.trim(), target: actTarget.trim(), label: actLabel.trim() });
     return '';
   });
 
   let html = formatMarkdown(cleanText.trim());
 
+  // Render Agentic Action Cards
+  if (execActions.length > 0) {
+    html += execActions.map(act => {
+      if (act.type === 'create_goal') {
+        return `
+          <div class="chat-action-card goal">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">🎯</span>
+                <span class="action-badge-label">Цель создана</span>
+              </div>
+              <span class="action-status-pill">✓ Добавлено на сайт</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">${esc(act.data.name)}</div>
+              <div class="action-main-subtitle">Целевой ориентир: <strong>${money(act.data.target_amount)}</strong> • Сохранено в системе</div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="goals">
+                <span>Смотреть в разделе «Цели»</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (act.type === 'create_budget') {
+        return `
+          <div class="chat-action-card budget">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">📊</span>
+                <span class="action-badge-label">Лимит бюджета</span>
+              </div>
+              <span class="action-status-pill">✓ Лимит активен</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">${esc(act.data.category)}</div>
+              <div class="action-main-subtitle">Установлен лимит: <strong>${money(act.data.limit_amount)}/мес</strong></div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="budgets">
+                <span>Управление бюджетами</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (act.type === 'create_tx') {
+        const isInc = act.data.type === 'income';
+        return `
+          <div class="chat-action-card transaction">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">⚡</span>
+                <span class="action-badge-label">${isInc ? 'Поступление' : 'Списание'}</span>
+              </div>
+              <span class="action-status-pill">✓ Записано в журнал</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">${isInc ? '+' : '−'}${money(act.data.amount)}</div>
+              <div class="action-main-subtitle">${esc(act.data.category || 'Операция')} • ${esc(act.data.description || '')}</div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="transactions">
+                <span>В историю операций</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      } else if (act.type === 'deposit_goal') {
+        return `
+          <div class="chat-action-card goal">
+            <div class="action-card-header">
+              <div class="action-card-badge">
+                <span class="action-badge-icon">💰</span>
+                <span class="action-badge-label">Взнос в цель</span>
+              </div>
+              <span class="action-status-pill">✓ Баланс цели обновлён</span>
+            </div>
+            <div class="action-card-body">
+              <div class="action-main-title">+${money(act.data.amount)}</div>
+              <div class="action-main-subtitle">Цель: «${esc(act.data.name)}»</div>
+            </div>
+            <div class="action-card-footer">
+              <button type="button" class="btn-action-navigate" data-nav-tab="goals">
+                <span>Открыть цели</span>
+                <span class="action-arrow">→</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+      return '';
+    }).join('');
+  }
+
+  // Render Navigation action buttons
   if (actions.length > 0) {
     const actionsHtml = `
       <div class="chat-actions-strip">
@@ -3854,8 +4027,11 @@ function renderAssistantView() {
         </div>
 
         <form class="chat-input-bar" id="assistant-form">
-          <input id="assistant-input" placeholder="Спросите о FIRE, прогнозе капитала, сокращении трат или 50/30/20..." required autocomplete="off">
-          <button type="submit" class="chat-send-btn" id="chat-send-btn" title="Отправить вопрос">
+          <button type="button" class="btn-voice-assistant" id="btn-voice-assistant" title="Голосовой ввод: нажмите и говорите" aria-label="Голосовой ввод">
+            ${icon('mic', 16)}
+          </button>
+          <input id="assistant-input" placeholder="Спросите совет или командуйте: «Создай цель на отпуск 150к», «Поставь бюджет на кафе 20к»..." required autocomplete="off">
+          <button type="submit" class="chat-send-btn" id="chat-send-btn" title="Отправить сообщение">
             ${icon('send', 15)}
           </button>
         </form>
@@ -6501,7 +6677,35 @@ function bindInteractiveEvents() {
 
       if (aiThinkingInterval) clearInterval(aiThinkingInterval);
       isAiThinking = false;
-      const answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
+      let answer = res.answer || res.reply || 'Я проанализировал ваши данные. Проверьте текущий баланс и лимиты трат.';
+
+      // Fallback Agentic Intent Recognizer: ensures goal/budget/tx actions execute even if backend didn't format tags
+      if (!answer.includes('[ACTION_EXEC:')) {
+        const qLower = text.toLowerCase();
+        let detectedAmt = null;
+        const kM = text.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ)(?:\s|$)/i);
+        const numM = text.match(/(?:^|\s)(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:\s|$)/i);
+        if (kM) detectedAmt = Math.round(parseFloat(kM[1].replace(',', '.')) * 1000);
+        else if (numM) {
+          const rawV = numM[1].replace(/\s+/g, '').replace(',', '.');
+          if (!isNaN(parseFloat(rawV)) && parseFloat(rawV) > 0) detectedAmt = Math.round(parseFloat(rawV));
+        }
+
+        if (/(?:создай|поставь|добавь|хочу накопить)\s+(?:цель|накопление)/i.test(qLower) && detectedAmt) {
+          let gName = 'Финансовая цель';
+          const nameM = text.match(/(?:цель|накопить)\s+(?:на|в)?\s*([а-яёa-z0-9\s-]+?)(?:\s*(?:на|в размере|сумма)?\s*\d|\s*$)/i);
+          if (nameM && nameM[1]) gName = nameM[1].replace(/(?:создай|поставь|добавь|хочу)/gi, '').trim() || gName;
+          gName = gName.charAt(0).toUpperCase() + gName.slice(1);
+          answer += `\n\n[ACTION_EXEC:create_goal:{"name":"${gName}","target_amount":${detectedAmt},"saved_amount":0}]`;
+        } else if (/(?:создай|поставь|установи)\s+(?:бюджет|лимит)/i.test(qLower) && detectedAmt) {
+          let cat = 'Прочее';
+          const catM = text.match(/(?:на|для|по)\s+([а-яёa-z0-9\s-]+?)(?:\s*\d|\s*$)/i);
+          if (catM && catM[1]) cat = catM[1].trim();
+          cat = cat.charAt(0).toUpperCase() + cat.slice(1);
+          answer += `\n\n[ACTION_EXEC:create_budget:{"category":"${cat}","limit_amount":${detectedAmt}}]`;
+        }
+      }
+
       data.chat.push({ role: 'assistant', content: answer, created_at: new Date().toISOString() });
       renderApp();
 
@@ -6529,6 +6733,85 @@ function bindInteractiveEvents() {
       if (text) submitAssistantQuestion(text);
     };
   }
+
+  // Voice Input for Assistant via Web Speech API
+  const btnVoiceAssistant = document.getElementById('btn-voice-assistant');
+  const assistantInput = document.getElementById('assistant-input');
+  if (btnVoiceAssistant && assistantInput) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+
+    if (SpeechRecognition) {
+      try {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ru-RU';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+
+        const stopVoice = () => {
+          isRecording = false;
+          btnVoiceAssistant.classList.remove('recording');
+          assistantInput.classList.remove('voice-active');
+          assistantInput.placeholder = 'Спросите совет или командуйте: «Создай цель на отпуск 150к», «Поставь бюджет на кафе 20к»...';
+        };
+
+        recognition.onstart = () => {
+          isRecording = true;
+          btnVoiceAssistant.classList.add('recording');
+          assistantInput.classList.add('voice-active');
+          assistantInput.placeholder = 'Слушаю вас... (например: «Создай цель на отпуск 150 000 рублей»)';
+        };
+
+        recognition.onresult = (event) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          assistantInput.value = transcript;
+        };
+
+        recognition.onerror = (event) => {
+          console.warn('Voice assistant notice:', event.error);
+          stopVoice();
+        };
+
+        recognition.onend = () => {
+          stopVoice();
+        };
+
+        btnVoiceAssistant.onclick = () => {
+          if (!isRecording) {
+            try {
+              recognition.start();
+            } catch (e) {
+              console.warn(e);
+            }
+          } else {
+            recognition.stop();
+          }
+        };
+      } catch (err) {
+        console.warn('SpeechRecognition init error:', err);
+      }
+    } else {
+      btnVoiceAssistant.onclick = () => {
+        alert('Голосовой ввод не поддерживается данным браузером. Рекомендуется Google Chrome или Safari.');
+      };
+    }
+  }
+
+  // Action Navigation Buttons
+  $$('.btn-action-navigate').forEach(btn => {
+    btn.onclick = () => {
+      const navTab = btn.getAttribute('data-nav-tab');
+      if (navTab) {
+        tab = navTab;
+        window.location.hash = tab;
+        renderApp();
+      }
+    };
+  });
 
   // Suggestion Chips with Direct Submission
   $$('.suggestion-chip').forEach(btn => {
