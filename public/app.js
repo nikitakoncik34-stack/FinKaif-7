@@ -1923,15 +1923,70 @@ function renderHomeView() {
 
   const mskHour = getMskDate().getHours();
   let timeGreeting = 'Добрый день';
-  if (mskHour >= 5 && mskHour < 12) timeGreeting = 'Доброе утро';
-  else if (mskHour >= 12 && mskHour < 18) timeGreeting = 'Добрый день';
-  else if (mskHour >= 18 && mskHour < 23) timeGreeting = 'Добрый вечер';
-  else timeGreeting = 'Доброй ночи';
+  let timeOfDayClass = 'day';
+  let timeOfDayIcon = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  `;
+
+  if (mskHour >= 5 && mskHour < 12) {
+    timeGreeting = 'Доброе утро';
+    timeOfDayClass = 'morning';
+    timeOfDayIcon = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+      </svg>
+    `;
+  } else if (mskHour >= 12 && mskHour < 18) {
+    timeGreeting = 'Добрый день';
+    timeOfDayClass = 'day';
+  } else if (mskHour >= 18 && mskHour < 23) {
+    timeGreeting = 'Добрый вечер';
+    timeOfDayClass = 'evening';
+    timeOfDayIcon = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 18a5 5 0 0 0-10 0"/>
+        <line x1="12" y1="9" x2="12" y2="2"/>
+        <line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/>
+        <line x1="1" y1="18" x2="3" y2="18"/>
+        <line x1="21" y1="18" x2="23" y2="18"/>
+        <line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/>
+        <line x1="23" y1="22" x2="1" y2="22"/>
+      </svg>
+    `;
+  } else {
+    timeGreeting = 'Доброй ночи';
+    timeOfDayClass = 'night';
+    timeOfDayIcon = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    `;
+  }
 
   return `
     <div class="view-header">
       <div>
-        <div class="view-greeting">${timeGreeting}, ${esc(userName)}</div>
+        <div class="view-greeting-pill">
+          <span class="greeting-icon-box ${timeOfDayClass}">
+            ${timeOfDayIcon}
+          </span>
+          <span class="greeting-text">
+            <span class="greeting-prefix">${timeGreeting},</span>
+            <span class="greeting-name">${esc(userName)}</span>
+          </span>
+          <span class="greeting-live-dot" title="Терминал активен"></span>
+        </div>
         <h1 class="view-title">Финансовый баланс</h1>
         <p class="view-subtitle">Сводный обзор капитала, ежедневные потоки и операционные записи.</p>
       </div>
