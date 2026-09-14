@@ -2189,49 +2189,74 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
   return results;
 }
 
+function calculateStatementPeriod(transactions) {
+  if (!transactions || transactions.length === 0) return { from: '', to: '', label: 'Период не определен' };
+  const dates = transactions.map(t => t.occurred_on || t.date).filter(Boolean).sort();
+  if (dates.length === 0) return { from: '', to: '', label: 'Период не определен' };
+  const minD = dates[0];
+  const maxD = dates[dates.length - 1];
+  const formatRu = (iso) => {
+    const p = String(iso).split('-');
+    if (p.length === 3) return `${p[2]}.${p[1]}.${p[0]}`;
+    return iso;
+  };
+  return {
+    from: minD,
+    to: maxD,
+    label: `${formatRu(minD)} — ${formatRu(maxD)}`
+  };
+}
+
 async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto') {
-  if (window.FINKAIF_AI_IMPORT_CONFIG && window.FINKAIF_AI_IMPORT_CONFIG.hasCustomAI()) {
-    try {
-      const endpoint = window.FINKAIF_AI_IMPORT_CONFIG.apiEndpoint;
-      const headers = { 'Content-Type': 'application/json' };
-      if (window.FINKAIF_AI_IMPORT_CONFIG.apiKey) {
-        headers['Authorization'] = `Bearer ${window.FINKAIF_AI_IMPORT_CONFIG.apiKey}`;
-      }
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          filename: fileName,
-          content: fileContent,
-          preset: bankPreset,
-          model: window.FINKAIF_AI_IMPORT_CONFIG.modelName
-        })
-      });
-      if (response.ok) {
-        const json = await response.json();
-        const list = Array.isArray(json) ? json : (json.transactions || json.items || []);
-        if (list.length > 0) {
-          return {
-            engine: 'ai',
-            transactions: list.map(item => ({
-              occurred_on: parseBankDate(item.date || item.occurred_on),
-              amount: Math.abs(parseBankAmount(item.amount)),
-              type: item.type === 'income' ? 'income' : 'expense',
-              category: item.category || autoCategorizeDescription(item.description),
-              description: item.description || 'Импортированная операция',
-              selected: true
-            }))
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Custom AI parse failed, falling back to smart engine:', e);
+  // 1. Try server-side dedicated Gemini AI endpoint
+  try {
+    const aiRes = await api('ai/parse-statement', {
+      method: 'POST',
+      body: JSON.stringify({
+        content: fileContent,
+        filename: fileName,
+        preset: bankPreset
+      })
+    });
+
+    if (aiRes && aiRes.success && Array.isArray(aiRes.transactions) && aiRes.transactions.length > 0) {
+      const txs = aiRes.transactions.map(item => ({
+        occurred_on: parseBankDate(item.date || item.occurred_on),
+        amount: Math.abs(parseBankAmount(item.amount)),
+        type: item.type === 'income' ? 'income' : 'expense',
+        category: item.category || autoCategorizeDescription(item.description),
+        description: item.description || 'Банковская операция',
+        selected: true
+      })).filter(x => x.amount > 0);
+
+      const period = aiRes.period && aiRes.period.label ? aiRes.period : calculateStatementPeriod(txs);
+
+      return {
+        engine: 'ai',
+        engineLabel: aiRes.engine || 'FinKaif AI (Gemini Flash)',
+        bank_name: aiRes.bank_name || (bankPreset !== 'auto' ? bankPreset : 'Банк РФ'),
+        period,
+        transactions: txs
+      };
     }
+  } catch (err) {
+    console.warn('Server AI parse notice:', err.message);
   }
 
+  // 2. Builtin Fallback Smart Engine
   const items = parseStatementBuiltin(fileContent, fileName, bankPreset);
+  const period = calculateStatementPeriod(items);
+  let detectedBank = 'Банк РФ';
+  if (bankPreset === 'tinkoff' || /тинькофф|т-банк|tinkoff/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'Т-Банк';
+  else if (bankPreset === 'sber' || /сбер|sber/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'СберБанк';
+  else if (bankPreset === 'alfa' || /альфа|alfa/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'Альфа-Банк';
+  else if (bankPreset === 'vtb' || /втб|vtb|1cclientbank/i.test(fileName + ' ' + fileContent.slice(0, 1000))) detectedBank = 'ВТБ / 1C';
+
   return {
     engine: 'smart',
+    engineLabel: '⚡ Smart Built-in Engine',
+    bank_name: detectedBank,
+    period,
     transactions: items
   };
 }
@@ -2251,8 +2276,6 @@ function closeBankImportModal() {
 }
 
 function renderImportBankModal() {
-  const hasAi = window.FINKAIF_AI_IMPORT_CONFIG && window.FINKAIF_AI_IMPORT_CONFIG.hasCustomAI();
-
   return `
     <div id="import-bank-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-card import-modal-card">
@@ -2269,7 +2292,7 @@ function renderImportBankModal() {
           <button type="button" class="btn-icon" id="btn-close-import-modal">${icon('close', 16)}</button>
         </div>
 
-        <!-- Bank Preset Selector Bar -->
+        <!-- Bank Preset Selector Bar with Active AI Badge -->
         <div class="import-presets-bar">
           <span class="import-presets-lbl">Банк:</span>
           <div class="import-bank-pills">
@@ -2279,34 +2302,9 @@ function renderImportBankModal() {
             <button type="button" class="import-bank-pill" data-bank="alfa">Альфа-Банк</button>
             <button type="button" class="import-bank-pill" data-bank="vtb">ВТБ / 1C</button>
           </div>
-          <button type="button" class="btn-ai-config-toggle" id="btn-toggle-ai-config" title="Настройки внешнего API нейросети">
-            ${icon('cpu', 13)}
-            <span>AI-движок</span>
-          </button>
-        </div>
-
-        <!-- AI Settings Drawer (Collapsible) -->
-        <div id="import-ai-config-drawer" class="import-ai-drawer" style="display: none;">
-          <div class="import-ai-drawer-head">
-            <div class="ai-drawer-title">
-              <span class="ai-pulse-dot"></span>
-              <span>Подключение внешнего AI для распознавания выписок</span>
-            </div>
-            <span class="ai-drawer-hint">Здесь можно указать API адрес и токен обученной нейросети</span>
-          </div>
-          <div class="ai-config-grid">
-            <div>
-              <label class="form-label">API Endpoint URL</label>
-              <input class="form-input" id="ai-import-endpoint" placeholder="https://your-ai-service.com/v1/parse-statement" value="${esc(window.FINKAIF_AI_IMPORT_CONFIG.apiEndpoint)}">
-            </div>
-            <div>
-              <label class="form-label">API Key / Токен</label>
-              <input class="form-input" id="ai-import-key" type="password" placeholder="sk-..." value="${esc(window.FINKAIF_AI_IMPORT_CONFIG.apiKey)}">
-            </div>
-          </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
-            <span class="ai-status-note">Текущий статус: ${hasAi ? '🟢 Внешний AI подключен' : '⚡ Работает встроенный Smart Engine (готов к подключению API)'}</span>
-            <button type="button" class="btn-secondary" id="btn-save-ai-config" style="height: 32px; font-size: 12px;">Сохранить настройки AI</button>
+          <div class="import-ai-status-pill" title="Искусственный интеллект FinKaif обучен и готов к распознаванию периодов, дат и категорий">
+            <span class="ai-pulse-dot"></span>
+            <span class="ai-pill-text">FinKaif AI активен</span>
           </div>
         </div>
 
@@ -2325,10 +2323,30 @@ function renderImportBankModal() {
             <span class="drop-badge">ВТБ & 1C</span>
             <span class="drop-badge">Универсальный CSV</span>
           </div>
+          <div id="import-scanning-overlay" class="import-scanning-overlay" style="display: none;">
+            <div class="scanning-spinner"></div>
+            <div class="scanning-title">FinKaif AI анализирует выписку...</div>
+            <div class="scanning-sub">Распознаем банк, период, даты и категории операций</div>
+          </div>
         </div>
 
         <!-- Preview & Action Section (Hidden initially) -->
         <div id="import-preview-section" class="import-preview-section" style="display: none;">
+          <!-- Statement Period & Bank Banner -->
+          <div class="import-period-banner" id="import-period-banner">
+            <div class="import-period-main">
+              <span class="import-period-icon">${icon('calendar', 18)}</span>
+              <div class="import-period-details">
+                <span class="import-period-title">Период выписки:</span>
+                <span class="import-period-dates" id="import-period-text">—</span>
+              </div>
+            </div>
+            <div class="import-bank-tag" id="import-bank-tag">
+              <span class="bank-tag-dot"></span>
+              <span id="import-bank-name">Банк РФ</span>
+            </div>
+          </div>
+
           <!-- Stats Strip -->
           <div class="import-stats-strip">
             <div class="import-stat-item">
@@ -2345,7 +2363,7 @@ function renderImportBankModal() {
             </div>
             <div class="import-stat-item engine-item">
               <span class="import-stat-lbl">Движок</span>
-              <span class="import-stat-val" id="import-stat-engine">⚡ Smart Engine</span>
+              <span class="import-stat-val" id="import-stat-engine">⚡ FinKaif AI</span>
             </div>
           </div>
 
@@ -7602,9 +7620,6 @@ function bindInteractiveEvents() {
 function bindBankImportModalEvents() {
   const importModal = document.getElementById('import-bank-modal');
   const btnCloseImport = document.getElementById('btn-close-import-modal');
-  const btnToggleAi = document.getElementById('btn-toggle-ai-config');
-  const aiDrawer = document.getElementById('import-ai-config-drawer');
-  const btnSaveAi = document.getElementById('btn-save-ai-config');
   const dropZone = document.getElementById('import-dropzone');
   const fileInput = document.getElementById('bank-file-input');
   const previewSection = document.getElementById('import-preview-section');
@@ -7621,27 +7636,6 @@ function bindBankImportModalEvents() {
     };
   }
 
-  if (btnToggleAi && aiDrawer) {
-    btnToggleAi.onclick = () => {
-      aiDrawer.style.display = aiDrawer.style.display === 'none' ? 'block' : 'none';
-    };
-  }
-
-  if (btnSaveAi) {
-    btnSaveAi.onclick = () => {
-      const ep = document.getElementById('ai-import-endpoint');
-      const key = document.getElementById('ai-import-key');
-      window.FINKAIF_AI_IMPORT_CONFIG.save(ep ? ep.value : '', key ? key.value : '', 'custom-fin-llm');
-      const note = importModal ? importModal.querySelector('.ai-status-note') : null;
-      if (note) {
-        note.innerText = window.FINKAIF_AI_IMPORT_CONFIG.hasCustomAI()
-          ? '🟢 Внешний AI подключен'
-          : '⚡ Работает встроенный Smart Engine (готов к подключению API)';
-      }
-      alert('Настройки AI сохранены! При наличии эндпоинта выписки будут обрабатываться вашей нейросетью.');
-    };
-  }
-
   $$('.import-bank-pill').forEach(pill => {
     pill.onclick = async () => {
       $$('.import-bank-pill').forEach(p => p.classList.remove('active'));
@@ -7654,7 +7648,10 @@ function bindBankImportModalEvents() {
   });
 
   if (dropZone && fileInput) {
-    dropZone.onclick = () => fileInput.click();
+    dropZone.onclick = (e) => {
+      if (e.target.closest('#import-scanning-overlay')) return;
+      fileInput.click();
+    };
 
     dropZone.ondragover = (e) => {
       e.preventDefault();
@@ -7691,23 +7688,40 @@ function bindBankImportModalEvents() {
   }
 
   async function processBankFile(content, fileName) {
-    const res = await parseBankStatement(content, fileName, bankImportSelectedPreset);
-    bankImportParsed = res.transactions;
+    const scanOverlay = document.getElementById('import-scanning-overlay');
+    if (scanOverlay) scanOverlay.style.display = 'flex';
 
-    if (!bankImportParsed || bankImportParsed.length === 0) {
-      alert('Не удалось распознать операции в данном файле. Проверьте формат выписки (CSV, TXT, TSV или JSON).');
-      return;
+    try {
+      const res = await parseBankStatement(content, fileName, bankImportSelectedPreset);
+      bankImportParsed = res.transactions;
+
+      if (!bankImportParsed || bankImportParsed.length === 0) {
+        alert('Не удалось распознать операции в данном файле. Проверьте формат выписки (CSV, TXT, TSV или JSON).');
+        return;
+      }
+
+      if (dropZone) dropZone.style.display = 'none';
+      if (previewSection) previewSection.style.display = 'flex';
+
+      const periodText = document.getElementById('import-period-text');
+      if (periodText) {
+        periodText.innerText = res.period?.label || 'За весь период выписки';
+      }
+
+      const bankNameEl = document.getElementById('import-bank-name');
+      if (bankNameEl) {
+        bankNameEl.innerText = res.bank_name || 'Банковская выписка';
+      }
+
+      const engineEl = document.getElementById('import-stat-engine');
+      if (engineEl) {
+        engineEl.innerText = res.engine === 'ai' ? '🤖 FinKaif AI' : '⚡ Smart Engine';
+      }
+
+      renderBankPreviewRows();
+    } finally {
+      if (scanOverlay) scanOverlay.style.display = 'none';
     }
-
-    if (dropZone) dropZone.style.display = 'none';
-    if (previewSection) previewSection.style.display = 'flex';
-
-    const engineEl = document.getElementById('import-stat-engine');
-    if (engineEl) {
-      engineEl.innerText = res.engine === 'ai' ? '🤖 Custom AI Engine' : '⚡ Smart Engine';
-    }
-
-    renderBankPreviewRows();
   }
 
   function renderBankPreviewRows() {
