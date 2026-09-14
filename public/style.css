@@ -656,22 +656,101 @@ input[type="number"] {
   }
 }
 
-.view-greeting {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent-jade);
-  margin-bottom: 6px;
-  display: flex;
+/* Luxury Greeting Pill (Replaces crude bullet text) */
+.view-greeting-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(24, 32, 44, 0.75) 0%, rgba(13, 19, 27, 0.88) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--r-pill);
+  padding: 4px 13px 4px 6px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all var(--fast);
+  user-select: none;
 }
 
-.view-greeting::before {
-  content: '';
-  width: 6px;
-  height: 6px;
+.view-greeting-pill:hover {
+  border-color: rgba(45, 212, 191, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 14px rgba(45, 212, 191, 0.16);
+  transform: translateY(-1px);
+}
+
+.greeting-icon-box {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: var(--accent-jade);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.greeting-icon-box svg {
+  display: block;
+}
+
+.greeting-icon-box.morning {
+  background: rgba(251, 191, 36, 0.16);
+  color: #FBBF24;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+}
+
+.greeting-icon-box.day {
+  background: rgba(45, 212, 191, 0.16);
+  color: #2DD4BF;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.3);
+}
+
+.greeting-icon-box.evening {
+  background: rgba(251, 113, 133, 0.16);
+  color: #FB7185;
+  border: 1px solid rgba(251, 113, 133, 0.35);
+  box-shadow: 0 0 8px rgba(251, 113, 133, 0.3);
+}
+
+.greeting-icon-box.night {
+  background: rgba(129, 140, 248, 0.16);
+  color: #818CF8;
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  box-shadow: 0 0 8px rgba(129, 140, 248, 0.3);
+}
+
+.greeting-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--font-display);
+  line-height: 1;
+}
+
+.greeting-prefix {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+}
+
+.greeting-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+}
+
+.greeting-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #2DD4BF;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.9);
+  margin-left: 2px;
+  animation: liveGlow 2.5s ease-in-out infinite;
 }
 
 .view-title {
