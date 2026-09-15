@@ -2226,14 +2226,21 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
     });
 
     if (aiRes && aiRes.success && Array.isArray(aiRes.transactions) && aiRes.transactions.length > 0) {
-      const txs = aiRes.transactions.map(item => ({
-        occurred_on: parseBankDate(item.date || item.occurred_on),
-        amount: Math.abs(parseBankAmount(item.amount)),
-        type: item.type === 'income' ? 'income' : 'expense',
-        category: item.category || autoCategorizeDescription(item.description),
-        description: item.description || 'Банковская операция',
-        selected: true
-      })).filter(x => x.amount > 0);
+      const txs = aiRes.transactions.map(item => {
+        const rawType = String(item.type || '').toLowerCase();
+        const isTransfer = rawType === 'transfer';
+        const isIncome = rawType === 'income';
+        return {
+          occurred_on: parseBankDate(item.date || item.occurred_on),
+          amount: Math.abs(parseBankAmount(item.amount)),
+          type: isIncome ? 'income' : 'expense',
+          tx_kind: isTransfer ? 'transfer' : (isIncome ? 'income' : 'expense'),
+          is_self_transfer: item.is_self_transfer === true,
+          category: item.category || (isTransfer ? '🔄 Переводы' : autoCategorizeDescription(item.description)),
+          description: item.description || 'Банковская операция',
+          selected: !isTransfer // transfers are unselected by default — user decides
+        };
+      }).filter(x => x.amount > 0);
 
       const period = aiRes.period && aiRes.period.label ? aiRes.period : calculateStatementPeriod(txs);
 
@@ -2366,6 +2373,10 @@ function renderImportBankModal() {
             <div class="import-stat-item">
               <span class="import-stat-lbl">Списания</span>
               <span class="import-stat-val num exp" id="import-stat-exp">-0 ₽</span>
+            </div>
+            <div class="import-stat-item">
+              <span class="import-stat-lbl">🔄 Переводы</span>
+              <span class="import-stat-val num" id="import-stat-transfers" style="color: rgba(160,185,255,0.85);">0 шт.</span>
             </div>
             <div class="import-stat-item engine-item">
               <span class="import-stat-lbl">Движок</span>
@@ -7799,21 +7810,44 @@ function bindBankImportModalEvents() {
         else expSum += tx.amount;
       }
 
-      const isInc = tx.type === 'income';
+      const isTransfer = tx.tx_kind === 'transfer';
+      const isInc = tx.type === 'income' && !isTransfer;
+
+      // Color for amount
+      let amtColor;
+      if (isTransfer) {
+        amtColor = 'var(--text-muted)';
+      } else if (isInc) {
+        amtColor = 'var(--accent-jade)';
+      } else {
+        amtColor = 'var(--accent-coral)';
+      }
+
+      // Amount prefix
+      const amtPrefix = isTransfer ? '⇄' : (isInc ? '+' : '−');
+
+      // Row style for transfers
+      const rowStyle = isTransfer ? 'opacity: 0.65;' : '';
+
+      // Transfer badge
+      const transferHint = isTransfer
+        ? `<span style="display:inline-block;margin-left:4px;font-size:10px;color:var(--text-muted);background:var(--bg-tertiary);border-radius:4px;padding:1px 5px;">${tx.is_self_transfer ? 'свой счёт' : 'физлицо'}</span>`
+        : '';
+
       return `
-        <tr class="${tx.selected ? '' : 'unselected'}">
+        <tr class="${tx.selected ? '' : 'unselected'}" style="${rowStyle}">
           <td>
             <input type="checkbox" class="bank-tx-cb" data-idx="${idx}" ${tx.selected ? 'checked' : ''}>
           </td>
           <td class="num" style="white-space: nowrap; font-size: 12px; color: var(--text-muted);">${tx.occurred_on}</td>
           <td>
-            <span class="import-cat-badge">${esc(tx.category)}</span>
+            <span class="import-cat-badge${isTransfer ? ' import-cat-transfer' : ''}">${esc(tx.category)}</span>
           </td>
           <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(tx.description)}">
-            ${esc(tx.description)}
+            ${esc(tx.description)}${transferHint}
           </td>
-          <td class="num" style="text-align: right; font-weight: 700; color: ${isInc ? 'var(--accent-jade)' : 'var(--accent-coral)'};">
-            ${isInc ? '+' : '−'}${money(tx.amount)}
+          <td class="num" style="text-align: right; font-weight: 700; color: ${amtColor};">
+            ${amtPrefix}${money(tx.amount)}
           </td>
         </tr>
       `;
@@ -7824,10 +7858,14 @@ function bindBankImportModalEvents() {
     const expEl = document.getElementById('import-stat-exp');
     const selCountLbl = document.getElementById('import-selected-count-label');
     const submitBtnLbl = document.getElementById('btn-import-submit-label');
+    const transfersEl = document.getElementById('import-stat-transfers');
+
+    const transferCount = bankImportParsed.filter(t => t.tx_kind === 'transfer').length;
 
     if (countEl) countEl.innerText = String(bankImportParsed.length);
     if (incEl) incEl.innerText = `+${money(incSum)}`;
     if (expEl) expEl.innerText = `−${money(expSum)}`;
+    if (transfersEl) transfersEl.innerText = transferCount > 0 ? `${transferCount} шт.` : '—';
     if (selCountLbl) selCountLbl.innerText = `Выбрано: ${selCount} из ${bankImportParsed.length}`;
     if (submitBtnLbl) submitBtnLbl.innerText = `Импортировать (${selCount})`;
 
