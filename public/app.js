@@ -6553,6 +6553,8 @@ function bindInteractiveEvents() {
   $$('.tx-delete-btn').forEach(btn => {
     btn.onclick = async e => {
       e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      if (!id) return;
       const confirmed = await showConfirmDialog({
         title: 'Удалить операцию?',
         message: 'Эта операция будет безвозвратно удалена из вашей финансовой истории.',
