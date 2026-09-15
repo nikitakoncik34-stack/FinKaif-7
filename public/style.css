@@ -8163,6 +8163,12 @@ input[type="number"] {
   white-space: nowrap;
 }
 
+.import-cat-transfer {
+  background: rgba(99, 140, 255, 0.08);
+  border-color: rgba(99, 140, 255, 0.25);
+  color: rgba(160, 185, 255, 0.85);
+}
+
 .import-footer-actions {
   display: flex;
   justify-content: space-between;
