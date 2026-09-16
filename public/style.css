@@ -162,14 +162,21 @@ input[type="number"] {
   padding: 24px 20px 80px;
 }
 
-.view-container {
-  animation: viewFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+/* Native View Transitions API Styling (Apple-grade fluid crossfade) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.18s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes viewFadeSlide {
+.view-container {
+  animation: viewSubtleFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes viewSubtleFade {
   from {
-    opacity: 0;
-    transform: translateY(6px);
+    opacity: 0.72;
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
