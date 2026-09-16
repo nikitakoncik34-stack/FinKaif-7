@@ -61,8 +61,11 @@ let me = null;
 let tab = 'home';
 let mode = 'login';
 let period = '7d';
+let customRange = { from: '', to: '' };
+let customRangeOpen = false;
 let analyticsPeriod = '30d';
-let cashflowChartMode = localStorage.getItem('finkaif_cf_mode') || 'bars';
+let cashflowChartMode = 'bars';
+try { cashflowChartMode = localStorage.getItem('finkaif_cf_mode') || 'bars'; } catch (_) {}
 let activeAnalyticsCat = null;
 let hoveredAnalyticsCat = null;
 let txFilter = 'all';
@@ -71,7 +74,9 @@ let txSearch = '';
 let modalType = 'expense';
 let editingTxId = null;
 let profileModalOpen = false;
-let privacyMode = localStorage.getItem('finkaif_privacy') === 'true';
+let finscoreModalOpen = false;
+let privacyMode = false;
+try { privacyMode = localStorage.getItem('finkaif_privacy') === 'true'; } catch (_) {}
 let paydaySplitData = null;
 let isAiThinking = false;
 let aiThinkingPhase = 0;
@@ -84,11 +89,22 @@ let simState = {
   rate: 12
 };
 
+let userCategories = [];
+try {
+  const savedCats = localStorage.getItem('finkaif_custom_cats');
+  if (savedCats) userCategories = JSON.parse(savedCats);
+} catch (_) {}
+
 let profile = {
-  display_name: localStorage.getItem('finkaif_name') || '',
-  avatar: localStorage.getItem('finkaif_avatar') || 'default',
-  currency: localStorage.getItem('finkaif_currency') || 'RUB'
+  display_name: '',
+  avatar: 'default',
+  currency: 'RUB'
 };
+try {
+  profile.display_name = localStorage.getItem('finkaif_name') || '';
+  profile.avatar = localStorage.getItem('finkaif_avatar') || 'default';
+  profile.currency = localStorage.getItem('finkaif_currency') || 'RUB';
+} catch (_) {}
 window.profile = profile;
 
 let data = {
@@ -718,7 +734,20 @@ function calculateFinScore() {
   else if (score >= 50) { label = 'Средний'; badgeClass = 'amber'; }
   else { label = 'Внимание'; badgeClass = 'coral'; }
 
-  return { score, label, badgeClass, runway: runway.toFixed(1), savingsRate };
+  return {
+    score,
+    label,
+    badgeClass,
+    runway: runway.toFixed(1),
+    savingsRate,
+    sCushion,
+    sSavings,
+    sBudgets,
+    sCapital,
+    totalSaved,
+    bal,
+    monthlyExp
+  };
 }
 
 // Central Moscow Time (Europe/Moscow, UTC+3) helper
@@ -816,8 +845,21 @@ const defaultCategories = [
   'ЖКХ', 'Путешествия', 'Развлечения', 'Авто', 'Инвестиции'
 ];
 
+function addCustomCategory(name, emoji = '🏷️') {
+  if (!name || !String(name).trim()) return null;
+  const clean = String(name).trim();
+  const formatted = clean.match(/^[\p{Emoji}\u200d]+/u) ? clean : `${emoji} ${clean}`;
+  if (!userCategories.includes(formatted)) {
+    userCategories.push(formatted);
+    try {
+      localStorage.setItem('finkaif_custom_cats', JSON.stringify(userCategories));
+    } catch (_) {}
+  }
+  return formatted;
+}
+
 const getAllCategories = () => {
-  const cats = new Set(defaultCategories);
+  const cats = new Set([...defaultCategories, ...userCategories]);
   (data.transactions || []).forEach(t => {
     if (t.category && String(t.category).trim()) {
       cats.add(String(t.category).trim());
@@ -1526,54 +1568,64 @@ function icon(name, size = 16) {
    AMBIENT BACKGROUND: SOOTHING FLUID AURORA
    ========================================================================== */
 function initAmbientCanvas() {
-  const canvas = document.getElementById('ambient-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  try {
+    const canvas = document.getElementById('ambient-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  let w = (canvas.width = window.innerWidth);
-  let h = (canvas.height = window.innerHeight);
+    let w = (canvas.width = window.innerWidth);
+    let h = (canvas.height = window.innerHeight);
 
-  window.addEventListener('resize', () => {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-  });
+    window.addEventListener('resize', () => {
+      try {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      } catch (_) {}
+    });
 
-  let t = 0;
-  let animId = null;
+    let t = 0;
+    let animId = null;
 
-  function draw() {
-    t += 0.003;
-    ctx.clearRect(0, 0, w, h);
+    function draw() {
+      try {
+        t += 0.003;
+        ctx.clearRect(0, 0, w, h);
 
-    const x1 = w * 0.25 + Math.sin(t) * 90;
-    const y1 = h * 0.35 + Math.cos(t * 0.8) * 80;
-    const g1 = ctx.createRadialGradient(x1, y1, 10, x1, y1, Math.max(w, h) * 0.6);
-    g1.addColorStop(0, 'rgba(45, 212, 191, 0.045)');
-    g1.addColorStop(1, 'rgba(10, 14, 20, 0)');
-    ctx.fillStyle = g1;
-    ctx.fillRect(0, 0, w, h);
+        const x1 = w * 0.25 + Math.sin(t) * 90;
+        const y1 = h * 0.35 + Math.cos(t * 0.8) * 80;
+        const g1 = ctx.createRadialGradient(x1, y1, 10, x1, y1, Math.max(w, h) * 0.6);
+        g1.addColorStop(0, 'rgba(45, 212, 191, 0.045)');
+        g1.addColorStop(1, 'rgba(10, 14, 20, 0)');
+        ctx.fillStyle = g1;
+        ctx.fillRect(0, 0, w, h);
 
-    const x2 = w * 0.75 + Math.cos(t * 0.7) * 90;
-    const y2 = h * 0.65 + Math.sin(t * 0.9) * 80;
-    const g2 = ctx.createRadialGradient(x2, y2, 10, x2, y2, Math.max(w, h) * 0.55);
-    g2.addColorStop(0, 'rgba(245, 158, 11, 0.035)');
-    g2.addColorStop(1, 'rgba(10, 14, 20, 0)');
-    ctx.fillStyle = g2;
-    ctx.fillRect(0, 0, w, h);
+        const x2 = w * 0.75 + Math.cos(t * 0.7) * 90;
+        const y2 = h * 0.65 + Math.sin(t * 0.9) * 80;
+        const g2 = ctx.createRadialGradient(x2, y2, 10, x2, y2, Math.max(w, h) * 0.55);
+        g2.addColorStop(0, 'rgba(245, 158, 11, 0.035)');
+        g2.addColorStop(1, 'rgba(10, 14, 20, 0)');
+        ctx.fillStyle = g2;
+        ctx.fillRect(0, 0, w, h);
 
-    animId = requestAnimationFrame(draw);
-  }
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      cancelAnimationFrame(animId);
-    } else {
-      draw();
+        animId = requestAnimationFrame(draw);
+      } catch (_) {}
     }
-  });
 
-  draw();
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (document.hidden) {
+          cancelAnimationFrame(animId);
+        } else {
+          draw();
+        }
+      } catch (_) {}
+    });
+
+    draw();
+  } catch (err) {
+    console.warn('Ambient canvas safely disabled:', err);
+  }
 }
 
 /* ==========================================================================
@@ -2305,6 +2357,18 @@ function renderImportBankModal() {
           <button type="button" class="btn-icon" id="btn-close-import-modal">${icon('close', 16)}</button>
         </div>
 
+        <!-- Source Mode Switcher: Bank vs Custom App Archive -->
+        <div class="import-source-switcher">
+          <button type="button" class="import-source-btn active" data-imode="bank">
+            ${icon('building', 14)}
+            <span>Выписка банка</span>
+          </button>
+          <button type="button" class="import-source-btn" data-imode="archive">
+            ${icon('fileText', 14)}
+            <span>Своя таблица / Архив (Excel, TXT, CoinKeeper, 1С)</span>
+          </button>
+        </div>
+
         <!-- Bank Preset Selector Bar with Active AI Badge -->
         <div class="import-presets-bar">
           <span class="import-presets-lbl">Банк:</span>
@@ -2327,14 +2391,13 @@ function renderImportBankModal() {
           <div class="drop-zone-icon">
             ${icon('fileText', 32)}
           </div>
-          <div class="drop-zone-title">Перетащите файл выписки сюда</div>
+          <div class="drop-zone-title" id="drop-zone-title">Перетащите файл выписки или архива сюда</div>
           <div class="drop-zone-subtitle">или <span class="drop-browse-link">выберите на устройстве</span></div>
           <div class="drop-zone-badges">
             <span class="drop-badge">PDF выписки банков</span>
             <span class="drop-badge">Excel (.XLSX / .XLS)</span>
-            <span class="drop-badge">Т-Банк (CSV)</span>
-            <span class="drop-badge">Сбер & ВТБ</span>
-            <span class="drop-badge">1C & Универсальный</span>
+            <span class="drop-badge">Текстовые файлы (.TXT / .CSV)</span>
+            <span class="drop-badge">Архивы (CoinKeeper / 1C / Заметки)</span>
           </div>
           <div id="import-scanning-overlay" class="import-scanning-overlay" style="display: none;">
             <div class="scanning-spinner"></div>
@@ -2441,7 +2504,10 @@ function renderHomeView() {
   const exp = data.transactions
     .filter(t => t.type === 'expense')
     .reduce((s, t) => s + Number(t.amount), 0);
-  const balance = inc - exp;
+  const totalCapital = inc - exp;
+  const savedInGoals = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
+  const freeBalance = totalCapital - savedInGoals;
+  const balance = freeBalance; // Primary focus is spendable liquid cash
 
   const savingsRate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
 
@@ -2457,7 +2523,36 @@ function renderHomeView() {
 
   const dayBuckets = [];
 
-  if (period === 'year') {
+  if (period === 'custom' && customRange.from && customRange.to) {
+    const fromD = new Date(customRange.from);
+    const toD = new Date(customRange.to);
+    const diffTime = Math.max(0, toD.getTime() - fromD.getTime());
+    const diffDays = Math.min(60, Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1));
+    for (let i = 0; i < diffDays; i++) {
+      const d = new Date(fromD.getFullYear(), fromD.getMonth(), fromD.getDate() + i);
+      const iso = toDateIso(d);
+      const isToday = (iso === toDateIso(now));
+      const dayTxs = (data.transactions || []).filter(t => getTxIso(t) === iso);
+      const dayExp = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+      const dayInc = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+      const wkShort = d.toLocaleDateString('ru-RU', { weekday: 'short' });
+      const capWk = wkShort.charAt(0).toUpperCase() + wkShort.slice(1);
+      dayBuckets.push({
+        date: iso,
+        dayDate: d,
+        dayNum: d.getDate(),
+        wkShort: capWk,
+        isToday,
+        isFuture: iso > toDateIso(now),
+        dayLabel: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }),
+        dayDisplay: `${d.getDate()} ${d.toLocaleDateString('ru-RU', { month: 'short' })}`,
+        fullDate: d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        exp: dayExp,
+        inc: dayInc,
+        txs: dayTxs
+      });
+    }
+  } else if (period === 'year') {
     // 12 calendar month buckets
     for (let m = 11; m >= 0; m--) {
       const target = new Date(now.getFullYear(), now.getMonth() - m, 1);
@@ -2796,17 +2891,51 @@ function renderHomeView() {
     <!-- Main Capital Hero Card -->
     <div class="hero-balance-card ${isDeficit ? 'deficit' : ''}">
       <div class="hero-topline">
-        <span class="hero-label" id="hero-balance-lbl">Чистый свободный остаток</span>
+        <div class="hero-label-group">
+          <span class="hero-label" id="hero-balance-lbl">Свободно на расходы</span>
+          <span class="hero-label-sub" title="Свободный остаток средств за вычетом отложенного в финансовые цели">за вычетом целей</span>
+        </div>
         <div class="period-tabs">
           <button class="period-tab ${period === '7d' ? 'active' : ''}" data-period="7d">Неделя</button>
           <button class="period-tab ${period === '30d' ? 'active' : ''}" data-period="30d">30 дней</button>
           <button class="period-tab ${period === 'year' ? 'active' : ''}" data-period="year">Год</button>
+          <button class="period-tab ${period === 'custom' ? 'active' : ''}" id="btn-toggle-custom-period" title="Выбрать свой период дат">
+            ${icon('calendar', 12)}
+            <span>${period === 'custom' && customRange.from ? `${customRange.from.slice(5)}...` : 'Период'}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Custom Date Range Popover Panel -->
+      <div class="custom-range-picker-bar" id="home-custom-range-bar" style="display: ${customRangeOpen ? 'flex' : 'none'};">
+        <div class="custom-range-inputs">
+          <label>C <input type="date" id="custom-range-from" value="${customRange.from || toDateIso(new Date(now.getFullYear(), now.getMonth(), 1))}"></label>
+          <label>По <input type="date" id="custom-range-to" value="${customRange.to || toDateIso(now)}"></label>
+        </div>
+        <div class="custom-range-buttons">
+          <button type="button" class="btn-primary-xs" id="btn-apply-home-range">Применить</button>
+          <button type="button" class="btn-ghost-xs" id="btn-close-home-range">✕</button>
         </div>
       </div>
 
       <div class="hero-balance-row">
-        <div class="hero-balance-figure num" id="hero-balance-val" data-base="${money(balance)}">${money(balance)}</div>
+        <div class="hero-balance-figure num" id="hero-balance-val" data-base="${money(freeBalance)}">${money(freeBalance)}</div>
         ${badgeHtml}
+      </div>
+
+      <!-- Capital & Goals Sub-Row Strip -->
+      <div class="hero-capital-substrip">
+        <div class="capital-sub-item" title="Средства, замороженные в целях накопления">
+          <span class="capital-sub-icon">🎯</span>
+          <span class="capital-sub-lbl">В целях:</span>
+          <span class="capital-sub-val num">${money(savedInGoals)}</span>
+        </div>
+        <div class="capital-sub-bullet">•</div>
+        <div class="capital-sub-item" title="Общий капитал со всеми накоплениями">
+          <span class="capital-sub-icon">💼</span>
+          <span class="capital-sub-lbl">Общий капитал:</span>
+          <span class="capital-sub-val num ${totalCapital >= 0 ? 'inc' : 'exp'}">${money(totalCapital)}</span>
+        </div>
       </div>
 
       <!-- Contextual Meta Chips Strip -->
@@ -2921,21 +3050,20 @@ function renderHomeView() {
       <!-- Live parse preview bar -->
       <div id="quick-parse-preview" class="quick-parse-preview" style="display: none;"></div>
 
-      <!-- 1-Tap Quick Tap Pills (Монетки) -->
-      <div class="quick-pills-strip">
-        <span class="quick-pills-label">Быстрые траты:</span>
-        <button class="quick-pill-btn" data-type="expense" data-cat="Кафе" data-amt="250" data-desc="Кофе с собой">
-          <span>☕</span> <span>Кофе 250 ₽</span>
-        </button>
-        <button class="quick-pill-btn" data-type="expense" data-cat="Транспорт" data-amt="450" data-desc="Такси">
-          <span>🚕</span> <span>Такси 450 ₽</span>
-        </button>
-        <button class="quick-pill-btn" data-type="expense" data-cat="Рестораны" data-amt="650" data-desc="Обед">
-          <span>🍽️</span> <span>Обед 650 ₽</span>
-        </button>
-        <button class="quick-pill-btn" data-type="expense" data-cat="Продукты" data-amt="1200" data-desc="Супермаркет">
-          <span>🛒</span> <span>Продукты 1 200 ₽</span>
-        </button>
+      <!-- Express Smart Guide Explanation Banner -->
+      <div class="express-guide-banner">
+        <div class="express-guide-header">
+          <span class="express-guide-bulb">💡</span>
+          <span class="express-guide-title">Умная экспресс-запись:</span>
+          <span class="express-guide-desc">пишите как думаете или нажмите микрофон 🎙️ — ИИ сам определит сумму, категорию и дату</span>
+        </div>
+        <div class="express-guide-samples">
+          <span class="express-samples-label">Нажмите для примера:</span>
+          <button type="button" class="express-sample-pill" data-sample="кофе 250">☕ «кофе 250»</button>
+          <button type="button" class="express-sample-pill" data-sample="такси 450 домой">🚕 «такси 450»</button>
+          <button type="button" class="express-sample-pill" data-sample="зарплата 85000">💰 «зарплата 85к»</button>
+          <button type="button" class="express-sample-pill" data-sample="продукты 1850 вчера">🛒 «продукты 1850»</button>
+        </div>
       </div>
     </div>
 
@@ -3031,7 +3159,15 @@ function renderAnalyticsView() {
   const mondayIso = toDateIso(monday);
   const sundayIso = toDateIso(sunday);
 
-  if (analyticsPeriod === '7d') {
+  if (analyticsPeriod === 'custom' && customRange.from && customRange.to) {
+    periodTxs = data.transactions.filter(t => {
+      const iso = getTxIso(t);
+      return iso >= customRange.from && iso <= customRange.to;
+    });
+    const fromD = new Date(customRange.from);
+    const toD = new Date(customRange.to);
+    daysCount = Math.max(1, Math.ceil(Math.abs(toD - fromD) / (1000 * 60 * 60 * 24)) + 1);
+  } else if (analyticsPeriod === '7d') {
     daysCount = 7;
     periodTxs = data.transactions.filter(t => {
       const iso = getTxIso(t);
@@ -3399,6 +3535,22 @@ function renderAnalyticsView() {
         <button class="analytics-period-btn ${analyticsPeriod === '30d' ? 'active' : ''}" data-aperiod="30d">30 дней</button>
         <button class="analytics-period-btn ${analyticsPeriod === 'month' ? 'active' : ''}" data-aperiod="month">Этот месяц</button>
         <button class="analytics-period-btn ${analyticsPeriod === 'all' ? 'active' : ''}" data-aperiod="all">Все время</button>
+        <button class="analytics-period-btn ${analyticsPeriod === 'custom' ? 'active' : ''}" data-aperiod="custom" id="btn-analytics-custom-toggle" title="Выбрать произвольный период">
+          ${icon('calendar', 12)}
+          <span>${analyticsPeriod === 'custom' && customRange.from ? `${customRange.from.slice(5)}...` : 'Период'}</span>
+        </button>
+      </div>
+
+      <!-- Custom Date Range Popover Panel in Analytics -->
+      <div class="custom-range-picker-bar" id="analytics-custom-range-bar" style="display: ${customRangeOpen && analyticsPeriod === 'custom' ? 'flex' : 'none'};">
+        <div class="custom-range-inputs">
+          <label>C <input type="date" id="analytics-custom-range-from" value="${customRange.from || toDateIso(new Date(now.getFullYear(), now.getMonth(), 1))}"></label>
+          <label>По <input type="date" id="analytics-custom-range-to" value="${customRange.to || toDateIso(now)}"></label>
+        </div>
+        <div class="custom-range-buttons">
+          <button type="button" class="btn-primary-xs" id="btn-apply-analytics-range">Применить</button>
+          <button type="button" class="btn-ghost-xs" id="btn-close-analytics-range">✕</button>
+        </div>
       </div>
     </div>
 
@@ -4728,14 +4880,17 @@ function renderModal() {
         </div>
 
         <!-- Category Chips -->
-        <div class="cat-chips-row">
+        <div class="cat-chips-row" style="flex-wrap: wrap;">
           <span class="cat-chip selected" data-cat="Продукты" data-type="expense">🛒 Продукты</span>
           <span class="cat-chip" data-cat="Рестораны" data-type="expense">🍽️ Рестораны</span>
+          <span class="cat-chip" data-cat="Кафе" data-type="expense">☕ Кафе</span>
           <span class="cat-chip" data-cat="Транспорт" data-type="expense">🚗 Транспорт</span>
           <span class="cat-chip" data-cat="Подписки" data-type="expense">📱 Подписки</span>
           <span class="cat-chip" data-cat="Здоровье" data-type="expense">🏥 Здоровье</span>
           <span class="cat-chip" data-cat="Зарплата" data-type="income">💰 Зарплата</span>
           <span class="cat-chip" data-cat="Дивиденды" data-type="income">📈 Дивиденды</span>
+          ${userCategories.map(c => `<span class="cat-chip custom" data-cat="${esc(c)}" data-type="expense">${esc(c)}</span>`).join('')}
+          <button type="button" class="cat-chip-add-btn" id="btn-add-custom-cat" title="Создать свою категорию">+ Своя категория</button>
         </div>
 
         <datalist id="tx-categories-datalist">
@@ -4789,8 +4944,17 @@ function renderModal() {
           <div id="tx-budget-warning" class="tx-budget-banner" style="display: none;"></div>
 
           <div class="form-group">
-            <label class="form-label">Описание</label>
-            <input class="form-input" id="form-desc" placeholder="Например: Супермаркет, заказ...">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" style="margin-bottom: 0;">Описание / Назначение</label>
+              <span style="font-size: 11px; color: var(--text-muted);">уточните для ментора</span>
+            </div>
+            <input class="form-input" id="form-desc" placeholder="Например: Супермаркет, возврат долга, подарок...">
+            <div class="desc-quick-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
+              <button type="button" class="desc-tag-pill" data-text="Подарок">🎁 Подарок</button>
+              <button type="button" class="desc-tag-pill" data-text="Возврат долга">🤝 Возврат долга</button>
+              <button type="button" class="desc-tag-pill" data-text="На отпуск">🏖️ На отпуск</button>
+              <button type="button" class="desc-tag-pill" data-text="Премия">⭐ Премия</button>
+            </div>
           </div>
 
           <button type="submit" class="btn-submit" id="tx-modal-submit-btn">
@@ -5124,6 +5288,106 @@ function renderPaydayModal() {
   `;
 }
 
+function renderFinScoreModal() {
+  const fs = calculateFinScore();
+  const tips = [];
+  if (fs.sCushion < 20) tips.push('🎯 Пополните цель накоплений, чтобы увеличить подушку безопасности до 3–6 месяцев.');
+  if (fs.sBudgets < 20) tips.push('📊 Установите лимиты бюджета на основные категории (Продукты, Кафе) для контроля трат.');
+  if (fs.sSavings < 15) tips.push('📈 Направляйте хотя бы 15–20% от каждого дохода в сбережения.');
+  if (fs.bal < 0) tips.push('⚠️ Расходы превысили доходы — сократите необязательные траты до восстановления баланса.');
+  if (tips.length === 0) tips.push('🌟 Ваши показатели идеальны! Капитал защищен, баланс положителен, дисциплина на высоте.');
+
+  return `
+    <div id="finscore-modal" class="modal-backdrop" style="display: ${finscoreModalOpen ? 'flex' : 'none'};">
+      <div class="modal-card finscore-modal-card">
+        <div class="modal-header">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="modal-header-icon-badge" style="background: rgba(45, 212, 191, 0.12); color: #2DD4BF;">
+              ${icon('pulse', 18)}
+            </div>
+            <div>
+              <h3 class="modal-title">Индекс финансового здоровья FinScore</h3>
+              <p class="modal-subtitle">Объективная оценка надежности ваших личных финансов от 0 до 100</p>
+            </div>
+          </div>
+          <button type="button" class="btn-icon" id="btn-close-finscore-modal">${icon('close', 16)}</button>
+        </div>
+
+        <div class="finscore-modal-body">
+          <!-- Main Score Gauge -->
+          <div class="finscore-hero-display">
+            <div class="finscore-big-dial">
+              <span class="finscore-big-num ${fs.badgeClass}">${fs.score}</span>
+              <span class="finscore-big-max">/ 100</span>
+            </div>
+            <div class="finscore-hero-status">
+              <span class="finscore-badge ${fs.badgeClass}" style="font-size: 13px; padding: 4px 12px;">${fs.label} уровень</span>
+              <p class="finscore-desc">
+                ${fs.score >= 80 ? 'Ваши финансы в превосходной форме: высокий запас прочности и отличная дисциплина.' : (fs.score >= 60 ? 'Хорошая устойчивость, но есть точки роста в накоплениях или контроле бюджета.' : 'Требуется внимание: подушка безопасности недостаточна или расходы превышают поступления.')}
+              </p>
+            </div>
+          </div>
+
+          <!-- Factor Breakdown Grid -->
+          <div class="finscore-breakdown-list">
+            <div class="finscore-factor-row">
+              <div class="finscore-factor-head">
+                <span class="factor-name">🛡️ Подушка безопасности (Runway)</span>
+                <span class="factor-pts num">${fs.sCushion} / 25 б.</span>
+              </div>
+              <div class="finscore-progress-bar">
+                <div class="finscore-progress-fill" style="width: ${(fs.sCushion / 25) * 100}%; background: #2DD4BF;"></div>
+              </div>
+              <div class="factor-subtext">Текущего капитала хватит на <strong>${fs.runway} мес.</strong> автономной жизни (цель: от 3–6 мес.).</div>
+            </div>
+
+            <div class="finscore-factor-row">
+              <div class="finscore-factor-head">
+                <span class="factor-name">📈 Норма сбережений (Savings Rate)</span>
+                <span class="factor-pts num">${fs.sSavings} / 25 б.</span>
+              </div>
+              <div class="finscore-progress-bar">
+                <div class="finscore-progress-fill" style="width: ${(fs.sSavings / 25) * 100}%; background: #34D399;"></div>
+              </div>
+              <div class="factor-subtext">Вы сохраняете <strong>${fs.savingsRate}%</strong> от совокупного дохода (рекомендуемый ориентир: от 20%).</div>
+            </div>
+
+            <div class="finscore-factor-row">
+              <div class="finscore-factor-head">
+                <span class="factor-name">📊 Контроль лимитов бюджета</span>
+                <span class="factor-pts num">${fs.sBudgets} / 25 б.</span>
+              </div>
+              <div class="finscore-progress-bar">
+                <div class="finscore-progress-fill" style="width: ${(fs.sBudgets / 25) * 100}%; background: #60A5FA;"></div>
+              </div>
+              <div class="factor-subtext">${data.budgets.length > 0 ? `Установлено <strong>${data.budgets.length} лимитов</strong> на расходы.` : 'Лимиты еще не настроены. Добавьте лимиты во вкладке «Бюджет».'}</div>
+            </div>
+
+            <div class="finscore-factor-row">
+              <div class="finscore-factor-head">
+                <span class="factor-name">💎 Профицит и чистота капитала</span>
+                <span class="factor-pts num">${fs.sCapital} / 25 б.</span>
+              </div>
+              <div class="finscore-progress-bar">
+                <div class="finscore-progress-fill" style="width: ${(fs.sCapital / 25) * 100}%; background: ${fs.bal >= 0 ? '#10B981' : '#F43F5E'};"></div>
+              </div>
+              <div class="factor-subtext">${fs.bal >= 0 ? 'Чистый баланс положителен, нет кассовых разрывов.' : 'Внимание: расходы превысили доходы (дефицит капитала).'}</div>
+            </div>
+          </div>
+
+          <!-- Recommendations Box -->
+          <div class="finscore-tips-box">
+            <div class="finscore-tips-title">💡 Персональный совет ментора:</div>
+            <ul class="finscore-tips-list">
+              ${tips.map(t => `<li>${esc(t)}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderApp() {
   window.renderApp = renderApp;
   window.openPaydayModal = (amt = 1000000) => {
@@ -5161,6 +5425,7 @@ function renderApp() {
       ${renderPaydayModal()}
       ${renderSubscriptionModal()}
       ${renderImportBankModal()}
+      ${renderFinScoreModal()}
     </div>
   `;
 
@@ -5241,7 +5506,8 @@ function bindInteractiveEvents() {
     if (heroBalEl) {
       const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
       const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
-      const balInRub = incTot - expTot;
+      const savedInGoals = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
+      const balInRub = incTot - expTot - savedInGoals;
       const balConv = convertFromRub(balInRub);
       animateNumber(heroBalEl, balConv, 650, curPrefix, sym);
     }
@@ -5486,18 +5752,175 @@ function bindInteractiveEvents() {
   }
 
   // Period Tabs on Home View
-  $$('.period-tab').forEach(btn => {
+  $$('.period-tab[data-period]').forEach(btn => {
     btn.onclick = () => {
       period = btn.getAttribute('data-period');
+      customRangeOpen = false;
       renderApp();
     };
   });
 
+  const btnToggleHomeCustom = document.getElementById('btn-toggle-custom-period');
+  if (btnToggleHomeCustom) {
+    btnToggleHomeCustom.onclick = () => {
+      customRangeOpen = !customRangeOpen;
+      const bar = document.getElementById('home-custom-range-bar');
+      if (bar) bar.style.display = customRangeOpen ? 'flex' : 'none';
+    };
+  }
+
+  const btnApplyHomeRange = document.getElementById('btn-apply-home-range');
+  if (btnApplyHomeRange) {
+    btnApplyHomeRange.onclick = () => {
+      const f = document.getElementById('custom-range-from')?.value;
+      const t = document.getElementById('custom-range-to')?.value;
+      if (f && t) {
+        customRange = { from: f, to: t };
+        period = 'custom';
+        customRangeOpen = false;
+        renderApp();
+      }
+    };
+  }
+
+  const btnCloseHomeRange = document.getElementById('btn-close-home-range');
+  if (btnCloseHomeRange) {
+    btnCloseHomeRange.onclick = () => {
+      customRangeOpen = false;
+      const bar = document.getElementById('home-custom-range-bar');
+      if (bar) bar.style.display = 'none';
+    };
+  }
+
   // Analytics Period Buttons
-  $$('.analytics-period-btn').forEach(btn => {
+  $$('.analytics-period-btn[data-aperiod]').forEach(btn => {
     btn.onclick = () => {
       analyticsPeriod = btn.getAttribute('data-aperiod');
+      if (analyticsPeriod !== 'custom') customRangeOpen = false;
       renderApp();
+    };
+  });
+
+  const btnAnalyticsCustom = document.getElementById('btn-analytics-custom-toggle');
+  if (btnAnalyticsCustom) {
+    btnAnalyticsCustom.onclick = () => {
+      customRangeOpen = !customRangeOpen;
+      analyticsPeriod = 'custom';
+      const bar = document.getElementById('analytics-custom-range-bar');
+      if (bar) bar.style.display = customRangeOpen ? 'flex' : 'none';
+    };
+  }
+
+  const btnApplyAnalyticsRange = document.getElementById('btn-apply-analytics-range');
+  if (btnApplyAnalyticsRange) {
+    btnApplyAnalyticsRange.onclick = () => {
+      const f = document.getElementById('analytics-custom-range-from')?.value;
+      const t = document.getElementById('analytics-custom-range-to')?.value;
+      if (f && t) {
+        customRange = { from: f, to: t };
+        analyticsPeriod = 'custom';
+        customRangeOpen = false;
+        renderApp();
+      }
+    };
+  }
+
+  const btnCloseAnalyticsRange = document.getElementById('btn-close-analytics-range');
+  if (btnCloseAnalyticsRange) {
+    btnCloseAnalyticsRange.onclick = () => {
+      customRangeOpen = false;
+      const bar = document.getElementById('analytics-custom-range-bar');
+      if (bar) bar.style.display = 'none';
+    };
+  }
+
+  // FinScore Modal Triggers
+  $$('.assistant-finscore-widget, .hero-balance-badge, .finscore-badge').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.onclick = (e) => {
+      e.stopPropagation();
+      finscoreModalOpen = true;
+      const m = document.getElementById('finscore-modal');
+      if (m) m.style.display = 'flex';
+      else renderApp();
+    };
+  });
+
+  const btnCloseFinscore = document.getElementById('btn-close-finscore-modal');
+  if (btnCloseFinscore) {
+    btnCloseFinscore.onclick = () => {
+      finscoreModalOpen = false;
+      const m = document.getElementById('finscore-modal');
+      if (m) m.style.display = 'none';
+    };
+  }
+
+  const finscoreModal = document.getElementById('finscore-modal');
+  if (finscoreModal) {
+    finscoreModal.onclick = (e) => {
+      if (e.target === finscoreModal) {
+        finscoreModalOpen = false;
+        finscoreModal.style.display = 'none';
+      }
+    };
+  }
+
+  // Express Samples Interactive Click
+  $$('.express-sample-pill').forEach(btn => {
+    btn.onclick = () => {
+      const sample = btn.getAttribute('data-sample');
+      const inp = document.getElementById('quick-express-input');
+      if (inp && sample) {
+        inp.value = sample;
+        inp.focus();
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    };
+  });
+
+  // Custom Category Add in Modal
+  const btnAddCustomCat = document.getElementById('btn-add-custom-cat');
+  if (btnAddCustomCat) {
+    btnAddCustomCat.onclick = () => {
+      const name = prompt('Введите название категории (например: 🐾 Питомцы, 🎮 Игры, 📚 Обучение, 🛠️ Ремонт):');
+      if (name && name.trim()) {
+        const formatted = addCustomCategory(name.trim());
+        const catInput = document.getElementById('form-category');
+        if (catInput) catInput.value = formatted;
+        renderApp();
+        const modal = document.getElementById('tx-modal');
+        if (modal) modal.style.display = 'flex';
+      }
+    };
+  }
+
+  // Description Tag Pills in Modal
+  $$('.desc-tag-pill').forEach(pill => {
+    pill.onclick = () => {
+      const tagText = pill.getAttribute('data-text');
+      const descInput = document.getElementById('form-desc');
+      if (descInput && tagText) {
+        descInput.value = descInput.value ? `${descInput.value}, ${tagText}` : tagText;
+        descInput.focus();
+      }
+    };
+  });
+
+  // Source Switcher in Bank Import Modal
+  $$('.import-source-btn').forEach(btn => {
+    btn.onclick = () => {
+      $$('.import-source-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const imode = btn.getAttribute('data-imode');
+      const presetsBar = document.querySelector('.import-presets-bar');
+      const dropTitle = document.getElementById('drop-zone-title');
+      if (imode === 'archive') {
+        if (presetsBar) presetsBar.style.display = 'none';
+        if (dropTitle) dropTitle.innerText = 'Перетащите Excel, TXT или файл из другой программы сюда';
+      } else {
+        if (presetsBar) presetsBar.style.display = 'flex';
+        if (dropTitle) dropTitle.innerText = 'Перетащите файл банковской выписки сюда';
+      }
     };
   });
 
@@ -7845,8 +8268,12 @@ function bindBankImportModalEvents() {
           <td>
             <span class="import-cat-badge${isTransfer ? ' import-cat-transfer' : ''}">${esc(tx.category)}</span>
           </td>
-          <td style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(tx.description)}">
-            ${esc(tx.description)}${transferHint}
+          <td style="min-width: 260px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <input type="text" class="import-desc-input" data-idx="${idx}" value="${esc(tx.description)}" placeholder="Уточните (от кого / на что)..." title="Отредактируйте для точного анализа ментором">
+              ${transferHint}
+            </div>
+            ${(isTransfer || !tx.description || tx.description.length < 5) ? `<div style="font-size: 10.5px; color: var(--accent-jade); margin-top: 3px;">💡 Уточните для ментора</div>` : ''}
           </td>
           <td class="num" style="text-align: right; font-weight: 700; color: ${amtColor};">
             ${amtPrefix}${money(tx.amount)}
@@ -7878,6 +8305,15 @@ function bindBankImportModalEvents() {
           bankImportParsed[idx].selected = cb.checked;
         }
         renderBankPreviewRows();
+      };
+    });
+
+    tbody.querySelectorAll('.import-desc-input').forEach(inp => {
+      inp.oninput = () => {
+        const idx = parseInt(inp.getAttribute('data-idx'), 10);
+        if (bankImportParsed[idx]) {
+          bankImportParsed[idx].description = inp.value;
+        }
       };
     });
   }
