@@ -27,7 +27,7 @@ function getAvatarHtml(avatarKey, userInitial = 'Н', size = 38) {
 
   // If user uploaded a custom photo (data URI or URL)
   if (key.startsWith('data:image/') || key.startsWith('http')) {
-    return `<img src="${key}" alt="Avatar" class="custom-avatar-img" style="width: ${size}px; height: ${size}px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(45, 212, 191, 0.4); display: block;">`;
+    return `<img src="${esc(key)}" alt="Avatar" class="custom-avatar-img" style="width: ${size}px; height: ${size}px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(45, 212, 191, 0.4); display: block;">`;
   }
 
   // Default elegant investor avatar
@@ -286,14 +286,38 @@ function initSpotlightCards() {
   });
 }
 
-const esc = s =>
-  String(s || '').replace(/[&<>"']/g, x => ({
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, x => ({
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#39;'
   }[x]));
+}
+
+
+function renderDialogIcon(iconKey, size = 22) {
+  if (typeof iconKey === 'string' && iconKey.trim().startsWith('<svg')) return iconKey;
+  const map = {
+    trash: 'trash',
+    delete: 'trash',
+    warning: 'alertTriangle',
+    danger: 'alertTriangle',
+    alert: 'alertTriangle',
+    alertTriangle: 'alertTriangle',
+    logout: 'logout',
+    edit: 'edit',
+    pencil: 'edit',
+    info: 'info',
+    sparkle: 'sparkle',
+    chart: 'chart',
+    target: 'target',
+    chat: 'chat'
+  };
+  const resolved = map[iconKey] || iconKey || 'alertTriangle';
+  return icon(resolved, size);
+}
 
 // ── In-App Toast Notification Engine ──
 function showToast(message, type = 'info', duration = 3600) {
@@ -306,16 +330,16 @@ function showToast(message, type = 'info', duration = 3600) {
   }
 
   const icons = {
-    success: '✅',
-    error: '⚠️',
-    warning: '🔔',
-    info: '💡'
+    success: icon('checkCircle', 16),
+    error: icon('alertTriangle', 16),
+    warning: icon('bell', 16),
+    info: icon('info', 16)
   };
 
   const toast = document.createElement('div');
   toast.className = `finkaif-toast-card ${type}`;
   toast.innerHTML = `
-    <span class="toast-icon">${icons[type] || '✨'}</span>
+    <span class="toast-icon">${icons[type] || icon('sparkle', 16)}</span>
     <span class="toast-msg">${esc(message)}</span>
     <button type="button" class="toast-close" aria-label="Закрыть">✕</button>
   `;
@@ -343,7 +367,7 @@ function showConfirmDialog({
   confirmText = 'Подтвердить',
   cancelText = 'Отмена',
   danger = true,
-  icon = '⚠️'
+  icon = 'alertTriangle'
 } = {}) {
   return new Promise(resolve => {
     const existing = document.getElementById('custom-confirm-modal');
@@ -355,7 +379,7 @@ function showConfirmDialog({
     backdrop.innerHTML = `
       <div class="confirm-dialog-card">
         <div class="confirm-dialog-icon-wrap ${danger ? 'danger' : 'info'}">
-          <span>${icon}</span>
+          <span>${renderDialogIcon(icon)}</span>
         </div>
         <h3 class="confirm-dialog-title">${esc(title)}</h3>
         <p class="confirm-dialog-message">${esc(message).replace(/\n/g, '<br>')}</p>
@@ -406,7 +430,7 @@ function showPromptDialog({
   defaultValue = '',
   confirmText = 'Сохранить',
   cancelText = 'Отмена',
-  icon = '✏️'
+  icon = 'edit'
 } = {}) {
   return new Promise(resolve => {
     const existing = document.getElementById('custom-prompt-modal');
@@ -472,7 +496,7 @@ function showAlertDialog({
   title = 'Внимание',
   message = '',
   buttonText = 'Понятно',
-  icon = '💡',
+  icon = 'sparkle',
   danger = false
 } = {}) {
   return new Promise(resolve => {
@@ -525,7 +549,7 @@ function showAlertDialog({
   });
 }
 
-// 🛡️ Global Native Dialog Interceptors (Zero System Dialogs)
+// Global Native Dialog Interceptors (Zero System Dialogs)
 window.alert = function(msg) {
   showToast(String(msg || ''), 'error');
 };
@@ -716,7 +740,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card goal">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">🎯</span>
+                <span class="action-badge-icon">${icon("target", 16)}</span>
                 <span class="action-badge-label">Цель создана</span>
               </div>
               <span class="action-status-pill">✓ Добавлено на сайт</span>
@@ -738,7 +762,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card budget">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">📊</span>
+                <span class="action-badge-icon">${icon("chart", 16)}</span>
                 <span class="action-badge-label">Лимит бюджета</span>
               </div>
               <span class="action-status-pill">✓ Лимит активен</span>
@@ -761,7 +785,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card transaction">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">⚡</span>
+                <span class="action-badge-icon">${icon("sparkle", 16)}</span>
                 <span class="action-badge-label">${isInc ? 'Поступление' : 'Списание'}</span>
               </div>
               <span class="action-status-pill">✓ Записано в журнал</span>
@@ -783,7 +807,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card goal">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">💰</span>
+                <span class="action-badge-icon">${icon("banknote", 16)}</span>
                 <span class="action-badge-label">Взнос в цель</span>
               </div>
               <span class="action-status-pill">✓ Баланс цели обновлён</span>
@@ -806,7 +830,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card delete">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">🗑️</span>
+                <span class="action-badge-icon">${icon("trash", 16)}</span>
                 <span class="action-badge-label">Цель удалена</span>
               </div>
               <span class="action-status-pill danger">✓ Удалено из системы</span>
@@ -829,7 +853,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card delete">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">🗑️</span>
+                <span class="action-badge-icon">${icon("trash", 16)}</span>
                 <span class="action-badge-label">Лимит бюджета удален</span>
               </div>
               <span class="action-status-pill danger">✓ Лимит снят</span>
@@ -851,7 +875,7 @@ const formatAssistantMessage = (raw) => {
           <div class="chat-action-card delete">
             <div class="action-card-header">
               <div class="action-card-badge">
-                <span class="action-badge-icon">🗑️</span>
+                <span class="action-badge-icon">${icon("trash", 16)}</span>
                 <span class="action-badge-label">Операция удалена</span>
               </div>
               <span class="action-status-pill danger">✓ Запись стёрта</span>
@@ -1026,7 +1050,7 @@ const defaultCategories = [
   'ЖКХ', 'Путешествия', 'Развлечения', 'Авто', 'Инвестиции'
 ];
 
-function addCustomCategory(name, emoji = '🏷️') {
+function addCustomCategory(name, emoji = 'tag') {
   if (!name || !String(name).trim()) return null;
   const clean = String(name).trim();
   const formatted = clean.match(/^[\p{Emoji}\u200d]+/u) ? clean : `${emoji} ${clean}`;
@@ -1366,7 +1390,7 @@ function parseQuickTxInput(raw) {
   // 3. Category & Type Detection (Income vs Expense)
   let type = 'expense';
   let category = 'Прочее';
-  let iconEmoji = '💳';
+  let iconEmoji = 'creditCard';
 
   // Comprehensive Income Regex Patterns
   const isIncome = /(?:заработ|получил|поднял|срубил|намайнил|выплат|перевел.*мне|перечисл|начисл|скинули|закинули|пришл|приход|капнул|упал[а-я]*\s+ден|прилетел|залетел|поступлен|поступил|доход|выручк|прибыл|гонорар|преми|бонус|оклад|отпускн|больничн|зарплат|аванс|получк|продал|подар|чаев|донат|вернули долг|отдали долг)/i.test(lower);
@@ -1375,25 +1399,25 @@ function parseQuickTxInput(raw) {
     type = 'income';
     if (/фриланс|проект|клиент|заказ|шабашк|халтур|калым|подработк|смен[аы]|дизайн|верстк|разработк|сайт/i.test(lower)) {
       category = 'Фриланс';
-      iconEmoji = '💼';
+      iconEmoji = 'briefcase';
     } else if (/дивиденд|купон|процент|вклад|акци|инвест|крипт|биток|eth|usdt|тон\b/i.test(lower)) {
       category = 'Инвестиции';
-      iconEmoji = '📈';
+      iconEmoji = 'trendUp';
     } else if (/продал|авито|юла|сбыт/i.test(lower)) {
       category = 'Продажи';
-      iconEmoji = '🏷️';
+      iconEmoji = 'tag';
     } else if (/подар|день рожден|др\b|чаев|донат/i.test(lower)) {
       category = 'Подарки';
-      iconEmoji = '🎁';
+      iconEmoji = 'gift';
     } else if (/кэшбэк|бонус|возврат|вычет/i.test(lower)) {
       category = 'Кэшбэк';
-      iconEmoji = '💳';
+      iconEmoji = 'creditCard';
     } else if (/долг|вернули|отдали/i.test(lower)) {
       category = 'Возврат долга';
-      iconEmoji = '🤝';
+      iconEmoji = 'wallet';
     } else {
       category = 'Зарплата';
-      iconEmoji = '💰';
+      iconEmoji = 'banknote';
     }
   } else {
     type = 'expense';
@@ -1401,62 +1425,62 @@ function parseQuickTxInput(raw) {
     // A. Coffee, Bakery & Hot Drinks (Кафе)
     if (/кофе|кофей[а-я]*|латте|капуч[а-я]*|флэт.*уайт|раф[а-я]*|эспрессо|американо|матча|какао|чай\b|чаёк|чаек|булочн[а-я]*|пекарн[а-я]*|круассан[а-я]*|слойк[а-я]*|чизкейк[а-я]*|десерт[а-я]*|пончик[а-я]*|донат[а-я]*|синнабон[а-я]*|эклер[а-я]*|пирожн[а-я]*|торт[а-я]*/i.test(lower)) {
       category = 'Кафе';
-      iconEmoji = '☕';
+      iconEmoji = 'coffee';
     }
     // B. Fast food, Asian/Caucasian/European dishes, Dining out & Delivery (Рестораны)
     else if (/шав[ауе][а-я]*|шаверм[а-я]*|шаурм[а-я]*|донер[а-я]*|кебаб[а-я]*|шашлык[а-я]*|люля|пицц[а-я]*|додо|папа.*джонс|бургер[а-я]*|воппер|бигмак|макдак|мак\b|вкусно.*точк|вит\b|кфс|kfc|ростикс|наггетс[а-я]*|стрипс[а-я]*|хот[- ]?дог[а-я]*|ролл[а-я]*|суши|сет.*ролл|филадельфи[а-я]*|калифорни[а-я]*|якитори|тануки|том.*ям|том.*кха|фо.*бо|фо.*га|рамен[а-я]*|рамэн[а-я]*|вок[а-я]*|лапш[а-я]*.*вок|пад.*тай|удон|соба|фунчоз[а-я]*|димсам[а-я]*|бао|хинкал[а-я]*|хачапур[а-я]*|плов[а-я]*|лагман[а-я]*|мант[а-я]*|самс[а-я]*|шурп[а-я]*|чебурек[а-я]*|беляш[а-я]*|борщ[а-я]*|солянк[а-я]*|харчо|ух[а-я]\b|крем[- ]?суп|суп[- ]?пюре|лапш[а-я]*.*курин|карбонар[а-я]*|болоньез[а-я]*|лазань[а-я]*|ризотто|стейк[а-я]*|рибай|медальон[а-я]*|тартар[а-я]*|карпаччо|цезар[а-я]*|оливье|греческ.*салат|бизнес[- ]?ланч[а-я]*|ланч[а-я]*|обед[а-я]*|ужин[а-я]*|завтрак[а-я]*|столовк[а-я]*|столов[а-я]*|рестик[а-я]*|ресторан[а-я]*|кафешк[а-я]*|бистро|трактир|чайхон[а-я]*|фудкорт|посидели|покушать|пожрать|пообедать|поужинать|доставк.*еды|яндекс.*еда|деливери|купер.*еда|пиво|пивас|пивко|крафт|сидр|сидрери[а-я]*|вино|бар\b|паб\b|кальян[а-я]*/i.test(lower)) {
       category = 'Рестораны';
-      iconEmoji = '🍽️';
+      iconEmoji = 'utensils';
     }
     // C. Groceries & Supermarkets & Staples at home (Продукты)
     else if (/макарон[а-я]*|спагетти|паст[а-я]*|вермишел[а-я]*|рожк[а-я]*|гречк[а-я]*|греч[а-я]*|рис[а-я]*|пшен[а-я]*|овсянк[а-я]*|геркулес[а-я]*|хлопь[а-я]*|круп[а-я]*|булгур[а-я]*|кускус[а-я]*|киноа|чечевиц[а-я]*|фасол[а-я]*|горох[а-я]*|мук[а-я]*|сахар[а-я]*|сол[иь][а-я]*|сод[а-я]*|крахмал[а-я]*|дрожж[а-я]*|специ[а-я]*|приправ[а-я]*|масл[а-я]*|подсолнечн[а-я]*|оливков[а-я]*|сливочн.*масл[а-я]*|майонез[а-я]*|мазик[а-я]*|кетчуп[а-я]*|соус[а-я]*|томатн.*паст[а-я]*|горчиц[а-я]*|хрен[а-я]*|уксус[а-я]*|консерв[а-я]*|тушенк[а-я]*|шпрот[а-я]*|сайр[а-я]*|тун[ец][а-я]*|паштет[а-я]*|горошек[а-я]*|кукуруз[а-я]*|колбас[а-я]*|сосиск[а-я]*|сардельк[а-я]*|ветчин[а-я]*|сервелат[а-я]*|карбонад[а-я]*|бекон[а-я]*|мяс[а-я]*|фарш[а-я]*|котлет[а-я]*|говядин[а-я]*|свинин[а-я]*|телятин[а-я]*|баранин[а-я]*|индейк[а-я]*|куриц[а-я]*|кур[а-я]*|курин[а-я]*|цыплят[а-я]*|цыпленок|грудк[а-я]*|филе|бедрышк[а-я]*|окороч[а-я]*|крылышк[а-я]*|пельмен[а-я]*|вареник[а-я]*|рыб[а-я]*|лосос[а-я]*|семг[а-я]*|сёмг[а-я]*|форел[а-я]*|селедк[а-я]*|минта[а-я]*|треск[а-я]*|скумбри[а-я]*|креветк[а-я]*|кальмар[а-я]*|крабов.*палочк[а-я]*|молок[а-я]*|молочк[а-я]*|творог[а-я]*|творож[а-я]*|сыр[а-я]*|сырок[а-я]*|сырочк[а-я]*|сметан[а-я]*|кефир[а-я]*|ряженк[а-я]*|йогурт[а-я]*|сливк[а-я]*|сгущенк[а-я]*|сгущёнк[а-я]*|яйц[а-я]*|яичк[а-я]*|яиц|овощ[а-я]*|картох[а-я]*|картошк[а-я]*|картофел[а-я]*|помидор[а-я]*|томат[а-я]*|огур[ец][а-я]*|капуст[а-я]*|морков[а-я]*|морковк[а-я]*|лук[а-я]*|чеснок[а-я]*|зелен[а-я]*|укроп[а-я]*|петрушк[а-я]*|салат[а-я]*|свекл[а-я]*|свёкл[а-я]*|кабач[а-я]*|баклажан[а-я]*|перец|перц[а-я]*|гриб[а-я]*|шампиньон[а-я]*|фрукт[а-я]*|яблок[а-я]*|банан[а-я]*|апельсин[а-я]*|мандарин[а-я]*|лимон[а-я]*|груш[а-я]*|виноград[а-я]*|персик[а-я]*|нектарин[а-я]*|ягод[а-я]*|клубник[а-я]*|малин[а-я]*|черник[а-я]*|голубик[а-я]*|арбуз[а-я]*|дыня|дыни|ананас[а-я]*|авокадо|манго|хлеб[а-я]*|хлебушек|батон[а-я]*|лаваш[а-я]*|булк[а-я]*|булочк[а-я]*|багет[а-я]*|тост[а-я]*|сухар[а-я]*|печень[а-я]*|пряник[а-я]*|вафл[а-я]*|конфет[а-я]*|шоколад[а-я]*|шоколадк[а-я]*|батончик[а-я]*|чипс[а-я]*|снек[а-я]*|снэк[а-я]*|сухарик[а-я]*|семечк[а-я]*|орех[а-я]*|арахис[а-я]*|мармелад[а-я]*|зефир[а-я]*|минералк[а-я]*|газировк[а-я]*|лимонад[а-я]*|сочок|соки|сок\b|магазин[а-я]*|супермаркет[а-я]*|гипермаркет[а-я]*|гастроном[а-я]*|универсам[а-я]*|пятерочк[а-я]*|пятёрочк[а-я]*|пятак[а-я]*|магнит[а-я]*|перекресток[а-я]*|перекрёсток[а-я]*|перек[а-я]*|вкусвилл[а-я]*|лент[а-я]*|ашан[а-я]*|дикси|спар\b|spar\b|глобус[а-я]*|чижик[а-я]*|красное.*белое|кб\b|к&б|бристол[а-я]*|ярче|верный|азбук[а-я].*вкус[а-я]*|окей|самокат.*продукт|лавка.*продукт|сбермаркет|продукт[а-я]*|еда домой|покушать домой|закупился|покупки домой/i.test(lower)) {
       category = 'Продукты';
-      iconEmoji = '🛒';
+      iconEmoji = 'cart';
     }
     // D. Transport, Auto & Fuel
     else if (/такс|uber|убер|яндекс.*гоу|яндекс.*такси|карш|каршеринг|делимобиль|ситидрайв|белк[а]|заправил|бенз|дизель|солярк|азс|лукойл|газпром|роснефть|татнефть|тебойл|мойка|самомойк|детейлинг|помыл тачк|помыл машин|шиномонтаж|переобул|резин[аы]|балансировк|метро|проездной|тройк|стрелк|автобус|маршрутк|трамвай|электричк|мцд|мцк|сапсан|ласточк|ржд|поезд|самолет|авиабилет|побед|аэрофлот|s7|парковк|штраф|гибдд|платка|осаго|каско/i.test(lower)) {
       category = 'Транспорт';
-      iconEmoji = '🚕';
+      iconEmoji = 'car';
     }
     // E. Animals / Pets
     else if (/коров[а-я]*|бык[а-я]*|телят[а-я]*|теленок|телк[а-я]*|коз[а-я]*|свин[а-я]*|хрюш[а-я]*|поросят[а-я]*|лошад[а-я]*|кон[яеь][а-я]*|жереб[а-я]*|овц[а-я]*|баран[а-я]*|ягнят[а-я]*|кур[а-я]*|петух[а-я]*|цыплят[а-я]*|гус[а-я]*|утк[а-я]*|индюк[а-я]*|скот[а-я]*|ферм[а-я]*|пасек[а-я]*|пчел[а-я]*|улей|питом[а-я]*|собак[а-я]*|щен[а-я]*|пес[а-я]*|пёсел[а-я]*|кошк[а-я]*|кот[а-я]*|котят[а-я]*|котейк[а-я]*|хомяк[а-я]*|попуга[а-я]*|рыбк[а-я]*|аквариум[а-я]*|грызун[а-я]*|корм[а-я]*|ветеринар[а-я]*|ветклиник[а-я]*|груминг[а-я]*|поводок|лоток|наполнитель/i.test(lower)) {
       category = 'Питомцы';
-      iconEmoji = '🐾';
+      iconEmoji = 'heart';
     }
     // F. Tech & Gaming
     else if (/плойк|соньк|playstation|ps5|ps4|xbox|иксбокс|нинтендо|switch|стимдек|видяха|видюх|видеокарт|rtx|geforce|проц|процессор|ссд|ssd|оперативк|монитор|моник|клав|мышк|айфон|iphone|эйрподс|airpods|макбук|macbook|ipad|айпад|эппл.*вотч|ноут|ноутбук|комп|пк|системник|телевизор|телик|техник|гаджет|наушник|колонк|алис[а]|станци[яи]|пылесос|стиралк|холодильник|микроволновк/i.test(lower)) {
       category = 'Техника';
-      iconEmoji = '💻';
+      iconEmoji = 'laptop';
     }
     // G. Subscriptions
     else if (/спотик|spotify|эппл.*мьюзик|apple.*music|яндекс.*плюс|плюс\b|телег|telegram.*prem|tg.*prem|нетфликс|netflix|ютуб|youtube|кинопоиск|иви|ivi|окко|okko|кион|kion|premier|start|впн|vpn|хостинг|сервер|vps|vds|домен|айклауд|icloud|гугл.*диск|облако|подписк|chatgpt|gpt|midjourney|github|figma/i.test(lower)) {
       category = 'Подписки';
-      iconEmoji = '📱';
+      iconEmoji = 'layers';
     }
     // H. Shopping & Clothes
     else if (/шмот|педал|тяги|кросс|кед|сникер|ботинк|худи|зипк|толстовк|свитшот|куртк|пуховик|пальто|джинс|штаны|брюк|футболк|мерч|вб\b|вэбэ|вайлдберриз|wildberries|озон|ozon|яндекс.*маркет|маркетплейс|мегамаркет|авито|цум|гум|стокманн|зарин|лайм|lime|befree|lamoda|ламода|косметик|духи|парфюм|золот.*яблок|зя\b|летуаль|шопинг|покупк/i.test(lower)) {
       category = 'Покупки';
-      iconEmoji = '🛍️';
+      iconEmoji = 'gift';
     }
     // I. Health & Sports
     else if (/зал\b|качалк|спортзал|фитнес|трен[яе]|тренировк|тренер|персоналк|абонемент|протеин|креатин|бцаа|аптек|таблетк|колес[а]|витамин|омег[а]|врач|доктор|терапевт|стоматолог|зуб|пломб|брекет|элайнер|мрт|кт|узи|анализ|инвитро|гемотест|kdl|здоровь|массаж|психолог|остиопат|спа\b/i.test(lower)) {
       category = 'Здоровье';
-      iconEmoji = '🏥';
+      iconEmoji = 'heart';
     }
     // J. Housing & Utilities
     else if (/аренд|квартир|хат|ипотек|жкх|коммуналк|квартплат|свет|электричеств|вод[аы]|отоплен|газ\b|домофон|капремонт|интернет|вайфай|провайдер|ростелеком|домру|клининг|уборк|ремонт|стройк|обои|краск|плитк|ламинат|сантехник|леруа|лемана.*про|петрович|оби|obi|мебель|икеа|ikea|hoff|диван|кровать|шкаф|стол|матрас/i.test(lower)) {
       category = 'Жилье';
-      iconEmoji = '🏠';
+      iconEmoji = 'home';
     }
     // K. Entertainment
     else if (/стим\b|steam|донат|скин|батлпас|battle.*pass|бп\b|вбакс|v-bucks|кино|фильм|сеанс|театр|спектакль|концерт|фест|фестивал|стендап|квест|боулинг|бильярд|страйкбол|парк|аттракцион|зоопарк|аквапарк|баня|сауна|настолк|игры/i.test(lower)) {
       category = 'Развлечения';
-      iconEmoji = '🎉';
+      iconEmoji = 'sparkles';
     }
     // L. Investments
     else if (/акци|облигац|офз|брокер|тинькофф.*инвест|бкс|крипт|биткоин|биток|btc|эфир|eth|usdt|тезер|тон\b|ton\b|байбит|bybit|бинанс|binance/i.test(lower)) {
       category = 'Инвестиции';
-      iconEmoji = '📈';
+      iconEmoji = 'trendUp';
     }
   }
 
@@ -1630,73 +1654,81 @@ function getFinancialRank(balance, goals) {
   const totalCapital = Math.max(0, balance) + totalSaved;
 
   if (totalCapital >= 300000 || (totalTarget > 0 && totalSaved >= totalTarget && goals.length >= 2)) {
-    return { title: 'Финансовый стратег', badge: '👑', desc: 'Уверенный капитал и системный контроль над будущим' };
+    return { title: 'Финансовый стратег', badge: 'crown', desc: 'Уверенный капитал и системный контроль над будущим' };
   }
   if (totalCapital >= 100000 || totalSaved >= 40000) {
-    return { title: 'Капиталист', badge: '💎', desc: 'Стабильный рост сбережений и надежный инвестиционный резерв' };
+    return { title: 'Капиталист', badge: 'gem', desc: 'Стабильный рост сбережений и надежный инвестиционный резерв' };
   }
   if (totalCapital >= 25000 || (goals && goals.length > 0)) {
-    return { title: 'Мастер бюджета', badge: '⚡', desc: 'Осознанные расходы и дисциплина лимитов' };
+    return { title: 'Мастер бюджета', badge: 'sparkle', desc: 'Осознанные расходы и дисциплина лимитов' };
   }
-  return { title: 'Первые шаги', badge: '🌱', desc: 'Начало построения финансовой свободы и подушки безопасности' };
+  return { title: 'Первые шаги', badge: 'activity', desc: 'Начало построения финансовой свободы и подушки безопасности' };
 }
 
-// Friendly Category Icons Map
+// Friendly Category SVG Icon Key Map (Anti-Slop, 100% Vector)
 const categoryIcons = {
-  'Продукты': '🛒',
-  'Рестораны': '🍽️',
-  'Кафе': '☕',
-  'Транспорт': '🚕',
-  'Такси': '🚕',
-  'Зарплата': '💰',
-  'Фриланс': '💼',
-  'Дивиденды': '📈',
-  'Инвестиции': '📈',
-  'Продажи': '🏷️',
-  'Кэшбэк': '💳',
-  'Возврат долга': '🤝',
-  'Подписки': '📱',
-  'Здоровье': '🏥',
-  'Спорт': '🏃',
-  'Покупки': '🛍️',
-  'Техника': '💻',
-  'Жилье': '🏠',
-  'ЖКХ': '⚡',
-  'Питомцы': '🐾',
-  'Животные': '🐾',
-  'Хозяйство': '🌾',
-  'Путешествия': '✈️',
-  'Образование': '📚',
-  'Развлечения': '🎉',
-  'Подарки': '🎁',
-  'Авто': '🚘'
+  'Продукты': 'cart',
+  'Рестораны': 'utensils',
+  'Кафе': 'coffee',
+  'Транспорт': 'car',
+  'Такси': 'compass',
+  'Зарплата': 'banknote',
+  'Фриланс': 'briefcase',
+  'Дивиденды': 'trendUp',
+  'Инвестиции': 'trendUp',
+  'Продажи': 'tag',
+  'Кэшбэк': 'creditCard',
+  'Возврат долга': 'wallet',
+  'Подписки': 'layers',
+  'Здоровье': 'heart',
+  'Спорт': 'dumbbell',
+  'Покупки': 'tag',
+  'Техника': 'laptop',
+  'Жилье': 'home',
+  'ЖКХ': 'home',
+  'Питомцы': 'heart',
+  'Животные': 'heart',
+  'Хозяйство': 'home',
+  'Путешествия': 'plane',
+  'Образование': 'book',
+  'Развлечения': 'sparkles',
+  'Подарки': 'gift',
+  'Авто': 'car'
 };
 
-const getCategoryIcon = (cat, type) => {
-  if (categoryIcons[cat]) return categoryIcons[cat];
-  const c = String(cat || '').toLowerCase();
-  if (type === 'income') {
-    if (/фриланс|проект|клиент|заказ|дизайн|разработк/i.test(c)) return '💼';
-    if (/инвест|дивиденд|купон|акци|крипт/i.test(c)) return '📈';
-    if (/продаж|авито/i.test(c)) return '🏷️';
-    if (/подар|чаев|донат/i.test(c)) return '🎁';
-    if (/кэшбэк|бонус/i.test(c)) return '💳';
-    if (/долг|возврат/i.test(c)) return '🤝';
-    return '💰';
+const getCategoryIcon = (cat, type, size = 15) => {
+  let iconName = categoryIcons[cat];
+  if (!iconName) {
+    const c = String(cat || '').toLowerCase();
+    if (type === 'income') {
+      if (/фриланс|проект|клиент|заказ|дизайн|разработк/i.test(c)) iconName = 'briefcase';
+      else if (/инвест|дивиденд|купон|акци|крипт/i.test(c)) iconName = 'trendUp';
+      else if (/продаж|авито/i.test(c)) iconName = 'tag';
+      else if (/подар|чаев|донат/i.test(c)) iconName = 'gift';
+      else if (/кэшбэк|бонус/i.test(c)) iconName = 'creditCard';
+      else if (/долг|возврат/i.test(c)) iconName = 'wallet';
+      else iconName = 'banknote';
+    } else {
+      if (/питом|животн|собак|кошк|корм|вет/i.test(c)) iconName = 'heart';
+      else if (/хозяйств|ферм|сад/i.test(c)) iconName = 'home';
+      else if (/такси/i.test(c)) iconName = 'compass';
+      else if (/транспорт|авто|машин|бензин|метро/i.test(c)) iconName = 'car';
+      else if (/кофе|кафе|пекарн/i.test(c)) iconName = 'coffee';
+      else if (/ресторан|бар|пицц|бургер|еда|доставк/i.test(c)) iconName = 'utensils';
+      else if (/техник|гаджет|комп|айфон|ноут/i.test(c)) iconName = 'laptop';
+      else if (/подписк|сервис|онлайн/i.test(c)) iconName = 'layers';
+      else if (/покупк|одежд|шмот|шопинг/i.test(c)) iconName = 'tag';
+      else if (/спорт|фитнес/i.test(c)) iconName = 'dumbbell';
+      else if (/здоров|аптек|врач/i.test(c)) iconName = 'heart';
+      else if (/жил|аренд|квартир|жкх|коммунал/i.test(c)) iconName = 'home';
+      else if (/развлечен|кино|игра|парк/i.test(c)) iconName = 'sparkles';
+      else if (/продукт|супермаркет/i.test(c)) iconName = 'cart';
+      else if (/путешеств|отпуск|билет/i.test(c)) iconName = 'plane';
+      else if (/книг|учеб|курс/i.test(c)) iconName = 'book';
+      else iconName = 'tag';
+    }
   }
-  if (/питом|животн|коров|бык|собак|кошк|корм|вет/i.test(c)) return '🐾';
-  if (/хозяйств|ферм/i.test(c)) return '🌾';
-  if (/транспорт|такси|авто|машин|бензин|метро/i.test(c)) return '🚕';
-  if (/кофе|кафе|пекарн/i.test(c)) return '☕';
-  if (/ресторан|бар|пицц|бургер|еда|доставк/i.test(c)) return '🍽️';
-  if (/техник|гаджет|комп|айфон|ноут/i.test(c)) return '💻';
-  if (/подписк|сервис|онлайн/i.test(c)) return '📱';
-  if (/покупк|одежд|шмот|шопинг/i.test(c)) return '🛍️';
-  if (/здоров|спорт|фитнес|аптек|врач/i.test(c)) return '🏥';
-  if (/жил|аренд|квартир|жкх|коммунал/i.test(c)) return '🏠';
-  if (/развлечен|кино|игра|парк/i.test(c)) return '🎉';
-  if (/продукт|супермаркет/i.test(c)) return '🛒';
-  return '💳';
+  return `<span class="category-svg-badge ${type === 'income' ? 'income' : 'expense'}">${icon(iconName, size)}</span>`;
 };
 
 /* ==========================================================================
@@ -1719,8 +1751,10 @@ function icon(name, size = 16) {
     send: '<line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>',
     close: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
     sparkle: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>',
+    sparkles: '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z"></path><path d="M5 3v4M3 5h4M19 17v4M17 19h4"></path>',
     settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
     check: '<polyline points="20 6 9 17 4 12"></polyline>',
+    checkCircle: '<circle cx="12" cy="12" r="10"></circle><polyline points="16 9 10 15 7 12"></polyline>',
     wallet: '<path d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"></path><path d="M16 13a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"></path>',
     flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
     edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>',
@@ -1739,10 +1773,45 @@ function icon(name, size = 16) {
     scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="M7 21h10"></path><path d="M12 3v18"></path><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path>',
     arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
     chevronRight: '<polyline points="9 18 15 12 9 6"></polyline>',
-    target: '<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>'
+    target: '<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>',
+    alertTriangle: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>',
+    clock: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+    info: '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
+    cart: '<circle cx="8" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path>',
+    utensils: '<path d="M18 2v6a3 3 0 0 1-3 3 3 3 0 0 1-3-3V2"></path><path d="M15 11v11"></path><path d="M5 2v10a3 3 0 0 0 3 3h1v7"></path><path d="M9 2v4"></path>',
+    coffee: '<path d="M17 8h1a4 4 0 1 1 0 8h-1"></path><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"></path><line x1="6" y1="2" x2="6" y2="4"></line><line x1="10" y1="2" x2="10" y2="4"></line><line x1="14" y1="2" x2="14" y2="4"></line>',
+    car: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 11.2 2 11.6 2 12v4c0 .6.4 1 1 1h2"></path><circle cx="7" cy="17" r="2"></circle><circle cx="17" cy="17" r="2"></circle>',
+    layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline>',
+    activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>',
+    heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path>',
+    banknote: '<rect width="20" height="12" x="2" y="6" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path>',
+    home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>',
+    laptop: '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"></path>',
+    gift: '<polyline points="20 12 20 22 4 22 4 12"></polyline><rect width="20" height="5" x="2" y="7" rx="1"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>',
+    book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10M6 10h10"></path>',
+    compass: '<circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>',
+    briefcase: '<rect width="20" height="14" x="2" y="7" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>',
+    creditCard: '<rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line>',
+    tag: '<path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path><circle cx="7" cy="7" r="1"></circle>',
+    dumbbell: '<path d="m6.5 6.5 11 11"></path><path d="m21 21-1-1a2 2 0 0 0-2.83 0l-.88.88a2 2 0 0 1-2.83 0l-1.58-1.58a2 2 0 0 1 0-2.83l.88-.88a2 2 0 0 0 0-2.83l-1-1"></path><path d="m3 3 1 1a2 2 0 0 0 2.83 0l.88-.88a2 2 0 0 1 2.83 0l1.58 1.58a2 2 0 0 1 0 2.83l-.88.88a2 2 0 0 0 0 2.83l1 1"></path>',
+    globe: '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>',
+    headphones: '<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path>',
+    cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>',
+    tv: '<rect width="20" height="15" x="2" y="7" rx="2"></rect><polyline points="17 2 12 7 7 2"></polyline>',
+    plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3.5c-.5-.5-2.5 0-4 1.5L13.5 8.5 5.3 6.7c-.8-.2-1.6.3-1.8 1.1l-.3 1.2c-.2.7.2 1.5.9 1.8l6.2 3.2-3.3 3.3-2.4-.6c-.5-.1-1 .2-1.3.6l-.4.6c-.3.5-.1 1.2.4 1.5l3.2 2 2 3.2c.4.5 1.1.7 1.6.4l.6-.4c.4-.3.7-.8.6-1.3l-.6-2.4 3.3-3.3 3.2 6.2c.3.7 1.1 1.1 1.8.9l1.2-.3c.8-.2 1.3-1 1.1-1.8z"></path>',
+    refresh: '<path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>',
+    crown: '<path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"></path>',
+    gem: '<polygon points="6 3 18 3 22 9 12 22 2 9"></polygon><path d="M12 22V9M2 9h20M7.5 3 12 9l4.5-6"></path>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>',
+    award: '<circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>',
+    chart: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>',
+    camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>',
+    bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path>',
+    radar: '<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="12" x2="19" y2="7"></line>',
+    chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
   };
 
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="svg-icon svg-icon-${name}">${icons[name] || ''}</svg>`;
 }
 
 /* ==========================================================================
@@ -1837,53 +1906,62 @@ function renderMasthead() {
 
   return `
     <header class="masthead">
-      <div class="brand" data-tab="home" title="FinKaif — На главную">
-        <div class="brand-logo-mark">
-          <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="fk-grad-bg" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#121D24"/>
-                <stop offset="100%" stop-color="#080E12"/>
-              </linearGradient>
-              <linearGradient id="fk-grad-pillar" x1="7" y1="7" x2="12" y2="27" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#5EEAD4"/>
-                <stop offset="50%" stop-color="#2DD4BF"/>
-                <stop offset="100%" stop-color="#0D9488"/>
-              </linearGradient>
-              <linearGradient id="fk-grad-wing1" x1="11" y1="7" x2="26" y2="13" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#FFFFFF"/>
-                <stop offset="50%" stop-color="#A7F3D0"/>
-                <stop offset="100%" stop-color="#2DD4BF"/>
-              </linearGradient>
-              <linearGradient id="fk-grad-wing2" x1="11" y1="14" x2="22" y2="19" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stop-color="#5EEAD4"/>
-                <stop offset="100%" stop-color="#0D9488"/>
-              </linearGradient>
-              <filter id="fk-glow-core" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="1.2" result="blur"/>
-                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-              </filter>
-            </defs>
-            <!-- Squircle Chassis with subtle specular highlight -->
-            <rect width="34" height="34" rx="10" fill="url(#fk-grad-bg)"/>
-            <rect x="0.5" y="0.5" width="33" height="33" rx="9.5" stroke="rgba(45, 212, 191, 0.28)" stroke-width="1"/>
-            <path d="M6 1.5C11 0.9 23 0.9 28 1.5" stroke="rgba(255, 255, 255, 0.22)" stroke-width="1" stroke-linecap="round"/>
-            <!-- Architectural Kinetic Emblem -->
-            <g filter="url(#fk-glow-core)">
-              <!-- Vertical Core Pillar -->
-              <rect x="8" y="7.5" width="4" height="19" rx="2" fill="url(#fk-grad-pillar)"/>
-              <!-- Upper Aerodynamic Wing -->
-              <path d="M12 7.5H23C24.38 7.5 25.5 8.62 25.5 10C25.5 11.38 24.38 12.5 23 12.5H12V7.5Z" fill="url(#fk-grad-wing1)"/>
-              <!-- Mid Harmonic Wing -->
-              <path d="M12 14.5H19.5C20.6 14.5 21.5 15.4 21.5 16.5C21.5 17.6 20.6 18.5 19.5 18.5H12V14.5Z" fill="url(#fk-grad-wing2)"/>
-              <!-- Kinetic Amber/Jade Precision Spark -->
-              <circle cx="21" cy="24" r="2" fill="#5EEAD4"/>
-            </g>
-          </svg>
+      <div class="masthead-left">
+        <div class="brand" data-tab="home" title="FinKaif — На главную">
+          <div class="brand-logo-mark">
+            <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="fk-grad-bg" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#121D24"/>
+                  <stop offset="100%" stop-color="#080E12"/>
+                </linearGradient>
+                <linearGradient id="fk-grad-pillar" x1="7" y1="7" x2="12" y2="27" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#5EEAD4"/>
+                  <stop offset="50%" stop-color="#2DD4BF"/>
+                  <stop offset="100%" stop-color="#0D9488"/>
+                </linearGradient>
+                <linearGradient id="fk-grad-wing1" x1="11" y1="7" x2="26" y2="13" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#FFFFFF"/>
+                  <stop offset="50%" stop-color="#A7F3D0"/>
+                  <stop offset="100%" stop-color="#2DD4BF"/>
+                </linearGradient>
+                <linearGradient id="fk-grad-wing2" x1="11" y1="14" x2="22" y2="19" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#5EEAD4"/>
+                  <stop offset="100%" stop-color="#0D9488"/>
+                </linearGradient>
+                <filter id="fk-glow-core" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="1.2" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+              <!-- Squircle Chassis with subtle specular highlight -->
+              <rect width="34" height="34" rx="10" fill="url(#fk-grad-bg)"/>
+              <rect x="0.5" y="0.5" width="33" height="33" rx="9.5" stroke="rgba(45, 212, 191, 0.28)" stroke-width="1"/>
+              <path d="M6 1.5C11 0.9 23 0.9 28 1.5" stroke="rgba(255, 255, 255, 0.22)" stroke-width="1" stroke-linecap="round"/>
+              <!-- Architectural Kinetic Emblem -->
+              <g filter="url(#fk-glow-core)">
+                <!-- Vertical Core Pillar -->
+                <rect x="8" y="7.5" width="4" height="19" rx="2" fill="url(#fk-grad-pillar)"/>
+                <!-- Upper Aerodynamic Wing -->
+                <path d="M12 7.5H23C24.38 7.5 25.5 8.62 25.5 10C25.5 11.38 24.38 12.5 23 12.5H12V7.5Z" fill="url(#fk-grad-wing1)"/>
+                <!-- Mid Harmonic Wing -->
+                <path d="M12 14.5H19.5C20.6 14.5 21.5 15.4 21.5 16.5C21.5 17.6 20.6 18.5 19.5 18.5H12V14.5Z" fill="url(#fk-grad-wing2)"/>
+                <!-- Kinetic Amber/Jade Precision Spark -->
+                <circle cx="21" cy="24" r="2" fill="#5EEAD4"/>
+              </g>
+            </svg>
+          </div>
+          <div class="brand-wordmark">
+            <span class="brand-wordmark-fin">Fin</span><span class="brand-wordmark-kaif">Kaif</span>
+            <span class="brand-wordmark-dot"></span>
+          </div>
         </div>
-        <div class="brand-wordmark">
-          <span class="brand-wordmark-fin">Fin</span><span class="brand-wordmark-kaif">Kaif</span>
-          <span class="brand-wordmark-dot"></span>
+
+        <div class="brand-cloud-status" id="brand-cloud-status" title="Синхронизировано с защищённым облаком FinKaif OS (AES-GCM)">
+          <span class="cloud-pulse-wrap">
+            <span class="cloud-pulse-dot"></span>
+          </span>
+          <span class="cloud-status-text">Синхронизировано</span>
         </div>
       </div>
 
@@ -1982,14 +2060,14 @@ function renderSubscriptionRadar() {
     }
 
     const nameLower = (s.name || '').toLowerCase();
-    let iconEmoji = '📱';
-    if (/яндекс|yandex|плюс/i.test(nameLower)) iconEmoji = '🟡';
-    else if (/telegram|телег/i.test(nameLower)) iconEmoji = '✈️';
-    else if (/spotify|спотик|музык|apple\s*music/i.test(nameLower)) iconEmoji = '🎧';
-    else if (/cloud|облак|icloud|drive/i.test(nameLower)) iconEmoji = '☁️';
-    else if (/зал|спорт|фитнес|gym/i.test(nameLower)) iconEmoji = '🏋️';
-    else if (/интернет|провайдер|связь|мтс|мегафон|билайн|т2/i.test(nameLower)) iconEmoji = '🌐';
-    else if (/ютуб|youtube|netflix|нетфликс|кинопоиск|иви/i.test(nameLower)) iconEmoji = '🎬';
+    let iconEmoji = 'layers';
+    if (/яндекс|yandex|плюс/i.test(nameLower)) iconEmoji = 'layers';
+    else if (/telegram|телег/i.test(nameLower)) iconEmoji = 'plane';
+    else if (/spotify|спотик|музык|apple\s*music/i.test(nameLower)) iconEmoji = 'headphones';
+    else if (/cloud|облак|icloud|drive/i.test(nameLower)) iconEmoji = 'cloud';
+    else if (/зал|спорт|фитнес|gym/i.test(nameLower)) iconEmoji = 'dumbbell';
+    else if (/интернет|провайдер|связь|мтс|мегафон|билайн|т2/i.test(nameLower)) iconEmoji = 'globe';
+    else if (/ютуб|youtube|netflix|нетфликс|кинопоиск|иви/i.test(nameLower)) iconEmoji = 'tv';
 
     return { daysLeft, badgeText, badgeClass, cardClass, iconEmoji, day };
   };
@@ -2002,12 +2080,12 @@ function renderSubscriptionRadar() {
 
   const existingNames = new Set(subs.map(s => (s.name || '').toLowerCase().trim()));
   const presetSuggestions = [
-    { name: 'Яндекс Плюс', amount: 299, day: 25, icon: '🟡', cat: 'Подписки' },
-    { name: 'Telegram Premium', amount: 299, day: 12, icon: '✈️', cat: 'Подписки' },
-    { name: 'Spotify Premium', amount: 299, day: 1, icon: '🎧', cat: 'Подписки' },
-    { name: 'Облако iCloud / Drive', amount: 1490, day: 15, icon: '☁️', cat: 'Подписки' },
-    { name: 'Фитнес-клуб', amount: 2500, day: 5, icon: '🏋️', cat: 'Здоровье' },
-    { name: 'Домашний интернет', amount: 650, day: 1, icon: '🌐', cat: 'Жилье' }
+    { name: 'Яндекс Плюс', amount: 299, day: 25, icon: 'layers', cat: 'Подписки' },
+    { name: 'Telegram Premium', amount: 299, day: 12, icon: 'plane', cat: 'Подписки' },
+    { name: 'Spotify Premium', amount: 299, day: 1, icon: 'headphones', cat: 'Подписки' },
+    { name: 'Облако iCloud / Drive', amount: 1490, day: 15, icon: 'cloud', cat: 'Подписки' },
+    { name: 'Фитнес-клуб', amount: 2500, day: 5, icon: 'dumbbell', cat: 'Здоровье' },
+    { name: 'Домашний интернет', amount: 650, day: 1, icon: 'globe', cat: 'Жилье' }
   ].filter(p => !existingNames.has(p.name.toLowerCase()));
 
   return `
@@ -2039,7 +2117,7 @@ function renderSubscriptionRadar() {
           ${enrichedSubs.map(s => `
             <div class="sub-card ${s.meta.cardClass}" data-id="${esc(s.id)}">
               <div class="sub-card-top">
-                <div class="sub-icon-box">${s.meta.iconEmoji}</div>
+                <div class="sub-icon-box">${icon(s.meta.iconEmoji || 'layers', 16)}</div>
                 <span class="sub-badge ${s.meta.badgeClass}">${s.meta.badgeText}</span>
               </div>
               <div>
@@ -2064,7 +2142,7 @@ function renderSubscriptionRadar() {
         </div>
       ` : `
         <div class="sub-empty-state">
-          <div style="font-size: 28px; margin-bottom: 8px;">📡</div>
+          <div class="sub-empty-icon" style="display: flex; justify-content: center; margin-bottom: 8px;">${icon('radar', 30)}</div>
           <div style="font-size: 14.5px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">Радар пока чист</div>
           <p style="font-size: 12.5px; color: var(--text-muted); max-width: 480px; margin: 0 auto 16px auto;">
             Добавьте ваши регулярные сервисы (Яндекс, Telegram, облачные хранилища, фитнес или интернет), чтобы видеть предстоящие списания и годовую стоимость.
@@ -2074,10 +2152,10 @@ function renderSubscriptionRadar() {
 
       ${presetSuggestions.length > 0 ? `
         <div class="quick-pills-strip" style="margin-bottom: 14px; padding-top: 6px;">
-          <span class="quick-pills-label">⚡ Быстрый радар:</span>
+          <span class="quick-pills-label">${icon('radar', 13)} Радар:</span>
           ${presetSuggestions.slice(0, 4).map(p => `
             <button type="button" class="quick-pill-btn sub-preset-add-btn" data-name="${esc(p.name)}" data-amt="${p.amount}" data-day="${p.day}" data-cat="${esc(p.cat)}">
-              <span>${p.icon}</span>
+              <span>${icon(p.icon, 13)}</span>
               <span>+ ${esc(p.name)} (${money(p.amount)}/мес)</span>
             </button>
           `).join('')}
@@ -2106,7 +2184,7 @@ function renderSubscriptionModal() {
       <div class="modal-card" style="max-width: 440px;">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 20px;">📅</span>
+            <span>${icon('calendar', 18)}</span>
             <h3 class="modal-title">Новое списание в Радар</h3>
           </div>
           <button type="button" class="btn-icon" id="btn-close-sub-modal">${icon('close', 16)}</button>
@@ -2115,16 +2193,16 @@ function renderSubscriptionModal() {
         <div class="quick-pills-strip" style="margin-bottom: 14px;">
           <span class="quick-pills-label">Шаблоны:</span>
           <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Яндекс Плюс" data-amt="299" data-day="25" data-cat="Подписки">
-            <span>🟡</span> <span>Яндекс 299 ₽</span>
+            <span>${icon('layers', 12)}</span> <span>Яндекс 299 ₽</span>
           </button>
           <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Telegram Premium" data-amt="299" data-day="12" data-cat="Подписки">
-            <span>✈️</span> <span>TG 299 ₽</span>
+            <span>${icon('plane', 12)}</span> <span>TG 299 ₽</span>
           </button>
           <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Spotify" data-amt="299" data-day="1" data-cat="Подписки">
-            <span>🎧</span> <span>Spotify 299 ₽</span>
+            <span>${icon('headphones', 12)}</span> <span>Spotify 299 ₽</span>
           </button>
           <button type="button" class="quick-pill-btn sub-modal-preset" data-name="Облако" data-amt="1490" data-day="15" data-cat="Подписки">
-            <span>☁️</span> <span>Облако 1 490 ₽</span>
+            <span>${icon('cloud', 12)}</span> <span>Облако 1 490 ₽</span>
           </button>
         </div>
 
@@ -2469,7 +2547,7 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
           type: isIncome ? 'income' : 'expense',
           tx_kind: isTransfer ? 'transfer' : (isIncome ? 'income' : 'expense'),
           is_self_transfer: item.is_self_transfer === true,
-          category: item.category || (isTransfer ? '🔄 Переводы' : autoCategorizeDescription(item.description)),
+          category: item.category || (isTransfer ? 'Переводы' : autoCategorizeDescription(item.description)),
           description: item.description || 'Банковская операция',
           selected: !isTransfer // transfers are unselected by default — user decides
         };
@@ -2500,7 +2578,7 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
 
   return {
     engine: 'smart',
-    engineLabel: '⚡ Smart Built-in Engine',
+    engineLabel: 'Smart Built-in Engine',
     bank_name: detectedBank,
     period,
     transactions: items
@@ -2619,12 +2697,12 @@ function renderImportBankModal() {
               <span class="import-stat-val num exp" id="import-stat-exp">-0 ₽</span>
             </div>
             <div class="import-stat-item">
-              <span class="import-stat-lbl">🔄 Переводы</span>
+              <span class="import-stat-lbl">Переводы</span>
               <span class="import-stat-val num" id="import-stat-transfers" style="color: rgba(160,185,255,0.85);">0 шт.</span>
             </div>
             <div class="import-stat-item engine-item">
               <span class="import-stat-lbl">Движок</span>
-              <span class="import-stat-val" id="import-stat-engine">⚡ FinKaif AI</span>
+              <span class="import-stat-val" id="import-stat-engine">FinKaif AI</span>
             </div>
           </div>
 
@@ -2689,6 +2767,63 @@ function renderHomeView() {
   const savedInGoals = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
   const freeBalance = totalCapital - savedInGoals;
   const balance = freeBalance; // Primary focus is spendable liquid cash
+
+  // Calculate Runway (Financial Safety Cushion)
+  const nowMs = getMskDate().getTime();
+  const thirtyDaysAgo = new Date(nowMs - 30 * 86400000);
+  const last30dExp = (data.transactions || [])
+    .filter(t => t.type === 'expense' && new Date(getTxIso(t)) >= thirtyDaysAgo)
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  const monthlyBurn = last30dExp > 0 ? last30dExp : (exp > 0 ? exp : 45000);
+  const runwayCapital = Math.max(0, totalCapital);
+  const runwayMonths = monthlyBurn > 0 ? (runwayCapital / monthlyBurn) : 0;
+
+  let runwayMonthsFormatted = '';
+  if (totalCapital <= 0) {
+    runwayMonthsFormatted = '0 мес.';
+  } else if (runwayMonths >= 10) {
+    runwayMonthsFormatted = `${Math.round(runwayMonths)} мес.`;
+  } else if (runwayMonths >= 1) {
+    runwayMonthsFormatted = `${runwayMonths.toFixed(1)} мес.`;
+  } else {
+    const days = Math.max(1, Math.round(runwayMonths * 30));
+    runwayMonthsFormatted = `${days} дн.`;
+  }
+
+  let runwayTierClass = 'runway-secure';
+  let runwayStatus = 'Крепость';
+  let runwayDot = 'jade';
+  let runwayDesc = `Автономность: капитала хватит на ${runwayMonthsFormatted} комфортной жизни при текущем темпе трат (${money(monthlyBurn)} ₽/мес)`;
+
+  if (totalCapital <= 0) {
+    runwayTierClass = 'runway-danger';
+    runwayStatus = 'Дефицит';
+    runwayDot = 'coral';
+    runwayDesc = 'Дефицит капитала: требуется оптимизация расходов';
+  } else if (runwayMonths < 1) {
+    runwayTierClass = 'runway-danger';
+    runwayStatus = 'Критично';
+    runwayDot = 'coral';
+    runwayDesc = `Запас менее 1 месяца (${runwayMonthsFormatted}). Рекомендуется сократить некритичные траты`;
+  } else if (runwayMonths < 3) {
+    runwayTierClass = 'runway-warning';
+    runwayStatus = 'Базовый';
+    runwayDot = 'amber';
+    runwayDesc = `Запас на ${runwayMonthsFormatted}. Рекомендуется сформировать подушку от 3 до 6 месяцев`;
+  } else if (runwayMonths < 6) {
+    runwayTierClass = 'runway-good';
+    runwayStatus = 'Стабильно';
+    runwayDot = 'jade';
+    runwayDesc = `Уверенный запас на ${runwayMonthsFormatted}. До золотого стандарта (6 мес.) осталось немного`;
+  } else {
+    runwayTierClass = 'runway-secure';
+    runwayStatus = 'Крепость';
+    runwayDot = 'jade';
+    runwayDesc = `Превосходная финансовая крепость: запас на ${runwayMonthsFormatted} без дополнительных доходов!`;
+  }
+
+  const runwayPercent = Math.min(100, Math.max(4, (runwayMonths / 6) * 100));
 
   const savingsRate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
 
@@ -3104,18 +3239,51 @@ function renderHomeView() {
         ${badgeHtml}
       </div>
 
-      <!-- Capital & Goals Sub-Row Strip -->
+      <!-- Capital & Goals Sub-Row Strip with Runway Pill -->
       <div class="hero-capital-substrip">
         <div class="capital-sub-item" title="Средства, замороженные в целях накопления">
-          <span class="capital-sub-icon">🎯</span>
+          <span class="capital-sub-icon">${icon("target", 13)}</span>
           <span class="capital-sub-lbl">В целях:</span>
           <span class="capital-sub-val num">${money(savedInGoals)}</span>
         </div>
         <div class="capital-sub-bullet">•</div>
         <div class="capital-sub-item" title="Общий капитал со всеми накоплениями">
-          <span class="capital-sub-icon">💼</span>
+          <span class="capital-sub-icon">${icon("briefcase", 13)}</span>
           <span class="capital-sub-lbl">Общий капитал:</span>
           <span class="capital-sub-val num ${totalCapital >= 0 ? 'inc' : 'exp'}">${money(totalCapital)}</span>
+        </div>
+        <div class="capital-sub-bullet">•</div>
+        <div class="capital-sub-item runway-pill ${runwayTierClass}" id="hero-runway-pill" title="${esc(runwayDesc)}">
+          <span class="capital-sub-icon"><span class="status-dot ${runwayDot}"></span></span>
+          <span class="capital-sub-lbl">Подушка:</span>
+          <span class="capital-sub-val num ${runwayTierClass}">${runwayMonthsFormatted}</span>
+        </div>
+      </div>
+
+      <!-- Runway Safety Gauge Strip -->
+      <div class="runway-gauge-strip" title="${esc(runwayDesc)}">
+        <div class="runway-gauge-header">
+          <div class="runway-gauge-title">
+            <span class="runway-gauge-icon">${icon("shield", 14)}</span>
+            <span class="runway-gauge-label">Финансовая подушка (Runway):</span>
+            <span class="runway-gauge-months num ${runwayTierClass}">${runwayMonthsFormatted}</span>
+          </div>
+          <div class="runway-gauge-badge ${runwayTierClass}">
+            <span class="runway-badge-dot"></span>
+            <span>${runwayStatus}</span>
+          </div>
+        </div>
+        <div class="runway-track-wrap">
+          <div class="runway-track">
+            <div class="runway-fill ${runwayTierClass}" style="width: ${runwayPercent}%;"></div>
+            <div class="runway-target-pip" style="left: 50%;" title="Минимальная норма: 3 месяца"></div>
+            <div class="runway-target-pip" style="left: 100%;" title="Золотой стандарт: 6 месяцев"></div>
+          </div>
+          <div class="runway-markers">
+            <span class="runway-marker">0 мес</span>
+            <span class="runway-marker center">3 мес (комфорт)</span>
+            <span class="runway-marker right">6+ мес (крепость)</span>
+          </div>
         </div>
       </div>
 
@@ -3233,6 +3401,20 @@ function renderHomeView() {
 
       <!-- Live parse preview bar -->
       <div id="quick-parse-preview" class="quick-parse-preview" style="display: none;"></div>
+
+      <!-- Quick Suggestion Chips (1-Tap Fast Logging) -->
+      <div class="quick-chips-row">
+        <span class="quick-chips-label">Быстрый ввод:</span>
+        <div class="quick-chips-scroll">
+          <button type="button" class="quick-chip" data-chip="Кофе 350">${icon("coffee", 13)} <span>Кофе 350</span></button>
+          <button type="button" class="quick-chip" data-chip="Продукты 2500">${icon("cart", 13)} <span>Продукты 2500</span></button>
+          <button type="button" class="quick-chip" data-chip="Такси 600">${icon("car", 13)} <span>Такси 600</span></button>
+          <button type="button" class="quick-chip" data-chip="Обед 850">${icon("utensils", 13)} <span>Обед 850</span></button>
+          <button type="button" class="quick-chip" data-chip="АЗС 2000">${icon("car", 13)} <span>АЗС 2000</span></button>
+          <button type="button" class="quick-chip" data-chip="Подписка 499">${icon("layers", 13)} <span>Подписка 499</span></button>
+          <button type="button" class="quick-chip" data-chip="Зарплата 85000">${icon("banknote", 13)} <span>Зарплата 85к</span></button>
+        </div>
+      </div>
 
       <!-- Express Smart Guide Explanation Banner -->
       <div class="express-guide-banner">
@@ -3755,7 +3937,7 @@ function renderAnalyticsView() {
 
         <div class="metric-popover" id="tt-net-cashflow">
           <div class="metric-popover-header">
-            <span class="popover-title">📈 Чистый денежный поток</span>
+            <span class="popover-title">${icon("trendUp", 14)} Чистый денежный поток</span>
             <button type="button" class="popover-close" data-close="tt-net-cashflow">✕</button>
           </div>
           <p class="popover-desc">Разница между всеми поступлениями и списаниями за выбранный период (Доходы − Расходы).</p>
@@ -3766,7 +3948,7 @@ function renderAnalyticsView() {
             ${pSavingsRate > 0 ? `<div class="p-row"><span>Норма сбережений:</span> <strong class="jade-text">${pSavingsRate}% сохранено в капитал</strong></div>` : ''}
           </div>
           <div class="popover-hint">
-            💡 Показывает, сколько свободных денег оседает в вашем капитале после всех трат периода.
+            Показывает, сколько свободных денег оседает в вашем капитале после всех трат периода.
           </div>
         </div>
       </div>
@@ -3788,7 +3970,7 @@ function renderAnalyticsView() {
 
         <div class="metric-popover" id="tt-burn-rate">
           <div class="metric-popover-header">
-            <span class="popover-title">🔥 Темп трат (Burn Rate)</span>
+            <span class="popover-title">${icon("activity", 14)} Темп трат (Burn Rate)</span>
             <button type="button" class="popover-close" data-close="tt-burn-rate">✕</button>
           </div>
           <p class="popover-desc">Среднесуточный расход за выбранный период (${daysCount} дн.). Показывает скорость выбытия денег и помогает вовремя заметить перерасход.</p>
@@ -3801,7 +3983,7 @@ function renderAnalyticsView() {
             ` : ''}
           </div>
           <div class="popover-hint">
-            💡 Показывает скорость сгорания денег в сутки. При текущем темпе ${dailyIncomeRate > 0 ? `вы сохраняете ${Math.max(0, 100 - Math.round((dailyVelocity / dailyIncomeRate) * 100))}% всех поступлений` : 'контролируйте запас капитала'}.
+            Показывает скорость сгорания денег в сутки. При текущем темпе ${dailyIncomeRate > 0 ? `вы сохраняете ${Math.max(0, 100 - Math.round((dailyVelocity / dailyIncomeRate) * 100))}% всех поступлений` : 'контролируйте запас капитала'}.
           </div>
         </div>
       </div>
@@ -3821,7 +4003,7 @@ function renderAnalyticsView() {
 
         <div class="metric-popover" id="tt-month-projection">
           <div class="metric-popover-header">
-            <span class="popover-title">💼 Остаток на конец месяца</span>
+            <span class="popover-title">${icon("briefcase", 14)} Остаток на конец месяца</span>
             <button type="button" class="popover-close" data-close="tt-month-projection">✕</button>
           </div>
           <p class="popover-desc">Ожидаемый баланс средств на ваших счетах к концу текущего месяца при сохранении текущей скорости трат (${money(dailyVelocity)}/день).</p>
@@ -3832,7 +4014,7 @@ function renderAnalyticsView() {
             <div class="p-row"><span>Всего расходов за месяц:</span> <strong>~${money(projectedMonthExp)}</strong></div>
           </div>
           <div class="popover-hint">
-            🛡 Консервативный расчет: намеренно не прибавляет гипотетические доходы, чтобы показать гарантированный финансовый остаток.
+            Консервативный расчет: намеренно не прибавляет гипотетические доходы, чтобы показать гарантированный финансовый остаток.
           </div>
         </div>
       </div>
@@ -3852,7 +4034,7 @@ function renderAnalyticsView() {
 
         <div class="metric-popover" id="tt-financial-status">
           <div class="metric-popover-header">
-            <span class="popover-title">👑 Финансовый статус</span>
+            <span class="popover-title">${icon("crown", 14)} Финансовый статус</span>
             <button type="button" class="popover-close" data-close="tt-financial-status">✕</button>
           </div>
           <p class="popover-desc">Ваш инвестиционный ранг по методологии FinKaif OS. Растет по мере накопления капитала и достижения целей.</p>
@@ -3862,7 +4044,7 @@ function renderAnalyticsView() {
             <div class="p-row"><span>Уровень капитала:</span> <strong>${userRank.desc}</strong></div>
           </div>
           <div class="popover-hint">
-            🏆 Пополняйте цели и контролируйте расходы, чтобы повышать свой статус в системе.
+            Пополняйте цели и контролируйте расходы, чтобы повышать свой статус в системе.
           </div>
         </div>
       </div>
@@ -4218,14 +4400,18 @@ function renderTransactionsView() {
   const availableMonths = Object.keys(monthMap).sort((a, b) => b.localeCompare(a));
 
   const filtered = data.transactions.filter(t => {
-    if (txFilter !== 'all' && t.type !== txFilter) return false;
+    if (txFilter === 'expense' && t.type !== 'expense') return false;
+    if (txFilter === 'income' && t.type !== 'income') return false;
+    if (txFilter === 'large' && Number(t.amount) < 10000) return false;
+    if (txFilter === 'today' && getTxIso(t) !== toDateIso(getMskDate())) return false;
+    if (txFilter === 'subs' && (t.category !== 'Подписки' && !t.is_recurring)) return false;
     if (txMonthFilter !== 'all') {
       const iso = getTxIso(t);
       if (!iso || !iso.startsWith(txMonthFilter)) return false;
     }
     if (txSearch) {
       const q = txSearch.toLowerCase();
-      return (t.category || '').toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q);
+      return (t.category || '').toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q) || String(t.amount).includes(q);
     }
     return true;
   });
@@ -4305,13 +4491,15 @@ function renderTransactionsView() {
     <div class="filter-bar">
       <div class="filter-tabs">
         <button class="filter-tab ${txFilter === 'all' ? 'active' : ''}" data-filter="all">Все записи</button>
-        <button class="filter-tab ${txFilter === 'expense' ? 'active' : ''}" data-filter="expense">Расходы</button>
-        <button class="filter-tab ${txFilter === 'income' ? 'active' : ''}" data-filter="income">Доходы</button>
+        <button class="filter-tab ${txFilter === 'expense' ? 'active' : ''}" data-filter="expense"><span class="status-dot coral"></span> Расходы</button>
+        <button class="filter-tab ${txFilter === 'income' ? 'active' : ''}" data-filter="income"><span class="status-dot jade"></span> Доходы</button>
+        <button class="filter-tab ${txFilter === 'large' ? 'active' : ''}" data-filter="large">${icon("sparkle", 12)} Крупные (>10к)</button>
+        <button class="filter-tab ${txFilter === 'today' ? 'active' : ''}" data-filter="today">${icon("calendar", 12)} Сегодня</button>
       </div>
 
       <div class="search-box">
         ${icon('search', 14)}
-        <input id="tx-search-input" placeholder="Поиск по категории или описанию..." value="${esc(txSearch)}">
+        <input id="tx-search-input" placeholder="Поиск по категории, описанию или сумме..." value="${esc(txSearch)}">
         ${txSearch ? `<button class="btn-icon" id="btn-clear-search" style="padding: 2px;">${icon('close', 12)}</button>` : ''}
       </div>
     </div>
@@ -4339,7 +4527,7 @@ function renderTransactionsView() {
         `;
       }).join('') : `
         <div style="text-align: center; padding: 50px 20px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
-          <div style="font-size: 32px; margin-bottom: 12px;">💳</div>
+          <div style="display: flex; justify-content: center; margin-bottom: 12px;">${icon("creditCard", 36)}</div>
           <div style="color: #FFFFFF; font-weight: 700; font-size: 16px; margin-bottom: 6px;">Операции пока не добавлены</div>
           <p style="color: var(--text-secondary); font-size: 13px; max-width: 440px; margin: 0 auto 18px;">Вы можете быстро загрузить выписку из банка файлом (.CSV, .TXT, .TSV, .JSON) или внести операцию вручную.</p>
           <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -4415,6 +4603,9 @@ function renderTxCard(t) {
           ${isInc ? '+' : '−'}${money(t.amount)}
         </div>
         <div class="tx-actions">
+          <button class="tx-duplicate-btn" data-id="${t.id}" title="Дублировать запись сегодняшним числом (в 1 клик)">
+            ${icon('copy', 13)}
+          </button>
           <button class="tx-edit-btn" data-id="${t.id}" title="Редактировать запись">
             ${icon('edit', 13)}
           </button>
@@ -4480,11 +4671,23 @@ function renderBudgetsView() {
       
       <!-- Category Quick Chips -->
       <div class="budget-quick-chips">
-        <span class="budget-quick-lbl">Быстрый выбор:</span>
+        <span class="budget-quick-lbl">Быстрый выбор категории:</span>
         <div class="budget-chips-stream">
           ${allAvailableCats.slice(0, 10).map(c => `
             <button type="button" class="budget-chip" data-cat="${esc(c)}">
               ${getCategoryIcon(c)} <span>${esc(c)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Amount Preset Chips -->
+      <div class="budget-quick-chips" style="margin-top: 6px;">
+        <span class="budget-quick-lbl">Рекомендуемая сумма лимита:</span>
+        <div class="budget-chips-stream">
+          ${[5000, 10000, 20000, 35000, 50000, 80000].map(amt => `
+            <button type="button" class="budget-amt-chip" data-amt="${amt}">
+              ${money(amt)}
             </button>
           `).join('')}
         </div>
@@ -4537,16 +4740,20 @@ function renderBudgetsView() {
                 <div class="budget-cat-icon">${catIcon}</div>
                 <div>
                   <div class="budget-cat-title">${esc(b.category)}</div>
-                  <div style="font-size: 11px; color: var(--text-muted);">Месячный лимит: ${money(lim)}</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">Месячный лимит: <strong class="num" style="color: #FFFFFF;">${money(lim)}</strong></div>
                 </div>
               </div>
-              <button class="budget-delete-btn" data-id="${b.id}" title="Удалить лимит">
-                ${icon('trash', 12)}
-              </button>
+              <div class="budget-card-actions">
+                <button type="button" class="budget-step-inline-btn" data-category="${esc(b.category)}" data-step="-1000" title="Уменьшить лимит на 1 000 ₽">−1к</button>
+                <button type="button" class="budget-step-inline-btn" data-category="${esc(b.category)}" data-step="1000" title="Увеличить лимит на 1 000 ₽">+1к</button>
+                <button class="budget-delete-btn" data-id="${b.id}" title="Удалить лимит">
+                  ${icon('trash', 12)}
+                </button>
+              </div>
             </div>
 
             <div class="progress-bar-track" style="margin: 14px 0 10px; position: relative;">
-              <div class="progress-bar-fill ${isExceeded ? 'danger' : (pct > 80 ? 'warning' : '')}" style="width: ${Math.max(0, Math.min(100, pct))}%; --target-width: ${Math.max(0, Math.min(100, pct))}%;"></div>
+              <div class="progress-bar-fill ${isExceeded ? 'danger' : (pct >= 75 ? 'warning' : 'jade')}" style="width: ${Math.max(0, Math.min(100, pct))}%; --target-width: ${Math.max(0, Math.min(100, pct))}%;"></div>
               <div class="budget-day-marker" style="left: ${((elapsedDays / daysInMonth) * 100).toFixed(1)}%;" title="Сегодня ${elapsedDays}-й день из ${daysInMonth}"></div>
             </div>
 
@@ -4566,13 +4773,13 @@ function renderBudgetsView() {
             <div class="budget-pace-box">
               ${isExceeded ? `
                 <span class="badge-tag coral" style="width: 100%; justify-content: center;">
-                  ⚠️ Превышение лимита на ${money(Math.abs(rem))}!
+                  <span class="status-dot coral"></span> Превышение лимита на ${money(Math.abs(rem))}!
                 </span>
               ` : `
                 <div style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
                   <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
                     <span class="badge-tag ${actualDaily <= plannedDaily ? 'jade' : 'amber'}">
-                      ${actualDaily <= plannedDaily ? `🟢 Темп в норме (−${money(Math.abs(paceDelta))} от графика)` : `🟡 Опережение темпа (+${money(paceDelta)} от графика)`}
+                      ${actualDaily <= plannedDaily ? `<span class=\"status-dot jade\"></span> Темп в норме (−${money(Math.abs(paceDelta))} от графика)` : `<span class=\"status-dot amber\"></span> Опережение темпа (+${money(paceDelta)} от графика)`}
                     </span>
                     <span style="color: var(--text-muted); font-size: 11px;">план: ${money(plannedDaily)}/дн.</span>
                   </div>
@@ -4631,7 +4838,19 @@ function renderGoalsView() {
 
     <!-- Add Goal Form -->
     <div class="create-card">
-      <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 12px;">Создать новую цель</h3>
+      <h3 style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px;">Создать новую цель</h3>
+      
+      <!-- Popular Goal Suggestion Chips -->
+      <div class="budget-quick-chips" style="margin-bottom: 12px;">
+        <span class="budget-quick-lbl">Популярные цели:</span>
+        <div class="budget-chips-stream">
+          <button type="button" class="goal-preset-chip" data-name="Подушка безопасности" data-target="300000">${icon("shield", 13)} <span>Подушка (300к)</span></button>
+          <button type="button" class="goal-preset-chip" data-name="Отпуск мечты" data-target="150000">${icon("plane", 13)} <span>Отпуск (150к)</span></button>
+          <button type="button" class="goal-preset-chip" data-name="Новый ноутбук" data-target="200000">${icon("laptop", 13)} <span>Ноутбук (200к)</span></button>
+          <button type="button" class="goal-preset-chip" data-name="Автомобиль" data-target="1500000">${icon("car", 13)} <span>Авто (1.5м)</span></button>
+        </div>
+      </div>
+
       <form id="goal-form" class="goal-form-grid">
         <input class="form-input" id="goal-name" placeholder="Название (напр. Подушка безопасности)" required>
         <div class="number-stepper-wrap">
@@ -4670,13 +4889,21 @@ function renderGoalsView() {
         const target = Number(g.target_amount) || 1;
         const pct = Math.min(100, Math.round((saved / target) * 100));
         const rem = Math.max(0, target - saved);
+        const isCompleted = pct >= 100;
+        const rec6mo = rem > 0 ? Math.round(rem / 6) : 0;
+        const rec12mo = rem > 0 ? Math.round(rem / 12) : 0;
 
         return `
-          <div class="goal-card">
+          <div class="goal-card ${isCompleted ? 'goal-card-completed' : ''}">
             <div class="goal-head">
               <div>
-                <div class="goal-title">${esc(g.name)}</div>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">${pct}% от цели</div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span class="goal-title">${esc(g.name)}</span>
+                  ${isCompleted ? `<span class="goal-completed-badge">${icon("checkCircle", 12)} Достигнута!</span>` : ''}
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                  <strong class="num" style="color: ${isCompleted ? 'var(--accent-emerald)' : 'var(--accent-jade)'};">${pct}%</strong> от цели ${rem > 0 ? `• осталось <span class="num">${money(rem)}</span>` : ''}
+                </div>
               </div>
               <button class="goal-delete-btn" data-id="${g.id}" title="Удалить цель">
                 ${icon('trash', 12)}
@@ -4684,7 +4911,7 @@ function renderGoalsView() {
             </div>
 
             <div class="progress-bar-track" style="margin: 16px 0 12px;">
-              <div class="progress-bar-fill" style="width: ${Math.max(0, Math.min(100, pct))}%; --target-width: ${Math.max(0, Math.min(100, pct))}%;"></div>
+              <div class="progress-bar-fill ${isCompleted ? 'completed' : 'jade'}" style="width: ${Math.max(0, Math.min(100, pct))}%; --target-width: ${Math.max(0, Math.min(100, pct))}%;"></div>
             </div>
 
             <div class="goal-meta-row num">
@@ -4698,10 +4925,24 @@ function renderGoalsView() {
               </div>
             </div>
 
-            <!-- Quick Add to Goal -->
+            ${rem > 0 ? `
+              <div class="goal-plan-pill">
+                <span><span class="status-dot jade"></span> Темп: ~<strong>${money(rec6mo)}</strong>/мес (6 мес) • ~<strong>${money(rec12mo)}</strong>/мес (1 год)</span>
+              </div>
+            ` : ''}
+
+            <!-- 1-Click Instant Deposit Chips -->
+            <div class="goal-instant-chips">
+              <span class="goal-instant-lbl">Быстро +:</span>
+              <button type="button" class="goal-instant-chip" data-id="${g.id}" data-amount="1000" title="Пополнить цель на 1 000 ₽">+1 000 ₽</button>
+              <button type="button" class="goal-instant-chip" data-id="${g.id}" data-amount="5000" title="Пополнить цель на 5 000 ₽">+5 000 ₽</button>
+              <button type="button" class="goal-instant-chip" data-id="${g.id}" data-amount="10000" title="Пополнить цель на 10 000 ₽">+10 000 ₽</button>
+            </div>
+
+            <!-- Custom Add to Goal -->
             <div class="goal-add-strip">
               <div class="number-stepper-wrap" style="flex: 1;">
-                <input class="form-input num goal-topup-input" data-id="${g.id}" type="number" min="1" step="any" placeholder="Сумма пополнения...">
+                <input class="form-input num goal-topup-input" data-id="${g.id}" type="number" min="1" step="any" placeholder="Произвольная сумма...">
                 <div class="input-spin-steppers">
                   <button type="button" class="spin-step-btn" data-step="500" title="Увеличить на 500 ₽" aria-label="Увеличить">
                     <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5L4 2L7 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -4712,7 +4953,7 @@ function renderGoalsView() {
                 </div>
               </div>
               <button class="btn-primary goal-topup-btn" data-id="${g.id}" style="padding: 0 14px; height: 36px; font-size: 12px;">
-                + Отложить
+                + Пополнить
               </button>
             </div>
           </div>
@@ -4734,10 +4975,10 @@ function renderGoalsView() {
 function renderAssistantView() {
   const finScore = calculateFinScore();
   const thinkingPhases = [
-    '🔍 Считываю структуру транзакций и баланс...',
-    '⚡ Рассчитываю финансовую скорость (Burn Rate)...',
-    '🔮 Моделирую сценарий сложного процента...',
-    '🧠 Синтезирую персональную стратегию...'
+    'Считываю структуру транзакций и баланс...',
+    'Рассчитываю финансовую скорость (Burn Rate)...',
+    'Моделирую сценарий сложного процента...',
+    'Синтезирую персональную стратегию...'
   ];
 
   // Wealth simulator calculation
@@ -4823,7 +5064,7 @@ function renderAssistantView() {
       <div class="wealth-sim-card" id="wealth-sim-card">
         <div class="wealth-sim-head">
           <div class="wealth-sim-title-group">
-            <span class="wealth-sim-icon">⚡</span>
+            <span class="wealth-sim-icon">${icon("sparkle", 16)}</span>
             <div>
               <h3 class="wealth-sim-title">Интерактивный симулятор сложного процента</h3>
               <p class="wealth-sim-desc">Оцените силу непрерывного инвестиционного потока и сложного процента во времени.</p>
@@ -4900,7 +5141,7 @@ function renderAssistantView() {
               <span><span class="legend-dot profit"></span> Доход от % (${Math.round((simProfit / (simTotal || 1)) * 100)}%)</span>
             </div>
             <button class="btn-ask-scenario" id="btn-ask-scenario" data-prompt="Рассчитай подробно инвест-план: стартовый капитал ${simState.initial} руб, пополнение ${simState.monthly} руб в месяц на ${simState.years} лет под ${simState.rate}% годовых">
-              <span>✨</span> <span>Спросить ассистента об этом плане</span>
+              <span>${icon("sparkle", 13)}</span> <span>Спросить ассистента об этом плане</span>
             </button>
           </div>
         </div>
@@ -5032,6 +5273,25 @@ function renderAssistantView() {
 
         <!-- Prominent Elevated Chat Command Capsule -->
         <div class="chat-input-container">
+          <!-- 1-Tap Quick Action Chips Stream right above input -->
+          <div class="chat-quick-strip">
+            <button type="button" class="chat-quick-chip" data-prompt="Где я могу сэкономить? Найди скрытые утечки">
+              <span>${icon("sparkle", 12)}</span> <span>Где сэкономить?</span>
+            </button>
+            <button type="button" class="chat-quick-chip" data-prompt="Какой прогноз расходов до конца месяца?">
+              <span>${icon("trendUp", 12)}</span> <span>Прогноз на месяц</span>
+            </button>
+            <button type="button" class="chat-quick-chip" data-prompt="Сколько мне отложить в цели в этом месяце?">
+              <span>${icon("target", 12)}</span> <span>Сколько в цели?</span>
+            </button>
+            <button type="button" class="chat-quick-chip" data-prompt="Оцени мой темп трат (Burn Rate)">
+              <span>${icon("activity", 12)}</span> <span>Burn Rate</span>
+            </button>
+            <button type="button" class="chat-quick-chip" data-prompt="На сколько месяцев мне хватит подушки безопасности?">
+              <span>${icon("shield", 12)}</span> <span>Подушка</span>
+            </button>
+          </div>
+
           <form class="chat-input-bar" id="assistant-form">
             <button type="button" class="btn-voice-assistant" id="btn-voice-assistant" title="Голосовой ввод: нажмите и говорите" aria-label="Голосовой ввод">
               ${icon('mic', 16)}
@@ -5072,14 +5332,14 @@ function renderModal() {
 
         <!-- Category Chips -->
         <div class="cat-chips-row" style="flex-wrap: wrap;">
-          <span class="cat-chip selected" data-cat="Продукты" data-type="expense">🛒 Продукты</span>
-          <span class="cat-chip" data-cat="Рестораны" data-type="expense">🍽️ Рестораны</span>
-          <span class="cat-chip" data-cat="Кафе" data-type="expense">☕ Кафе</span>
-          <span class="cat-chip" data-cat="Транспорт" data-type="expense">🚗 Транспорт</span>
-          <span class="cat-chip" data-cat="Подписки" data-type="expense">📱 Подписки</span>
-          <span class="cat-chip" data-cat="Здоровье" data-type="expense">🏥 Здоровье</span>
-          <span class="cat-chip" data-cat="Зарплата" data-type="income">💰 Зарплата</span>
-          <span class="cat-chip" data-cat="Дивиденды" data-type="income">📈 Дивиденды</span>
+          <span class="cat-chip selected" data-cat="Продукты" data-type="expense">${icon("cart", 13)} Продукты</span>
+          <span class="cat-chip" data-cat="Рестораны" data-type="expense">${icon("utensils", 13)} Рестораны</span>
+          <span class="cat-chip" data-cat="Кафе" data-type="expense">${icon("coffee", 13)} Кафе</span>
+          <span class="cat-chip" data-cat="Транспорт" data-type="expense">${icon("car", 13)} Транспорт</span>
+          <span class="cat-chip" data-cat="Подписки" data-type="expense">${icon("layers", 13)} Подписки</span>
+          <span class="cat-chip" data-cat="Здоровье" data-type="expense">${icon("heart", 13)} Здоровье</span>
+          <span class="cat-chip" data-cat="Зарплата" data-type="income">${icon("banknote", 13)} Зарплата</span>
+          <span class="cat-chip" data-cat="Дивиденды" data-type="income">${icon("trendUp", 13)} Дивиденды</span>
           ${userCategories.map(c => `<span class="cat-chip custom" data-cat="${esc(c)}" data-type="expense">${esc(c)}</span>`).join('')}
           <button type="button" class="cat-chip-add-btn" id="btn-add-custom-cat" title="Создать свою категорию">+ Своя категория</button>
         </div>
@@ -5089,18 +5349,25 @@ function renderModal() {
         </datalist>
 
         <form id="tx-modal-form">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div class="form-group">
-              <label class="form-label">Тип</label>
-              <select class="form-select" id="form-type">
-                <option value="expense">Расход (−)</option>
-                <option value="income">Поступление (+)</option>
-              </select>
+          <div class="form-group" style="margin-bottom: 12px;">
+            <div class="modal-type-segmented" id="modal-type-segmented">
+              <button type="button" class="segmented-type-btn active" data-type="expense" id="seg-btn-expense">
+                <span class="status-dot coral"></span>
+                <span>Расход</span>
+              </button>
+              <button type="button" class="segmented-type-btn" data-type="income" id="seg-btn-income">
+                <span class="status-dot jade"></span>
+                <span>Поступление</span>
+              </button>
             </div>
-            <div class="form-group">
-              <label class="form-label">Категория</label>
-              <input class="form-input" id="form-category" list="tx-categories-datalist" value="Продукты" placeholder="Напр. Кафе" required>
-            </div>
+            <select class="form-select" id="form-type" style="display: none;">
+              <option value="expense" selected>Расход</option>
+              <option value="income">Поступление</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label">Категория</label>
+            <input class="form-input" id="form-category" list="tx-categories-datalist" value="Продукты" placeholder="Напр. Кафе" required>
           </div>
 
           <!-- Swiss Hero Amount Row -->
@@ -5141,10 +5408,10 @@ function renderModal() {
             </div>
             <input class="form-input" id="form-desc" placeholder="Например: Супермаркет, возврат долга, подарок...">
             <div class="desc-quick-tags" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;">
-              <button type="button" class="desc-tag-pill" data-text="Подарок">🎁 Подарок</button>
-              <button type="button" class="desc-tag-pill" data-text="Возврат долга">🤝 Возврат долга</button>
-              <button type="button" class="desc-tag-pill" data-text="На отпуск">🏖️ На отпуск</button>
-              <button type="button" class="desc-tag-pill" data-text="Премия">⭐ Премия</button>
+              <button type="button" class="desc-tag-pill" data-text="Подарок">${icon("gift", 12)} Подарок</button>
+              <button type="button" class="desc-tag-pill" data-text="Возврат долга">${icon("wallet", 12)} Возврат долга</button>
+              <button type="button" class="desc-tag-pill" data-text="На отпуск">${icon("plane", 12)} На отпуск</button>
+              <button type="button" class="desc-tag-pill" data-text="Премия">${icon("sparkle", 12)} Премия</button>
             </div>
           </div>
 
@@ -5174,14 +5441,14 @@ function renderProfileModal() {
   const currentBal = data.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
   const rank = getFinancialRank(currentBal, data.goals);
 
-  const emojiList = ['🦁', '⚡', '💎', '🦅', '🚀', '👑', '🧘', '💼', '🎯', '🔥', '🐉', '🏆'];
+  // Swiss minimalist icons system
 
   return `
     <div id="profile-modal" class="modal-backdrop" style="display: ${profileModalOpen ? 'flex' : 'none'};">
       <div class="modal-card profile-dialog">
         <div class="modal-header">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 18px;">⚙️</span>
+            <span>${icon("settings", 18)}</span>
             <h3 class="modal-title">Профиль и персонализация</h3>
           </div>
           <button class="btn-icon" id="btn-close-profile">${icon('close', 16)}</button>
@@ -5196,7 +5463,7 @@ function renderProfileModal() {
             <div class="profile-name-title">${esc(userName)}</div>
             <div class="profile-email-sub">${esc(me?.email || 'investor@finkaif.ru')}</div>
             <div class="profile-rank-badge">
-              <span>${rank.badge}</span>
+              <span>${icon(rank.badge, 14)}</span>
               <span>${rank.title}</span>
             </div>
           </div>
@@ -5399,7 +5666,7 @@ function renderMobileBottomBar() {
             </div>
           </button>
           <button class="mobile-sheet-item" id="mobile-sheet-profile-btn">
-            <div class="mobile-sheet-item-icon">⚙️</div>
+            <div class="mobile-sheet-item-icon">${icon("settings", 18)}</div>
             <div class="mobile-sheet-item-info">
               <span class="mobile-sheet-item-name">Профиль и настройки</span>
               <span class="mobile-sheet-item-sub">Аватар, валюта, аккаунт</span>
@@ -5423,7 +5690,7 @@ function renderPaydayModal() {
     <div id="payday-modal" class="modal-backdrop" style="display: flex;">
       <div class="modal-card payday-card">
         <div class="payday-header">
-          <div class="payday-confetti-star">🎉</div>
+          <div class="payday-confetti-star">${icon("sparkles", 32)}</div>
           <h3 class="payday-title">Отличное поступление!</h3>
           <div class="payday-amt-badge num">+${new Intl.NumberFormat('ru-RU').format(amt)} ₽</div>
           <p class="payday-subtitle">Время защитить доход по формуле <strong>50 / 30 / 20</strong> — «Сначала заплати себе».</p>
@@ -5431,7 +5698,7 @@ function renderPaydayModal() {
 
         <div class="payday-split-grid">
           <div class="payday-split-item box-savings">
-            <div class="payday-split-icon">🛡️</div>
+            <div class="payday-split-icon">${icon("shield", 20)}</div>
             <div class="payday-split-content">
               <div class="payday-split-label">20% — Сбережения и цели</div>
               <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(savings)} ₽</div>
@@ -5440,7 +5707,7 @@ function renderPaydayModal() {
           </div>
 
           <div class="payday-split-item box-needs">
-            <div class="payday-split-icon">🏠</div>
+            <div class="payday-split-icon">${icon("home", 20)}</div>
             <div class="payday-split-content">
               <div class="payday-split-label">50% — Базовые расходы</div>
               <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(needs)} ₽</div>
@@ -5449,7 +5716,7 @@ function renderPaydayModal() {
           </div>
 
           <div class="payday-split-item box-wants">
-            <div class="payday-split-icon">✨</div>
+            <div class="payday-split-icon">${icon("sparkle", 20)}</div>
             <div class="payday-split-content">
               <div class="payday-split-label">30% — Свободный кайф</div>
               <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(wants)} ₽</div>
@@ -5482,11 +5749,11 @@ function renderPaydayModal() {
 function renderFinScoreModal() {
   const fs = calculateFinScore();
   const tips = [];
-  if (fs.sCushion < 20) tips.push('🎯 Пополните цель накоплений, чтобы увеличить подушку безопасности до 3–6 месяцев.');
-  if (fs.sBudgets < 20) tips.push('📊 Установите лимиты бюджета на основные категории (Продукты, Кафе) для контроля трат.');
-  if (fs.sSavings < 15) tips.push('📈 Направляйте хотя бы 15–20% от каждого дохода в сбережения.');
-  if (fs.bal < 0) tips.push('⚠️ Расходы превысили доходы — сократите необязательные траты до восстановления баланса.');
-  if (tips.length === 0) tips.push('🌟 Ваши показатели идеальны! Капитал защищен, баланс положителен, дисциплина на высоте.');
+  if (fs.sCushion < 20) tips.push('Пополните цель накоплений, чтобы увеличить подушку безопасности до 3–6 месяцев.');
+  if (fs.sBudgets < 20) tips.push('Установите лимиты бюджета на основные категории (Продукты, Кафе) для контроля трат.');
+  if (fs.sSavings < 15) tips.push('Направляйте хотя бы 15–20% от каждого дохода в сбережения.');
+  if (fs.bal < 0) tips.push('Расходы превысили доходы — сократите необязательные траты до восстановления баланса.');
+  if (tips.length === 0) tips.push('Ваши показатели на высоте! Капитал защищен, баланс положителен, дисциплина в норме.');
 
   return `
     <div id="finscore-modal" class="modal-backdrop" style="display: ${finscoreModalOpen ? 'flex' : 'none'};">
@@ -5523,7 +5790,7 @@ function renderFinScoreModal() {
           <div class="finscore-breakdown-list">
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
-                <span class="factor-name">🛡️ Подушка безопасности (Runway)</span>
+                <span class="factor-name">${icon("shield", 13)} Подушка безопасности (Runway)</span>
                 <span class="factor-pts num">${fs.sCushion} / 25 б.</span>
               </div>
               <div class="finscore-progress-bar">
@@ -5534,7 +5801,7 @@ function renderFinScoreModal() {
 
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
-                <span class="factor-name">📈 Норма сбережений (Savings Rate)</span>
+                <span class="factor-name">${icon("trendUp", 13)} Норма сбережений (Savings Rate)</span>
                 <span class="factor-pts num">${fs.sSavings} / 25 б.</span>
               </div>
               <div class="finscore-progress-bar">
@@ -5545,7 +5812,7 @@ function renderFinScoreModal() {
 
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
-                <span class="factor-name">📊 Контроль лимитов бюджета</span>
+                <span class="factor-name">${icon("chart", 13)} Контроль лимитов бюджета</span>
                 <span class="factor-pts num">${fs.sBudgets} / 25 б.</span>
               </div>
               <div class="finscore-progress-bar">
@@ -5556,7 +5823,7 @@ function renderFinScoreModal() {
 
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
-                <span class="factor-name">💎 Профицит и чистота капитала</span>
+                <span class="factor-name">${icon("gem", 13)} Профицит и чистота капитала</span>
                 <span class="factor-pts num">${fs.sCapital} / 25 б.</span>
               </div>
               <div class="finscore-progress-bar">
@@ -5568,7 +5835,7 @@ function renderFinScoreModal() {
 
           <!-- Recommendations Box -->
           <div class="finscore-tips-box">
-            <div class="finscore-tips-title">💡 Персональный совет ментора:</div>
+            <div class="finscore-tips-title">${icon("sparkle", 14)} Персональный совет ментора:</div>
             <ul class="finscore-tips-list">
               ${tips.map(t => `<li>${esc(t)}</li>`).join('')}
             </ul>
@@ -5691,6 +5958,9 @@ function switchTab(newTab, options = {}) {
 
   const performSwap = () => {
     viewContainer.innerHTML = nextHtml;
+    viewContainer.classList.remove('view-enter-active');
+    void viewContainer.offsetWidth; // Force micro reflow
+    viewContainer.classList.add('view-enter-active');
     bindInteractiveEvents();
     if (!options.keepScroll) {
       window.scrollTo({ top: 0, behavior: 'instant' });
@@ -6040,7 +6310,7 @@ function bindInteractiveEvents() {
                 currency: profile.currency
               })
             });
-            showToast('✅ Фото профиля сохранено в облаке!', 'success');
+            showToast('Фото профиля сохранено в облаке', 'success');
           } catch (err) {
             console.warn('Avatar auto-sync notice:', err.message);
           }
@@ -6130,7 +6400,7 @@ function bindInteractiveEvents() {
           localStorage.setItem('finkaif_currency', profile.currency);
         } catch (_) {}
         updateMastheadDynamicData();
-        showToast('✅ Профиль сохранён и синхронизирован со всеми устройствами!', 'success');
+        showToast('Профиль сохранён и синхронизирован со всеми устройствами', 'success');
       } catch (err) {
         showToast('Ошибка сохранения профиля: ' + err.message, 'error');
       }
@@ -6150,7 +6420,7 @@ function bindInteractiveEvents() {
         confirmText: 'Выйти',
         cancelText: 'Отмена',
         danger: true,
-        icon: '🚪'
+        icon: 'logout'
       });
       if (confirmed) {
         await api('auth/logout', { method: 'POST' }).catch(() => {});
@@ -6293,10 +6563,10 @@ function bindInteractiveEvents() {
       const name = await showPromptDialog({
         title: 'Новая категория',
         message: 'Введите название для персональной категории расходов или доходов:',
-        placeholder: 'Например: 🐾 Питомцы, 🎮 Игры, 📚 Обучение',
+        placeholder: 'Например: Питомцы, Игры, Обучение',
         confirmText: 'Создать',
         cancelText: 'Отмена',
-        icon: '✨'
+        icon: 'sparkle'
       });
       if (name && name.trim()) {
         const formatted = addCustomCategory(name.trim());
@@ -6346,7 +6616,7 @@ function bindInteractiveEvents() {
     if (!center) return;
     if (cat) {
       center.innerHTML = `
-        <div class="donut-center-icon">${icon || '💳'}</div>
+        <div class="donut-center-icon">${icon || icon('creditCard', 20)}</div>
         <div class="donut-center-amt num">${money(amt)}</div>
         <div class="donut-center-cat" title="${esc(cat)}">${esc(cat)}</div>
         <div class="donut-center-badge">${pct}% трат</div>
@@ -6932,7 +7202,7 @@ function bindInteractiveEvents() {
     const budget = (data.budgets || []).find(b => b.category.toLowerCase() === cat.toLowerCase());
     if (!budget) {
       banner.className = 'tx-budget-banner muted';
-      banner.innerHTML = `<span>ℹ️ По категории «${esc(cat)}» лимит не установлен</span>`;
+      banner.innerHTML = `<span><span class="status-dot blue"></span> По категории «${esc(cat)}» лимит не установлен</span>`;
       banner.style.display = 'block';
       return;
     }
@@ -6950,7 +7220,7 @@ function bindInteractiveEvents() {
       const overspend = newTotal - lim;
       banner.className = 'tx-budget-banner danger';
       banner.innerHTML = `
-        <div style="font-weight: 700;">⚠️ Внимание! Превышение лимита бюджета</div>
+        <div style="font-weight: 700; display: flex; align-items: center; gap: 6px;"><span class="status-dot coral"></span> Внимание! Превышение лимита бюджета</div>
         <div style="font-size: 11.5px; margin-top: 2px;">
           Лимит: ${money(lim)} • Уже потрачено: ${money(spentThisMonth)}<br>
           С учетом этой операции (${money(amt)}) превышение составит <strong class="num" style="color: #FFF;">${money(overspend)}</strong>!
@@ -6960,7 +7230,7 @@ function bindInteractiveEvents() {
     } else if (newTotal >= lim * 0.8) {
       banner.className = 'tx-budget-banner warning';
       banner.innerHTML = `
-        <div style="font-weight: 700;">⚡ Внимание: приближение к лимиту</div>
+        <div style="font-weight: 700; display: flex; align-items: center; gap: 6px;"><span class="status-dot amber"></span> Внимание: приближение к лимиту</div>
         <div style="font-size: 11.5px; margin-top: 2px;">
           Лимит: ${money(lim)} • Останется всего: <strong class="num" style="color: #FFF;">${money(lim - newTotal)}</strong> (${Math.round((newTotal / lim) * 100)}% лимита).
         </div>
@@ -6997,6 +7267,7 @@ function bindInteractiveEvents() {
         modalTitle.innerHTML = `Редактирование операции <span class="tx-badge-editing">Изменение</span>`;
       }
       if (typeSelect) typeSelect.value = txOrType.type || 'expense';
+      $('.segmented-type-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-type') === (txOrType.type || 'expense')));
       if (catInput) catInput.value = txOrType.category || '';
       if (amtInput) amtInput.value = profile.currency === 'RUB' ? (txOrType.amount || '') : Number(convertFromRub(txOrType.amount).toFixed(2));
       if (dateInput) dateInput.value = getTxIso(txOrType);
@@ -7015,6 +7286,7 @@ function bindInteractiveEvents() {
       const type = typeof txOrType === 'string' ? txOrType : 'expense';
       if (modalTitle) modalTitle.innerText = 'Новая операция';
       if (typeSelect) typeSelect.value = type;
+      $('.segmented-type-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-type') === type));
       if (catInput) catInput.value = type === 'income' ? 'Зарплата' : 'Продукты';
       if (amtInput) amtInput.value = '';
       if (dateInput) dateInput.value = toDateIso(getMskDate());
@@ -7115,7 +7387,7 @@ function bindInteractiveEvents() {
         confirmText: 'Удалить операцию',
         cancelText: 'Отмена',
         danger: true,
-        icon: '🗑️'
+        icon: 'trash'
       });
       if (confirmed) {
         try {
@@ -7135,7 +7407,7 @@ function bindInteractiveEvents() {
   // Category Chips inside Modal
   $$('.cat-chip').forEach(chip => {
     chip.onclick = () => {
-      $$('.cat-chip').forEach(c => c.classList.remove('selected'));
+      $('.cat-chip').forEach(c => c.classList.remove('selected'));
       chip.classList.add('selected');
       const cat = chip.getAttribute('data-cat');
       const catType = chip.getAttribute('data-type');
@@ -7143,6 +7415,9 @@ function bindInteractiveEvents() {
       const typeSelect = document.getElementById('form-type');
       if (catInput) catInput.value = cat;
       if (typeSelect) typeSelect.value = catType;
+      $('.segmented-type-btn').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-type') === catType);
+      });
       updateModalBudgetAlert();
     };
   });
@@ -7178,6 +7453,21 @@ function bindInteractiveEvents() {
     };
   }
   if (modalTypeSelect) modalTypeSelect.onchange = updateModalBudgetAlert;
+
+  
+  // Segmented Type Switcher in Modal
+  $$('.segmented-type-btn').forEach(btn => {
+    btn.onclick = () => {
+      const type = btn.getAttribute('data-type');
+      $$('.segmented-type-btn').forEach(b => b.classList.toggle('active', b === btn));
+      const typeSelect = document.getElementById('form-type');
+      if (typeSelect) {
+        typeSelect.value = type;
+        typeSelect.dispatchEvent(new Event('change'));
+      }
+      updateModalBudgetAlert();
+    };
+  });
 
   // Quick Amount Nudges (+100, +500, +1000, +5000)
   $$('.tx-nudge-btn').forEach(btn => {
@@ -7239,7 +7529,7 @@ function bindInteractiveEvents() {
               confirmText: 'Зафиксировать расход',
               cancelText: 'Отмена',
               danger: true,
-              icon: '⚠️'
+              icon: 'alertTriangle'
             });
             if (!ok) return;
           }
@@ -7369,7 +7659,7 @@ function bindInteractiveEvents() {
         confirmText: `Удалить ${count} записей`,
         cancelText: 'Отмена',
         danger: true,
-        icon: '🗑️'
+        icon: 'trash'
       });
 
       if (confirmed) {
@@ -7409,7 +7699,7 @@ function bindInteractiveEvents() {
   // Click on Transaction Card to Edit or Toggle Select
   $$('.tx-card').forEach(card => {
     card.onclick = e => {
-      if (e.target.closest('.tx-delete-btn') || e.target.closest('.tx-edit-btn') || e.target.closest('.tx-checkbox-wrap')) return;
+      if (e.target.closest('.tx-delete-btn') || e.target.closest('.tx-edit-btn') || e.target.closest('.tx-duplicate-btn') || e.target.closest('.tx-checkbox-wrap')) return;
       const id = card.getAttribute('data-id');
       if (isTxSelectMode) {
         if (selectedTxIds.has(id)) {
@@ -7423,6 +7713,47 @@ function bindInteractiveEvents() {
       const tx = data.transactions.find(t => String(t.id) === String(id));
       if (tx) {
         openTxModal(tx);
+      }
+    };
+  });
+
+  // Edit Transaction button (Direct Edit Trigger)
+  $$('.tx-edit-btn').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      const tx = (data.transactions || []).find(t => String(t.id) === String(id));
+      if (tx) openTxModal(tx);
+    };
+  });
+
+  // Duplicate Transaction button (1-Click Instant Duplication)
+  $$('.tx-duplicate-btn').forEach(btn => {
+    btn.onclick = async e => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      const orig = (data.transactions || []).find(x => String(x.id) === String(id));
+      if (!orig) return;
+      try {
+        btn.disabled = true;
+        const copyPayload = {
+          type: orig.type,
+          category: orig.category,
+          amount: Number(orig.amount),
+          description: orig.description,
+          occurred_on: toDateIso(getMskDate())
+        };
+        await api('transactions', {
+          method: 'POST',
+          body: JSON.stringify(copyPayload)
+        });
+        showToast(`✓ Операция «${orig.category}» продублирована сегодняшним числом`, 'success');
+        await refreshAllData();
+        renderApp();
+      } catch (err) {
+        showToast('Ошибка дублирования: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
       }
     };
   });
@@ -7491,7 +7822,7 @@ function bindInteractiveEvents() {
         confirmText: 'Удалить',
         cancelText: 'Отмена',
         danger: true,
-        icon: '🗑️'
+        icon: 'trash'
       });
       if (confirmed) {
         try {
@@ -7526,15 +7857,27 @@ function bindInteractiveEvents() {
 
     const updatePosition = (target) => {
       const el = target || nav.querySelector('.nav-item.active') || nav.querySelector(`.nav-item[data-tab="${tab}"]`);
-      if (!el) {
+      if (!el || el.offsetWidth === 0) {
         glider.style.opacity = '0';
         return;
       }
       const left = el.offsetLeft;
       const width = el.offsetWidth;
-      glider.style.opacity = '1';
-      glider.style.transform = `translate3d(${left}px, 0, 0)`;
-      glider.style.width = `${width}px`;
+      if (!glider.style.opacity || glider.style.opacity === '0') {
+        glider.style.transition = 'opacity 0.16s ease';
+        glider.style.transform = `translate3d(${left}px, 0, 0)`;
+        glider.style.width = `${width}px`;
+        requestAnimationFrame(() => {
+          glider.style.opacity = '1';
+          requestAnimationFrame(() => {
+            glider.style.transition = '';
+          });
+        });
+      } else {
+        glider.style.opacity = '1';
+        glider.style.transform = `translate3d(${left}px, 0, 0)`;
+        glider.style.width = `${width}px`;
+      }
     };
 
     requestAnimationFrame(() => updatePosition());
@@ -7573,6 +7916,16 @@ function bindInteractiveEvents() {
   const mastheadBalPill = document.getElementById('masthead-balance-pill');
   if (mastheadBalPill) {
     mastheadBalPill.onclick = () => togglePrivacy();
+  }
+
+  const brandCloudStatus = document.getElementById('brand-cloud-status');
+  if (brandCloudStatus) {
+    brandCloudStatus.onclick = e => {
+      e.stopPropagation();
+      if (typeof showToast === 'function') {
+        showToast('✓ Облако активно: шифрование AES-GCM, мгновенная синхронизация', 'success');
+      }
+    };
   }
 
   if (!window.__globalKeysBound) {
@@ -7631,12 +7984,12 @@ function bindInteractiveEvents() {
     if (parsed && parsed.amount > 0) {
       previewBox.style.display = 'flex';
       previewBox.innerHTML = `
-        <span class="preview-pill type ${parsed.type}">${parsed.type === 'income' ? '🟢 Поступление' : '🔴 Расход'}</span>
-        <span class="preview-pill cat">${parsed.icon || '💳'} ${esc(parsed.category)}</span>
+        <span class="preview-pill type ${parsed.type}"><span class="status-dot ${parsed.type === 'income' ? 'jade' : 'coral'}"></span> ${parsed.type === 'income' ? 'Поступление' : 'Расход'}</span>
+        <span class="preview-pill cat">${getCategoryIcon(parsed.category, parsed.type, 13)} ${esc(parsed.category)}</span>
         <span class="preview-pill amt num">${parsed.type === 'income' ? '+' : '−'}${new Intl.NumberFormat('ru-RU').format(parsed.amount)} ₽</span>
-        <span class="preview-pill date">📅 ${esc(parsed.dateLabel || 'Сегодня')}</span>
-        <span class="preview-pill desc">💬 «${esc(parsed.description)}»</span>
-        ${isAi ? '<span class="preview-pill ai-tag">✨ ИИ</span>' : ''}
+        <span class="preview-pill date">${icon('calendar', 12)} ${esc(parsed.dateLabel || 'Сегодня')}</span>
+        <span class="preview-pill desc">«${esc(parsed.description)}»</span>
+        ${isAi ? `<span class="preview-pill ai-tag">${icon('sparkle', 11)} ИИ</span>` : ''}
       `;
     } else {
       previewBox.style.display = 'none';
@@ -7872,6 +8225,18 @@ function bindInteractiveEvents() {
     };
   }
 
+  // Home Screen 1-Tap Suggestion Chips
+  $$('.quick-chip').forEach(chip => {
+    chip.onclick = () => {
+      const val = chip.getAttribute('data-chip');
+      if (quickInput && val) {
+        quickInput.value = val;
+        quickInput.focus();
+        updateQuickPreview(false);
+      }
+    };
+  });
+
   // 1-Tap Quick-Tap Pills (Монетки)
   $$('.quick-pill-btn').forEach(pill => {
     pill.onclick = async () => {
@@ -8045,7 +8410,7 @@ function bindInteractiveEvents() {
         confirmText: 'Удалить',
         cancelText: 'Отмена',
         danger: true,
-        icon: '🗑️'
+        icon: 'trash'
       });
 
       if (confirmed) {
@@ -8155,7 +8520,7 @@ function bindInteractiveEvents() {
         confirmText: 'Удалить лимит',
         cancelText: 'Отмена',
         danger: true,
-        icon: '📊'
+        icon: 'chart'
       });
       if (confirmed) {
         try {
@@ -8165,6 +8530,40 @@ function bindInteractiveEvents() {
         } catch (err) {
           showToast('Ошибка удаления: ' + err.message, 'error');
         }
+      }
+    };
+  });
+
+  // Budgets: Preset Amount Chips
+  $$('.budget-amt-chip').forEach(chip => {
+    chip.onclick = () => {
+      const amt = chip.getAttribute('data-amt');
+      const input = document.getElementById('budget-limit');
+      if (input) {
+        input.value = amt;
+        input.focus();
+      }
+    };
+  });
+
+  // Budgets: Inline Quick Step Adjustment (+1k / -1k)
+  $$('.budget-step-inline-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const category = btn.getAttribute('data-category');
+      const step = Number(btn.getAttribute('data-step')) || 1000;
+      const budget = (data.budgets || []).find(b => b.category === category);
+      if (!budget) return;
+      const newLim = Math.max(1000, Number(budget.limit_amount) + step);
+      try {
+        await api('budgets', {
+          method: 'POST',
+          body: JSON.stringify({ category, limit_amount: newLim })
+        });
+        await refreshAllData();
+        renderApp();
+        showToast(`Лимит «${category}» обновлён: ${money(newLim)}`, 'success');
+      } catch (err) {
+        showToast('Ошибка изменения лимита: ' + err.message, 'error');
       }
     };
   });
@@ -8202,7 +8601,7 @@ function bindInteractiveEvents() {
         confirmText: 'Удалить цель',
         cancelText: 'Отмена',
         danger: true,
-        icon: '🎯'
+        icon: 'target'
       });
       if (confirmed) {
         try {
@@ -8241,6 +8640,45 @@ function bindInteractiveEvents() {
     };
   });
 
+  // Goals: Popular Presets Chips
+  $$('.goal-preset-chip').forEach(chip => {
+    chip.onclick = () => {
+      const name = chip.getAttribute('data-name');
+      const target = chip.getAttribute('data-target');
+      const nameInput = document.getElementById('goal-name');
+      const targetInput = document.getElementById('goal-target');
+      if (nameInput) nameInput.value = name;
+      if (targetInput) targetInput.value = target;
+      const savedInput = document.getElementById('goal-saved');
+      if (savedInput) savedInput.focus();
+    };
+  });
+
+  // Goals: 1-Click Instant Deposit Chips
+  $$('.goal-instant-chip').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-id');
+      const addVal = Number(btn.getAttribute('data-amount')) || 0;
+      if (!addVal || addVal <= 0) return;
+
+      const targetGoal = (data.goals || []).find(g => String(g.id) === String(id));
+      if (!targetGoal) return;
+
+      const newSaved = Number(targetGoal.saved_amount || 0) + addVal;
+      try {
+        await api('goals/' + id, {
+          method: 'PUT',
+          body: JSON.stringify({ saved_amount: newSaved })
+        });
+        await refreshAllData();
+        renderApp();
+        showToast(`В цель «${targetGoal.name}» внесено +${money(addVal)}!`, 'success');
+      } catch (err) {
+        showToast('Ошибка пополнения: ' + err.message, 'error');
+      }
+    };
+  });
+
   // Robust AI Assistant Dispatcher
   async function submitAssistantQuestion(text) {
     if (!text || isAiThinking) return;
@@ -8259,10 +8697,10 @@ function bindInteractiveEvents() {
 
     if (aiThinkingInterval) clearInterval(aiThinkingInterval);
     const phases = [
-      '🔍 Считываю структуру транзакций и баланс...',
-      '⚡ Рассчитываю финансовую скорость (Burn Rate)...',
-      '🔮 Моделирую сценарий сложного процента...',
-      '🧠 Синтезирую персональную стратегию...'
+      'Считываю структуру транзакций и баланс...',
+      'Рассчитываю финансовую скорость (Burn Rate)...',
+      'Моделирую сценарий сложного процента...',
+      'Синтезирую персональную стратегию...'
     ];
     aiThinkingInterval = setInterval(() => {
       aiThinkingPhase = (aiThinkingPhase + 1) % phases.length;
@@ -8344,7 +8782,7 @@ function bindInteractiveEvents() {
     } catch (err) {
       if (aiThinkingInterval) clearInterval(aiThinkingInterval);
       isAiThinking = false;
-      data.chat.push({ role: 'assistant', content: `⚠️ Ошибка: ${err.message}`, created_at: new Date().toISOString() });
+      data.chat.push({ role: 'assistant', content: `Ошибка: ${err.message}`, created_at: new Date().toISOString() });
       renderApp();
     }
   }
@@ -8442,6 +8880,14 @@ function bindInteractiveEvents() {
     };
   });
 
+  // Chat Quick Starter Chips (above input bar)
+  $$('.chat-quick-chip').forEach(btn => {
+    btn.onclick = () => {
+      const promptText = btn.getAttribute('data-prompt');
+      if (promptText) submitAssistantQuestion(promptText);
+    };
+  });
+
   // Assistant Mode Pills with Direct Submission
   $$('.assistant-mode-pill').forEach(pill => {
     pill.onclick = () => {
@@ -8494,7 +8940,7 @@ function bindInteractiveEvents() {
         confirmText: 'Очистить историю',
         cancelText: 'Отмена',
         danger: true,
-        icon: '💬'
+        icon: 'chat'
       });
       if (confirmed) {
         data.chat = [];
@@ -8711,7 +9157,7 @@ function bindBankImportModalEvents() {
 
       const engineEl = document.getElementById('import-stat-engine');
       if (engineEl) {
-        engineEl.innerText = res.engine === 'ai' ? '🤖 FinKaif AI' : '⚡ Smart Engine';
+        engineEl.innerText = res.engine === 'ai' ? 'FinKaif AI' : 'Smart Engine';
       }
 
       renderBankPreviewRows();
@@ -8773,7 +9219,7 @@ function bindBankImportModalEvents() {
               <input type="text" class="import-desc-input" data-idx="${idx}" value="${esc(tx.description)}" placeholder="Уточните (от кого / на что)..." title="Отредактируйте для точного анализа ментором">
               ${transferHint}
             </div>
-            ${(isTransfer || !tx.description || tx.description.length < 5) ? `<div style="font-size: 10.5px; color: var(--accent-jade); margin-top: 3px;">💡 Уточните для ментора</div>` : ''}
+            ${(isTransfer || !tx.description || tx.description.length < 5) ? `<div style="font-size: 10.5px; color: var(--accent-jade); margin-top: 3px;">Уточните для ментора</div>` : ''}
           </td>
           <td class="num" style="text-align: right; font-weight: 700; color: ${amtColor};">
             ${amtPrefix}${money(tx.amount)}
@@ -8885,7 +9331,7 @@ function bindBankImportModalEvents() {
         tab = 'transactions';
         renderApp();
 
-        showToast('✅ Успешно импортировано ' + selected.length + ' операций!', 'success');
+        showToast('Успешно импортировано ' + selected.length + ' операций', 'success');
       } catch (err) {
         showToast('Ошибка при импорте: ' + err.message, 'error');
       } finally {
