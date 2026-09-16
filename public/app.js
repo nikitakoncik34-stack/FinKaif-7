@@ -5604,6 +5604,107 @@ function renderBulkDock() {
   `;
 }
 
+function getViewHtmlForTab(targetTab) {
+  if (targetTab === 'home') return renderHomeView();
+  if (targetTab === 'analytics') return renderAnalyticsView();
+  if (targetTab === 'transactions') return renderTransactionsView();
+  if (targetTab === 'budgets') return renderBudgetsView();
+  if (targetTab === 'goals') return renderGoalsView();
+  if (targetTab === 'assistant') return renderAssistantView();
+  return renderHomeView();
+}
+
+function updateMastheadDynamicData() {
+  const inc = data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const exp = data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  const balance = inc - exp;
+
+  const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
+  const userName = profile.display_name ? profile.display_name : rawUser;
+  const userInitial = rawUser.charAt(0).toUpperCase();
+
+  const nameEl = document.querySelector('.user-name-text') || document.querySelector('.user-name');
+  if (nameEl) nameEl.innerText = userName;
+
+  const avatarEl = document.querySelector('.user-avatar');
+  if (avatarEl) avatarEl.innerHTML = getAvatarHtml(profile.avatar, userInitial, 36);
+
+  const balEl = document.getElementById('masthead-balance-figure');
+  if (balEl && !privacyMode) {
+    const cur = profile.currency || 'RUB';
+    const sym = (cur === 'USD' || cur === 'EUR') ? '' : ` ${currencySymbols[cur] || '₽'}`;
+    const curPrefix = cur === 'USD' ? '$' : cur === 'EUR' ? '€' : '';
+    const balConv = convertFromRub(balance);
+    balEl.textContent = `${curPrefix}${money(balConv)}${sym}`;
+  }
+}
+
+function switchTab(newTab, options = {}) {
+  if (!me) {
+    tab = newTab;
+    renderApp();
+    return;
+  }
+  const appContainer = document.querySelector('.app-container');
+  const viewContainer = document.querySelector('.view-container');
+  if (!appContainer || !viewContainer) {
+    tab = newTab;
+    window.location.hash = tab;
+    renderApp();
+    return;
+  }
+
+  tab = newTab;
+  window.location.hash = tab;
+
+  // 1. Update navigation active state without re-rendering masthead
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+  });
+
+  // 2. Smoothly reposition magnetic spring glider
+  if (typeof initNavGlider === 'function') {
+    initNavGlider();
+  }
+
+  // 3. Update mobile bottom bar active state
+  document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+  });
+
+  // 4. Update bulk dock
+  const existingDock = document.getElementById('tx-bulk-dock');
+  if (tab !== 'transactions' || selectedTxIds.size === 0) {
+    if (existingDock) existingDock.remove();
+  } else {
+    if (!existingDock) {
+      const dWrap = document.createElement('div');
+      dWrap.innerHTML = renderBulkDock();
+      if (dWrap.firstElementChild) appContainer.appendChild(dWrap.firstElementChild);
+    } else {
+      existingDock.outerHTML = renderBulkDock();
+    }
+  }
+
+  // 5. Swap view content smoothly with View Transitions API or direct swap
+  const nextHtml = getViewHtmlForTab(tab);
+
+  const performSwap = () => {
+    viewContainer.innerHTML = nextHtml;
+    bindInteractiveEvents();
+    if (!options.keepScroll) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  };
+
+  if (document.startViewTransition) {
+    document.startViewTransition(performSwap);
+  } else {
+    performSwap();
+  }
+}
+window.switchTab = switchTab;
+
 function renderApp() {
   window.renderApp = renderApp;
   window.openPaydayModal = (amt = 1000000) => {
@@ -5619,13 +5720,48 @@ function renderApp() {
     return;
   }
 
-  let viewHtml = '';
-  if (tab === 'home') viewHtml = renderHomeView();
-  else if (tab === 'analytics') viewHtml = renderAnalyticsView();
-  else if (tab === 'transactions') viewHtml = renderTransactionsView();
-  else if (tab === 'budgets') viewHtml = renderBudgetsView();
-  else if (tab === 'goals') viewHtml = renderGoalsView();
-  else if (tab === 'assistant') viewHtml = renderAssistantView();
+  const appContainer = container.querySelector('.app-container');
+  const viewContainer = container.querySelector('.view-container');
+
+  // If App Shell is already in DOM, perform smooth in-place update without nuking DOM
+  if (appContainer && viewContainer) {
+    updateMastheadDynamicData();
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+    });
+    if (typeof initNavGlider === 'function') initNavGlider();
+    document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+    });
+
+    const existingDock = document.getElementById('tx-bulk-dock');
+    if (tab !== 'transactions' || selectedTxIds.size === 0) {
+      if (existingDock) existingDock.remove();
+    } else {
+      if (existingDock) existingDock.outerHTML = renderBulkDock();
+      else {
+        const dWrap = document.createElement('div');
+        dWrap.innerHTML = renderBulkDock();
+        if (dWrap.firstElementChild) appContainer.appendChild(dWrap.firstElementChild);
+      }
+    }
+
+    viewContainer.innerHTML = getViewHtmlForTab(tab);
+
+    // Update dynamic modals if present
+    const pModal = document.getElementById('profile-modal');
+    if (pModal) pModal.outerHTML = renderProfileModal();
+    const payModal = document.getElementById('payday-modal');
+    if (payModal) payModal.outerHTML = renderPaydayModal();
+    const fsModal = document.getElementById('finscore-modal');
+    if (fsModal) fsModal.outerHTML = renderFinScoreModal();
+
+    bindInteractiveEvents();
+    return;
+  }
+
+  // Initial Full Mount
+  let viewHtml = getViewHtmlForTab(tab);
 
   container.innerHTML = `
     <div class="app-container">
@@ -5689,13 +5825,18 @@ function bindAuthEvents() {
         if (res.token) localStorage.setItem('finkaif_token', res.token);
         me = res.user;
 
-        // Fetch profile settings
+        // Fetch authoritative profile settings from cloud database
         try {
           const prof = await api('profile');
           if (prof) {
             profile.display_name = prof.display_name || '';
-            profile.avatar = prof.avatar || '⚡';
+            profile.avatar = prof.avatar || 'default';
             if (prof.currency) profile.currency = prof.currency;
+            try {
+              localStorage.setItem('finkaif_name', profile.display_name);
+              localStorage.setItem('finkaif_avatar', profile.avatar);
+              localStorage.setItem('finkaif_currency', profile.currency);
+            } catch (_) {}
           }
         } catch { }
 
@@ -5786,12 +5927,11 @@ function bindInteractiveEvents() {
     }
   }
 
-  // Navigation Tabs
+  // Navigation Tabs (Zero-Blink Smooth Switching)
   $$('.nav-item').forEach(btn => {
     btn.onclick = () => {
-      tab = btn.getAttribute('data-tab');
-      window.location.hash = tab;
-      renderApp();
+      const target = btn.getAttribute('data-tab');
+      if (target) switchTab(target);
     };
   });
 
@@ -5801,12 +5941,11 @@ function bindInteractiveEvents() {
   $$('[data-tab]').forEach(el => {
     if (!el.classList.contains('nav-item')) {
       el.onclick = () => {
-        tab = el.getAttribute('data-tab');
+        const target = el.getAttribute('data-tab');
         if (el.getAttribute('data-cat')) {
           activeAnalyticsCat = el.getAttribute('data-cat');
         }
-        window.location.hash = tab;
-        renderApp();
+        if (target) switchTab(target);
       };
     }
   });
@@ -5865,7 +6004,7 @@ function bindInteractiveEvents() {
       const reader = new FileReader();
       reader.onload = (re) => {
         const img = new Image();
-        img.onload = () => {
+        img.onload = async () => {
           const canvas = document.createElement('canvas');
           const MAX_SIZE = 256;
           let w = img.width;
@@ -5882,10 +6021,29 @@ function bindInteractiveEvents() {
           ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, MAX_SIZE, MAX_SIZE);
 
           profile.avatar = canvas.toDataURL('image/jpeg', 0.85);
+          try {
+            localStorage.setItem('finkaif_avatar', profile.avatar);
+          } catch (_) {}
           updateModalAvatarPreview();
+          updateMastheadDynamicData();
           renderApp();
           const pm = document.getElementById('profile-modal');
           if (pm) pm.style.display = 'flex';
+
+          // Instantly sync to cloud database (PostgreSQL)
+          try {
+            await api('profile', {
+              method: 'POST',
+              body: JSON.stringify({
+                display_name: profile.display_name,
+                avatar: profile.avatar,
+                currency: profile.currency
+              })
+            });
+            showToast('✅ Фото профиля сохранено в облаке!', 'success');
+          } catch (err) {
+            console.warn('Avatar auto-sync notice:', err.message);
+          }
         };
         img.src = re.target.result;
       };
@@ -5895,21 +6053,48 @@ function bindInteractiveEvents() {
 
   const btnResetAv = document.getElementById('btn-avatar-reset-default');
   if (btnResetAv) {
-    btnResetAv.onclick = () => {
+    btnResetAv.onclick = async () => {
       profile.avatar = 'default';
+      try {
+        localStorage.setItem('finkaif_avatar', 'default');
+      } catch (_) {}
       updateModalAvatarPreview();
+      updateMastheadDynamicData();
+      try {
+        await api('profile', {
+          method: 'POST',
+          body: JSON.stringify({
+            display_name: profile.display_name,
+            avatar: 'default',
+            currency: profile.currency
+          })
+        });
+        showToast('Стандартный аватар восстановлен и синхронизирован', 'success');
+      } catch (err) {
+        console.warn('Avatar reset notice:', err.message);
+      }
       renderApp();
       const pm = document.getElementById('profile-modal');
       if (pm) pm.style.display = 'flex';
     };
   }
 
-  // Currency Selection with Live Instant Conversion
+  // Currency Selection with Live Instant Conversion and Cloud Sync
   $$('.currency-pill-btn').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const cur = btn.getAttribute('data-currency');
       profile.currency = cur;
-      localStorage.setItem('finkaif_currency', profile.currency);
+      try {
+        localStorage.setItem('finkaif_currency', profile.currency);
+      } catch (_) {}
+      api('profile', {
+        method: 'POST',
+        body: JSON.stringify({
+          display_name: profile.display_name,
+          avatar: profile.avatar,
+          currency: profile.currency
+        })
+      }).catch(() => {});
       renderApp();
       const pm = document.getElementById('profile-modal');
       if (pm) pm.style.display = 'flex';
@@ -5924,12 +6109,8 @@ function bindInteractiveEvents() {
       const inputName = document.getElementById('profile-input-name');
       profile.display_name = inputName ? inputName.value.trim() : '';
 
-      localStorage.setItem('finkaif_name', profile.display_name);
-      localStorage.setItem('finkaif_avatar', profile.avatar);
-      localStorage.setItem('finkaif_currency', profile.currency);
-
       try {
-        await api('profile', {
+        const savedProf = await api('profile', {
           method: 'POST',
           body: JSON.stringify({
             display_name: profile.display_name,
@@ -5937,8 +6118,21 @@ function bindInteractiveEvents() {
             currency: profile.currency
           })
         });
+        if (savedProf) {
+          profile.display_name = savedProf.display_name || profile.display_name;
+          profile.avatar = savedProf.avatar || profile.avatar;
+          profile.currency = savedProf.currency || profile.currency;
+        }
+
+        try {
+          localStorage.setItem('finkaif_name', profile.display_name);
+          localStorage.setItem('finkaif_avatar', profile.avatar);
+          localStorage.setItem('finkaif_currency', profile.currency);
+        } catch (_) {}
+        updateMastheadDynamicData();
+        showToast('✅ Профиль сохранён и синхронизирован со всеми устройствами!', 'success');
       } catch (err) {
-        console.warn('Profile sync warning:', err.message);
+        showToast('Ошибка сохранения профиля: ' + err.message, 'error');
       }
 
       profileModalOpen = false;
@@ -5960,8 +6154,18 @@ function bindInteractiveEvents() {
       });
       if (confirmed) {
         await api('auth/logout', { method: 'POST' }).catch(() => {});
-        localStorage.removeItem('finkaif_token');
+        try {
+          localStorage.removeItem('finkaif_token');
+          localStorage.removeItem('finkaif_name');
+          localStorage.removeItem('finkaif_avatar');
+          localStorage.removeItem('finkaif_currency');
+        } catch (_) {}
         me = null;
+        profile = {
+          display_name: '',
+          avatar: 'default',
+          currency: 'RUB'
+        };
         profileModalOpen = false;
         renderApp();
       }
@@ -7226,8 +7430,8 @@ function bindInteractiveEvents() {
   // Mobile Bottom Bar Navigation
   $$('.mobile-nav-btn[data-tab]').forEach(btn => {
     btn.onclick = () => {
-      tab = btn.getAttribute('data-tab');
-      renderApp();
+      const target = btn.getAttribute('data-tab');
+      if (target) switchTab(target);
     };
   });
 
@@ -7260,9 +7464,9 @@ function bindInteractiveEvents() {
 
   $$('.mobile-sheet-item[data-tab]').forEach(btn => {
     btn.onclick = () => {
-      tab = btn.getAttribute('data-tab');
+      const target = btn.getAttribute('data-tab');
       if (mobileSheet) mobileSheet.style.display = 'none';
-      renderApp();
+      if (target) switchTab(target);
     };
   });
 
@@ -7701,8 +7905,7 @@ function bindInteractiveEvents() {
     card.onclick = () => {
       const cat = card.getAttribute('data-cat');
       activeAnalyticsCat = cat;
-      tab = 'analytics';
-      renderApp();
+      switchTab('analytics');
     };
   });
 
@@ -8227,11 +8430,7 @@ function bindInteractiveEvents() {
   $$('.btn-action-navigate').forEach(btn => {
     btn.onclick = () => {
       const navTab = btn.getAttribute('data-nav-tab');
-      if (navTab) {
-        tab = navTab;
-        window.location.hash = tab;
-        renderApp();
-      }
+      if (navTab) switchTab(navTab);
     };
   });
 
@@ -8257,16 +8456,12 @@ function bindInteractiveEvents() {
       const actTab = btn.getAttribute('data-action-tab');
       const actTarget = btn.getAttribute('data-action-target');
       if (actTarget === 'tx-import') {
-        tab = 'transactions';
-        window.location.hash = tab;
-        renderApp();
+        switchTab('transactions');
         setTimeout(openBankImportModal, 80);
         return;
       }
       if (actTab) {
-        tab = actTab;
-        window.location.hash = tab;
-        renderApp();
+        switchTab(actTab);
       }
     };
   });
@@ -8705,12 +8900,13 @@ function bindBankImportModalEvents() {
    ========================================================================== */
 async function refreshAllData() {
   try {
-    const [txs, bgs, gls, cht, subs] = await Promise.all([
+    const [txs, bgs, gls, cht, subs, prof] = await Promise.all([
       api('transactions').catch(() => []),
       api('budgets').catch(() => []),
       api('goals').catch(() => []),
       api('chat').catch(() => []),
-      api('subscriptions').catch(() => [])
+      api('subscriptions').catch(() => []),
+      api('profile').catch(() => null)
     ]);
 
     data.transactions = Array.isArray(txs) ? txs : [];
@@ -8718,6 +8914,18 @@ async function refreshAllData() {
     data.goals = Array.isArray(gls) ? gls : [];
     data.chat = Array.isArray(cht) ? cht : [];
     data.subscriptions = Array.isArray(subs) ? subs : [];
+
+    if (prof) {
+      profile.display_name = prof.display_name || '';
+      profile.avatar = prof.avatar || 'default';
+      if (prof.currency) profile.currency = prof.currency;
+      try {
+        localStorage.setItem('finkaif_name', profile.display_name);
+        localStorage.setItem('finkaif_avatar', profile.avatar);
+        localStorage.setItem('finkaif_currency', profile.currency);
+      } catch (_) {}
+      if (typeof updateMastheadDynamicData === 'function') updateMastheadDynamicData();
+    }
   } catch (err) {
     console.warn('Sync notice:', err.message);
   }
@@ -8726,8 +8934,10 @@ async function refreshAllData() {
 function syncHash() {
   const h = window.location.hash.replace('#', '');
   if (['home', 'analytics', 'transactions', 'budgets', 'goals', 'assistant'].includes(h)) {
-    tab = h;
-    renderApp();
+    if (tab !== h) {
+      if (typeof switchTab === 'function') switchTab(h);
+      else { tab = h; renderApp(); }
+    }
   }
 }
 
@@ -8744,16 +8954,18 @@ async function boot() {
     const userRes = await api('me');
     me = userRes.user;
 
-    // Load profile
+    // Load authoritative profile settings from cloud database (PostgreSQL SSOT)
     try {
       const prof = await api('profile');
       if (prof) {
-        profile.display_name = prof.display_name || localStorage.getItem('finkaif_name') || '';
-        profile.avatar = localStorage.getItem('finkaif_avatar') || prof.avatar || 'default';
-        if (prof.currency) {
-          profile.currency = prof.currency;
-          localStorage.setItem('finkaif_currency', prof.currency);
-        }
+        profile.display_name = prof.display_name || '';
+        profile.avatar = prof.avatar || 'default';
+        if (prof.currency) profile.currency = prof.currency;
+        try {
+          localStorage.setItem('finkaif_name', profile.display_name);
+          localStorage.setItem('finkaif_avatar', profile.avatar);
+          localStorage.setItem('finkaif_currency', profile.currency);
+        } catch (_) {}
       }
     } catch { }
 
