@@ -3029,10 +3029,12 @@ function renderHomeView() {
     </div>
 
     <!-- Smart Quick-Input Express Card -->
-    <div class="quick-express-card">
+    <div class="quick-express-card" id="quick-express-card">
       <div class="quick-express-top">
         <div class="quick-input-wrap">
-          <span class="quick-input-icon">${icon('sparkle', 16)}</span>
+          <div class="quick-ai-badge">
+            <span class="quick-input-icon">${icon('sparkle', 16)}</span>
+          </div>
           <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»..." autocomplete="off" aria-label="Быстрая запись расхода или дохода">
           <div class="quick-input-right-actions">
             <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;" title="Очистить" aria-label="Очистить поле ввода">${icon('close', 12)}</button>
@@ -3041,9 +3043,10 @@ function renderHomeView() {
             </button>
           </div>
         </div>
-        <button class="btn-submit-express" id="btn-submit-express">
+        <button class="btn-submit-express" id="btn-submit-express" title="Записать операцию (Enter)">
           ${icon('plus', 14)}
           <span>Записать</span>
+          <kbd class="express-kbd-hint">↵</kbd>
         </button>
       </div>
 
@@ -3053,16 +3056,38 @@ function renderHomeView() {
       <!-- Express Smart Guide Explanation Banner -->
       <div class="express-guide-banner">
         <div class="express-guide-header">
-          <span class="express-guide-bulb">💡</span>
-          <span class="express-guide-title">Умная экспресс-запись:</span>
-          <span class="express-guide-desc">пишите как думаете или нажмите микрофон 🎙️ — ИИ сам определит сумму, категорию и дату</span>
+          <div class="express-ai-chip">
+            <span class="express-ai-sparkle">✦</span>
+            <span>ИИ-ввод</span>
+          </div>
+          <div class="express-guide-desc">
+            Пишите в свободной форме или надиктуйте через <span class="express-mic-tag">${icon('mic', 12)} микрофон</span> — система сама определит сумму, категорию и дату
+          </div>
         </div>
         <div class="express-guide-samples">
-          <span class="express-samples-label">Нажмите для примера:</span>
-          <button type="button" class="express-sample-pill" data-sample="кофе 250">☕ «кофе 250»</button>
-          <button type="button" class="express-sample-pill" data-sample="такси 450 домой">🚕 «такси 450»</button>
-          <button type="button" class="express-sample-pill" data-sample="зарплата 85000">💰 «зарплата 85к»</button>
-          <button type="button" class="express-sample-pill" data-sample="продукты 1850 вчера">🛒 «продукты 1850»</button>
+          <span class="express-samples-label"><span class="express-samples-dot"></span> Примеры в 1 клик:</span>
+          <div class="express-pills-list">
+            <button type="button" class="express-sample-pill" data-sample="кофе 250">
+              <span class="pill-emoji">☕</span>
+              <span class="pill-text">кофе 250</span>
+              <span class="pill-arrow">↵</span>
+            </button>
+            <button type="button" class="express-sample-pill" data-sample="такси 450 домой">
+              <span class="pill-emoji">🚕</span>
+              <span class="pill-text">такси 450</span>
+              <span class="pill-arrow">↵</span>
+            </button>
+            <button type="button" class="express-sample-pill" data-sample="зарплата 85000">
+              <span class="pill-emoji">💰</span>
+              <span class="pill-text">зарплата 85к</span>
+              <span class="pill-arrow">↵</span>
+            </button>
+            <button type="button" class="express-sample-pill" data-sample="продукты 1850 вчера">
+              <span class="pill-emoji">🛒</span>
+              <span class="pill-text">продукты 1850</span>
+              <span class="pill-arrow">↵</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
