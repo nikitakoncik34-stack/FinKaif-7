@@ -71,6 +71,8 @@ let hoveredAnalyticsCat = null;
 let txFilter = 'all';
 let txMonthFilter = 'all';
 let txSearch = '';
+let selectedTxIds = new Set();
+let isTxSelectMode = false;
 let modalType = 'expense';
 let editingTxId = null;
 let profileModalOpen = false;
@@ -284,7 +286,57 @@ function initSpotlightCards() {
   });
 }
 
-// Beautiful Custom In-App Confirmation Modal
+const esc = s =>
+  String(s || '').replace(/[&<>"']/g, x => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[x]));
+
+// ── In-App Toast Notification Engine ──
+function showToast(message, type = 'info', duration = 3600) {
+  let container = document.getElementById('finkaif-toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'finkaif-toast-container';
+    container.className = 'finkaif-toast-container';
+    document.body.appendChild(container);
+  }
+
+  const icons = {
+    success: '✅',
+    error: '⚠️',
+    warning: '🔔',
+    info: '💡'
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `finkaif-toast-card ${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || '✨'}</span>
+    <span class="toast-msg">${esc(message)}</span>
+    <button type="button" class="toast-close" aria-label="Закрыть">✕</button>
+  `;
+
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+
+  let timer;
+  const closeToast = () => {
+    if (timer) clearTimeout(timer);
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 240);
+  };
+
+  toast.querySelector('.toast-close').onclick = closeToast;
+  if (duration > 0) {
+    timer = setTimeout(closeToast, duration);
+  }
+}
+
+// ── Beautiful Custom In-App Confirmation Modal ──
 function showConfirmDialog({
   title = 'Подтверждение',
   message = 'Вы уверены, что хотите выполнить это действие?',
@@ -346,14 +398,143 @@ function showConfirmDialog({
   });
 }
 
-const esc = s =>
-  String(s || '').replace(/[&<>"']/g, x => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[x]));
+// ── Beautiful Custom In-App Input / Prompt Modal ──
+function showPromptDialog({
+  title = 'Ввод данных',
+  message = 'Введите значение:',
+  placeholder = '',
+  defaultValue = '',
+  confirmText = 'Сохранить',
+  cancelText = 'Отмена',
+  icon = '✏️'
+} = {}) {
+  return new Promise(resolve => {
+    const existing = document.getElementById('custom-prompt-modal');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'custom-prompt-modal';
+    backdrop.className = 'confirm-dialog-backdrop';
+    backdrop.innerHTML = `
+      <div class="confirm-dialog-card prompt-card">
+        <div class="confirm-dialog-icon-wrap info">
+          <span>${icon}</span>
+        </div>
+        <h3 class="confirm-dialog-title">${esc(title)}</h3>
+        <p class="confirm-dialog-message">${esc(message).replace(/\n/g, '<br>')}</p>
+        <div class="prompt-input-box">
+          <input type="text" id="prompt-input-field" class="prompt-input-field" placeholder="${esc(placeholder)}" value="${esc(defaultValue)}" autocomplete="off">
+        </div>
+        <div class="confirm-dialog-actions">
+          <button type="button" class="btn-confirm-cancel" id="prompt-btn-cancel">${esc(cancelText)}</button>
+          <button type="button" class="btn-confirm-primary" id="prompt-btn-ok">${esc(confirmText)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector('#prompt-input-field');
+
+    requestAnimationFrame(() => {
+      backdrop.classList.add('visible');
+      input?.focus();
+      input?.select();
+    });
+
+    let resolved = false;
+    const cleanup = (val) => {
+      if (resolved) return;
+      resolved = true;
+      backdrop.classList.remove('visible');
+      setTimeout(() => {
+        backdrop.remove();
+        resolve(val);
+      }, 190);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') cleanup(null);
+      if (e.key === 'Enter') cleanup(input ? input.value : null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    backdrop.querySelector('#prompt-btn-cancel').onclick = () => cleanup(null);
+    backdrop.querySelector('#prompt-btn-ok').onclick = () => cleanup(input ? input.value : null);
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) cleanup(null);
+    };
+  });
+}
+
+// ── Beautiful Custom In-App Alert Modal ──
+function showAlertDialog({
+  title = 'Внимание',
+  message = '',
+  buttonText = 'Понятно',
+  icon = '💡',
+  danger = false
+} = {}) {
+  return new Promise(resolve => {
+    const existing = document.getElementById('custom-alert-modal');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'custom-alert-modal';
+    backdrop.className = 'confirm-dialog-backdrop';
+    backdrop.innerHTML = `
+      <div class="confirm-dialog-card">
+        <div class="confirm-dialog-icon-wrap ${danger ? 'danger' : 'info'}">
+          <span>${icon}</span>
+        </div>
+        <h3 class="confirm-dialog-title">${esc(title)}</h3>
+        <p class="confirm-dialog-message">${esc(message).replace(/\n/g, '<br>')}</p>
+        <div class="confirm-dialog-actions" style="justify-content: center;">
+          <button type="button" class="btn-confirm-primary" id="alert-btn-ok" style="min-width: 130px;">${esc(buttonText)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+    requestAnimationFrame(() => {
+      backdrop.classList.add('visible');
+      backdrop.querySelector('#alert-btn-ok')?.focus();
+    });
+
+    let resolved = false;
+    const cleanup = () => {
+      if (resolved) return;
+      resolved = true;
+      backdrop.classList.remove('visible');
+      setTimeout(() => {
+        backdrop.remove();
+        resolve();
+      }, 190);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') cleanup();
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    backdrop.querySelector('#alert-btn-ok').onclick = cleanup;
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) cleanup();
+    };
+  });
+}
+
+// 🛡️ Global Native Dialog Interceptors (Zero System Dialogs)
+window.alert = function(msg) {
+  showToast(String(msg || ''), 'error');
+};
+window.confirm = function(msg) {
+  return showConfirmDialog({ message: String(msg || '') });
+};
+window.prompt = function(msg, def) {
+  return showPromptDialog({ message: String(msg || ''), defaultValue: def });
+};
 
 const formatMarkdown = s => {
   if (!s) return '';
@@ -3064,31 +3245,6 @@ function renderHomeView() {
             Пишите в свободной форме или надиктуйте через <span class="express-mic-tag">${icon('mic', 12)} микрофон</span> — система сама определит сумму, категорию и дату
           </div>
         </div>
-        <div class="express-guide-samples">
-          <span class="express-samples-label"><span class="express-samples-dot"></span> Примеры в 1 клик:</span>
-          <div class="express-pills-list">
-            <button type="button" class="express-sample-pill" data-sample="кофе 250">
-              <span class="pill-emoji">☕</span>
-              <span class="pill-text">кофе 250</span>
-              <span class="pill-arrow">↵</span>
-            </button>
-            <button type="button" class="express-sample-pill" data-sample="такси 450 домой">
-              <span class="pill-emoji">🚕</span>
-              <span class="pill-text">такси 450</span>
-              <span class="pill-arrow">↵</span>
-            </button>
-            <button type="button" class="express-sample-pill" data-sample="зарплата 85000">
-              <span class="pill-emoji">💰</span>
-              <span class="pill-text">зарплата 85к</span>
-              <span class="pill-arrow">↵</span>
-            </button>
-            <button type="button" class="express-sample-pill" data-sample="продукты 1850 вчера">
-              <span class="pill-emoji">🛒</span>
-              <span class="pill-text">продукты 1850</span>
-              <span class="pill-arrow">↵</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -4094,6 +4250,10 @@ function renderTransactionsView() {
         <p class="view-subtitle">Полный журнал поступлений и списаний средств с быстрым поиском и итогами.</p>
       </div>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button class="btn-secondary ${isTxSelectMode ? 'active' : ''}" id="btn-toggle-select-mode" title="Включить режим множественного выбора операций">
+          ${icon('check', 14)}
+          <span>${isTxSelectMode ? 'Режим выбора: ВКЛ' : 'Выбрать несколько'}</span>
+        </button>
         <button class="btn-secondary" id="btn-import-bank" title="Импортировать выписку банка (Т-Банк, Сбер, Альфа, ВТБ...)">
           ${icon('upload', 14)}
           <span>Импорт выписки</span>
@@ -4231,9 +4391,15 @@ function formatDateLabel(dStr) {
 function renderTxCard(t) {
   const isInc = t.type === 'income';
   const catIcon = getCategoryIcon(t.category);
+  const isSelected = selectedTxIds.has(t.id);
 
   return `
-    <div class="tx-card tx-row-clickable" data-id="${t.id}" title="Нажмите для редактирования операции">
+    <div class="tx-card tx-row-clickable ${isSelected ? 'selected' : ''} ${isTxSelectMode ? 'select-mode' : ''}" data-id="${t.id}" title="Нажмите для редактирования операции">
+      <div class="tx-checkbox-wrap ${isSelected ? 'checked' : ''}" data-id="${t.id}" title="${isSelected ? 'Снять выбор' : 'Выбрать для удаления'}">
+        <span class="tx-custom-checkbox ${isSelected ? 'checked' : ''}">
+          ${isSelected ? icon('check', 11) : ''}
+        </span>
+      </div>
       <div class="tx-left">
         <div class="tx-icon-box ${isInc ? 'inc' : 'exp'}">
           ${catIcon}
@@ -5413,6 +5579,31 @@ function renderFinScoreModal() {
   `;
 }
 
+function renderBulkDock() {
+  if (tab !== 'transactions' || selectedTxIds.size === 0) return '';
+  const filtered = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
+  const bulkSum = filtered.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  return `
+    <div class="tx-bulk-dock" id="tx-bulk-dock">
+      <div class="tx-bulk-info">
+        <span class="tx-bulk-badge">Выбрано: <strong>${selectedTxIds.size}</strong></span>
+        <span class="tx-bulk-dot">•</span>
+        <span class="tx-bulk-sum ${bulkSum >= 0 ? 'inc' : 'exp'}">
+          Сумма: ${bulkSum >= 0 ? '+' : '−'}${money(Math.abs(bulkSum))}
+        </span>
+      </div>
+      <div class="tx-bulk-actions">
+        <button type="button" class="btn-bulk-sec" id="btn-bulk-select-all">Все (${(data.transactions || []).length})</button>
+        <button type="button" class="btn-bulk-sec" id="btn-bulk-deselect">Снять</button>
+        <button type="button" class="btn-bulk-delete" id="btn-bulk-delete">
+          ${icon('trash', 14)}
+          <span>Удалить (${selectedTxIds.size})</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function renderApp() {
   window.renderApp = renderApp;
   window.openPaydayModal = (amt = 1000000) => {
@@ -5445,6 +5636,7 @@ function renderApp() {
         </div>
       </main>
       ${renderMobileBottomBar()}
+      ${renderBulkDock()}
       ${renderModal()}
       ${renderProfileModal()}
       ${renderPaydayModal()}
@@ -5510,7 +5702,7 @@ function bindAuthEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert(err.message);
+        showToast(err.message, 'error');
         submitBtn.disabled = false;
         submitBtn.innerText = mode === 'login' ? 'Войти' : 'Зарегистрироваться';
       }
@@ -5667,7 +5859,7 @@ function bindInteractiveEvents() {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        alert('Пожалуйста, выберите файл изображения (PNG, JPG, WebP).');
+        showToast('Пожалуйста, выберите файл изображения (PNG, JPG, WebP).', 'warning');
         return;
       }
       const reader = new FileReader();
@@ -5890,24 +6082,18 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Express Samples Interactive Click
-  $$('.express-sample-pill').forEach(btn => {
-    btn.onclick = () => {
-      const sample = btn.getAttribute('data-sample');
-      const inp = document.getElementById('quick-express-input');
-      if (inp && sample) {
-        inp.value = sample;
-        inp.focus();
-        inp.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    };
-  });
-
-  // Custom Category Add in Modal
+  // Custom Category Add in Modal (Using In-App Custom Prompt)
   const btnAddCustomCat = document.getElementById('btn-add-custom-cat');
   if (btnAddCustomCat) {
-    btnAddCustomCat.onclick = () => {
-      const name = prompt('Введите название категории (например: 🐾 Питомцы, 🎮 Игры, 📚 Обучение, 🛠️ Ремонт):');
+    btnAddCustomCat.onclick = async () => {
+      const name = await showPromptDialog({
+        title: 'Новая категория',
+        message: 'Введите название для персональной категории расходов или доходов:',
+        placeholder: 'Например: 🐾 Питомцы, 🎮 Игры, 📚 Обучение',
+        confirmText: 'Создать',
+        cancelText: 'Отмена',
+        icon: '✨'
+      });
       if (name && name.trim()) {
         const formatted = addCustomCategory(name.trim());
         const catInput = document.getElementById('form-category');
@@ -5915,6 +6101,7 @@ function bindInteractiveEvents() {
         renderApp();
         const modal = document.getElementById('tx-modal');
         if (modal) modal.style.display = 'flex';
+        showToast(`Категория «${formatted}» добавлена!`, 'success');
       }
     };
   }
@@ -6735,7 +6922,7 @@ function bindInteractiveEvents() {
           await refreshAllData();
           renderApp();
         } catch (err) {
-          alert('Ошибка удаления: ' + err.message);
+          showToast('Ошибка удаления: ' + err.message, 'error');
         }
       }
     };
@@ -6825,7 +7012,7 @@ function bindInteractiveEvents() {
       const description = document.getElementById('form-desc').value.trim();
 
       if (!category || amount <= 0) {
-        alert('Заполните категорию и сумму операции');
+        showToast('Заполните категорию и сумму операции', 'warning');
         return;
       }
 
@@ -6878,7 +7065,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка сохранения операции: ' + err.message);
+        showToast('Ошибка сохранения операции: ' + err.message, 'error');
         const submitBtn = txForm.querySelector('button[type="submit"]');
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Сохранить'; }
       }
@@ -6933,11 +7120,102 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Click on Transaction Card to Edit
+  // Toggle Select Mode in History
+  const btnToggleSelectMode = document.getElementById('btn-toggle-select-mode');
+  if (btnToggleSelectMode) {
+    btnToggleSelectMode.onclick = () => {
+      isTxSelectMode = !isTxSelectMode;
+      if (!isTxSelectMode) selectedTxIds.clear();
+      renderApp();
+    };
+  }
+
+  // Bulk Selection: Select All
+  const btnBulkSelectAll = document.getElementById('btn-bulk-select-all');
+  if (btnBulkSelectAll) {
+    btnBulkSelectAll.onclick = () => {
+      (data.transactions || []).forEach(t => selectedTxIds.add(t.id));
+      isTxSelectMode = true;
+      renderApp();
+    };
+  }
+
+  // Bulk Selection: Deselect All
+  const btnBulkDeselect = document.getElementById('btn-bulk-deselect');
+  if (btnBulkDeselect) {
+    btnBulkDeselect.onclick = () => {
+      selectedTxIds.clear();
+      isTxSelectMode = false;
+      renderApp();
+    };
+  }
+
+  // Bulk Delete Transactions Handler
+  const btnBulkDelete = document.getElementById('btn-bulk-delete');
+  if (btnBulkDelete) {
+    btnBulkDelete.onclick = async () => {
+      const count = selectedTxIds.size;
+      if (count === 0) return;
+      const selectedTxs = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
+      const totalAmount = selectedTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+      const confirmed = await showConfirmDialog({
+        title: `Удалить ${count} операций?`,
+        message: `Вы действительно хотите безвозвратно удалить ${count} выбранных операций на сумму ${money(totalAmount)} ₽? Это действие нельзя будет отменить.`,
+        confirmText: `Удалить ${count} записей`,
+        cancelText: 'Отмена',
+        danger: true,
+        icon: '🗑️'
+      });
+
+      if (confirmed) {
+        try {
+          const ids = Array.from(selectedTxIds);
+          await Promise.all(ids.map(id => api('transactions/' + id, { method: 'DELETE' })));
+          selectedTxIds.clear();
+          isTxSelectMode = false;
+          await refreshAllData();
+          renderApp();
+          showToast(`Успешно удалено ${count} операций`, 'success');
+        } catch (err) {
+          showToast('Ошибка массового удаления: ' + err.message, 'error');
+        }
+      }
+    };
+  }
+
+  // Checkbox Click Handler for Transaction Cards
+  $$('.tx-checkbox-wrap').forEach(wrap => {
+    wrap.onclick = e => {
+      e.stopPropagation();
+      const id = wrap.getAttribute('data-id');
+      if (!id) return;
+      if (selectedTxIds.has(id)) {
+        selectedTxIds.delete(id);
+        if (selectedTxIds.size === 0 && !isTxSelectMode) {
+          // keep mode as is
+        }
+      } else {
+        selectedTxIds.add(id);
+      }
+      renderApp();
+    };
+  });
+
+  // Click on Transaction Card to Edit or Toggle Select
   $$('.tx-card').forEach(card => {
     card.onclick = e => {
-      if (e.target.closest('.tx-delete-btn')) return;
+      if (e.target.closest('.tx-delete-btn') || e.target.closest('.tx-edit-btn') || e.target.closest('.tx-checkbox-wrap')) return;
       const id = card.getAttribute('data-id');
+      if (isTxSelectMode) {
+        if (selectedTxIds.has(id)) {
+          selectedTxIds.delete(id);
+        } else {
+          selectedTxIds.add(id);
+        }
+        renderApp();
+        return;
+      }
       const tx = data.transactions.find(t => String(t.id) === String(id));
       if (tx) {
         openTxModal(tx);
@@ -6997,7 +7275,7 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Delete Transaction button
+  // Delete Transaction button (Single Deletion)
   $$('.tx-delete-btn').forEach(btn => {
     btn.onclick = async e => {
       e.stopPropagation();
@@ -7014,10 +7292,12 @@ function bindInteractiveEvents() {
       if (confirmed) {
         try {
           await api('transactions/' + id, { method: 'DELETE' });
+          if (selectedTxIds.has(id)) selectedTxIds.delete(id);
           await refreshAllData();
           renderApp();
+          showToast('Операция удалена', 'success');
         } catch (err) {
-          alert('Ошибка удаления: ' + err.message);
+          showToast('Ошибка удаления: ' + err.message, 'error');
         }
       }
     };
@@ -7308,7 +7588,7 @@ function bindInteractiveEvents() {
       }
     } else {
       btnVoiceExpress.onclick = () => {
-        alert('Голосовой ввод не поддерживается в этом браузере. Рекомендуем использовать Chrome, Safari или Edge.');
+        showToast('Голосовой ввод не поддерживается в этом браузере.', 'warning');
       };
     }
   }
@@ -7351,7 +7631,7 @@ function bindInteractiveEvents() {
       }
 
       if (!parsed || parsed.amount <= 0) {
-        alert('Введите сумму и категорию (например: «кофе 250», «получил 50к», «шавуха 350», «зарплата 80к»)');
+        showToast('Введите сумму и категорию (например: «кофе 250», «получил 50к»)', 'warning');
         btnSubmitExpress.disabled = false;
         btnSubmitExpress.innerText = 'Записать';
         quickInput.focus();
@@ -7381,7 +7661,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка быстрой записи: ' + err.message);
+        showToast('Ошибка быстрой записи: ' + err.message, 'error');
       } finally {
         if (btnSubmitExpress) btnSubmitExpress.disabled = false;
       }
@@ -7410,7 +7690,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка быстрой записи: ' + err.message);
+        showToast('Ошибка быстрой записи: ' + err.message, 'error');
         pill.disabled = false;
       }
     };
@@ -7497,7 +7777,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка добавления: ' + err.message);
+        showToast('Ошибка добавления: ' + err.message, 'error');
         btn.disabled = false;
       }
     };
@@ -7519,7 +7799,7 @@ function bindInteractiveEvents() {
       const category = (catInp && catInp.value.trim()) ? catInp.value.trim() : 'Подписки';
 
       if (!name || amount <= 0) {
-        alert('Укажите корректное название и сумму подписки.');
+        showToast('Укажите корректное название и сумму подписки.', 'warning');
         return;
       }
 
@@ -7538,7 +7818,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка сохранения подписки: ' + err.message);
+        showToast('Ошибка сохранения подписки: ' + err.message, 'error');
       } finally {
         if (saveBtn) {
           saveBtn.disabled = false;
@@ -7571,7 +7851,7 @@ function bindInteractiveEvents() {
           await refreshAllData();
           renderApp();
         } catch (err) {
-          alert('Ошибка при удалении: ' + err.message);
+          showToast('Ошибка при удалении: ' + err.message, 'error');
         }
       }
     };
@@ -7657,7 +7937,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка сохранения бюджета: ' + err.message);
+        showToast('Ошибка сохранения бюджета: ' + err.message, 'error');
       }
     };
   }
@@ -7680,7 +7960,7 @@ function bindInteractiveEvents() {
           await refreshAllData();
           renderApp();
         } catch (err) {
-          alert('Ошибка удаления: ' + err.message);
+          showToast('Ошибка удаления: ' + err.message, 'error');
         }
       }
     };
@@ -7704,7 +7984,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка создания цели: ' + err.message);
+        showToast('Ошибка создания цели: ' + err.message, 'error');
       }
     };
   }
@@ -7727,7 +8007,7 @@ function bindInteractiveEvents() {
           await refreshAllData();
           renderApp();
         } catch (err) {
-          alert('Ошибка удаления: ' + err.message);
+          showToast('Ошибка удаления: ' + err.message, 'error');
         }
       }
     };
@@ -7753,7 +8033,7 @@ function bindInteractiveEvents() {
         await refreshAllData();
         renderApp();
       } catch (err) {
-        alert('Ошибка пополнения: ' + err.message);
+        showToast('Ошибка пополнения: ' + err.message, 'error');
       }
     };
   });
@@ -7938,7 +8218,7 @@ function bindInteractiveEvents() {
       }
     } else {
       btnVoiceAssistant.onclick = () => {
-        alert('Голосовой ввод не поддерживается данным браузером. Рекомендуется Google Chrome или Safari.');
+        showToast('Голосовой ввод не поддерживается данным браузером.', 'warning');
       };
     }
   }
@@ -8181,7 +8461,7 @@ function bindBankImportModalEvents() {
             }
           }
           if (!csvText) {
-            alert('Не удалось прочитать таблицы из файла Excel.');
+            showToast('Не удалось прочитать таблицы из файла Excel.', 'error');
             return;
           }
           window._currentBankFileContent = csvText;
@@ -8189,7 +8469,7 @@ function bindBankImportModalEvents() {
           window._currentBankFileName = file.name;
           await processBankFile(csvText, file.name, null);
         } catch (xErr) {
-          alert('Ошибка чтения файла Excel: ' + xErr.message);
+          showToast('Ошибка чтения файла Excel: ' + xErr.message, 'error');
         }
       };
       reader.readAsArrayBuffer(file);
@@ -8217,7 +8497,7 @@ function bindBankImportModalEvents() {
       bankImportParsed = res.transactions;
 
       if (!bankImportParsed || bankImportParsed.length === 0) {
-        alert('Не удалось распознать операции в данном файле. Проверьте формат выписки (PDF, Excel, CSV или TXT).');
+        showToast('Не удалось распознать операции в данном файле.', 'error');
         return;
       }
 
@@ -8367,7 +8647,7 @@ function bindBankImportModalEvents() {
     btnSubmitImport.onclick = async () => {
       const selected = bankImportParsed.filter(tx => tx.selected);
       if (selected.length === 0) {
-        alert('Выберите хотя бы одну операцию для импорта.');
+        showToast('Выберите хотя бы одну операцию для импорта.', 'warning');
         return;
       }
 
@@ -8410,9 +8690,9 @@ function bindBankImportModalEvents() {
         tab = 'transactions';
         renderApp();
 
-        alert(`✅ Успешно импортировано ${selected.length} операций! Журнал и баланс обновлены.`);
+        showToast('✅ Успешно импортировано ' + selected.length + ' операций!', 'success');
       } catch (err) {
-        alert('Ошибка при импорте: ' + err.message);
+        showToast('Ошибка при импорте: ' + err.message, 'error');
       } finally {
         if (btnSubmitImport) btnSubmitImport.disabled = false;
       }
