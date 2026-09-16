@@ -7,6 +7,7 @@ import pg from "pg";
 import OpenAI from "openai";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,7 +16,15 @@ const app = express();
 app.set("trust proxy", 1);
 
 const port = Number(process.env.PORT || 3000);
-const JWT_SECRET = process.env.JWT_SECRET || "finkaif_secret_jwt_key_fallback_2026";
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    console.warn("⚠️ SECURITY WARNING: JWT_SECRET environment variable is not set! Generating ephemeral key.");
+    JWT_SECRET = crypto.randomBytes(32).toString("hex");
+  } else {
+    JWT_SECRET = "finkaif_dev_jwt_secret_key_2026";
+  }
+}
 
 const db = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -52,7 +61,57 @@ async function initDb() {
     console.error("Database schema init error:", e.message);
   }
 }
-initDb();
+// ============================================================================
+// SECURITY HEADERS & DEFENSIVE MIDDLEWARE
+// ============================================================================
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
+// High-performance in-memory sliding window rate limiter
+function createRateLimiter({ windowMs = 15 * 60 * 1000, max = 20, message = "Слишком много запросов. Попробуйте позже." } = {}) {
+  const requests = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, timestamps] of requests.entries()) {
+      const valid = timestamps.filter(t => now - t < windowMs);
+      if (valid.length === 0) requests.delete(ip);
+      else requests.set(ip, valid);
+    }
+  }, 5 * 60 * 1000).unref();
+
+  return (req, res, next) => {
+    const ip = req.ip || req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    const timestamps = requests.get(ip) || [];
+    const valid = timestamps.filter(t => now - t < windowMs);
+    if (valid.length >= max) {
+      return res.status(429).json({ error: message });
+    }
+    valid.push(now);
+    requests.set(ip, valid);
+    next();
+  };
+}
+
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: "Слишком много попыток авторизации с вашего IP. Пожалуйста, подождите 15 минут."
+});
+
+const aiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 25,
+  message: "Превышен лимит запросов к ИИ-ассистенту. Пожалуйста, подождите минуту."
+});
 
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
@@ -528,7 +587,10 @@ function auth(req, res, next) {
 
 function fail(res, e) {
   console.error("Server error:", e);
-  res.status(500).json({ error: e.message || "Ошибка сервера. Проверьте DATABASE_URL и настройки базы." });
+  const msg = process.env.NODE_ENV === "production"
+    ? "Внутренняя ошибка сервера. Пожалуйста, попробуйте позже."
+    : (e.message || "Ошибка сервера. Проверьте DATABASE_URL и настройки базы.");
+  res.status(500).json({ error: msg });
 }
 
 app.get("/health", async (_req, res) => {
@@ -540,7 +602,7 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-app.post("/api/auth/register", async (req, res) => {
+app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const email = String(req.body.email || "").toLowerCase().trim();
     const password = String(req.body.password || "");
@@ -558,7 +620,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const email = String(req.body.email || "").toLowerCase().trim();
     const password = String(req.body.password || "");
@@ -1181,7 +1243,7 @@ async function callGeminiFast(apiKey, systemPrompt, userMessage) {
   return null;
 }
 
-app.post("/api/parse-tx", async (req, res) => {
+app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
   try {
     const { text } = req.body || {};
     if (!text || !String(text).trim()) {
@@ -2102,8 +2164,8 @@ const assistantHandler = async (req, res) => {
   }
 };
 
-app.post("/api/assistant", auth, assistantHandler);
-app.post("/api/chat", auth, assistantHandler);
+app.post("/api/assistant", auth, aiLimiter, assistantHandler);
+app.post("/api/chat", auth, aiLimiter, assistantHandler);
 
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
