@@ -11,13 +11,57 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=8.48">
+  <link rel="stylesheet" href="style.css?v=8.50">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334D399' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/></svg>">
+  <script>
+    // 🛡️ Safe Storage Polyfill (prevents fatal SecurityError if browser restricts localStorage)
+    (function() {
+      try {
+        var test = '__fk_test__';
+        window.localStorage.setItem(test, test);
+        window.localStorage.removeItem(test);
+      } catch (err) {
+        console.warn('LocalStorage access blocked by browser policy, engaging in-memory fallback:', err);
+        var memoryStore = {};
+        try {
+          Object.defineProperty(window, 'localStorage', {
+            value: {
+              getItem: function(k) { return Object.prototype.hasOwnProperty.call(memoryStore, k) ? memoryStore[k] : null; },
+              setItem: function(k, v) { memoryStore[k] = String(v); },
+              removeItem: function(k) { delete memoryStore[k]; },
+              clear: function() { memoryStore = {}; }
+            },
+            configurable: true,
+            writable: true
+          });
+        } catch (_) {}
+      }
+    })();
+
+    // 🛡️ Global Error Boundary for Startup Safety
+    window.addEventListener('error', function(ev) {
+      console.warn('Global Startup Guard caught event:', ev.message);
+      var app = document.getElementById('app');
+      if (app && (!app.children || app.children.length === 0 || !app.innerHTML.trim())) {
+        app.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#080D0B;color:#E6EDF3;font-family:system-ui,-apple-system,sans-serif;text-align:center;">' +
+          '<div style="max-width:440px;background:rgba(20,30,28,0.95);border:1px solid rgba(45,212,191,0.3);border-radius:24px;padding:36px;box-shadow:0 24px 64px rgba(0,0,0,0.6);">' +
+            '<div style="font-size:42px;margin-bottom:14px;">🛡️</div>' +
+            '<h2 style="font-size:20px;margin:0 0 10px;color:#2DD4BF;font-weight:700;">FinKaif OS — Безопасный запуск</h2>' +
+            '<p style="font-size:14px;color:#94A3B8;line-height:1.55;margin-bottom:24px;">Обнаружена неполадка совместимости браузера. Нажмите кнопку ниже для безопасной перезагрузки приложения.</p>' +
+            '<div style="display:flex;gap:10px;justify-content:center;">' +
+              '<button onclick="location.reload(true)" style="background:linear-gradient(135deg,#0D9488,#14B8A6);color:#fff;border:none;padding:12px 22px;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;">Перезагрузить</button>' +
+              '<button onclick="try{localStorage.clear()}catch(_){};location.href=location.pathname" style="background:rgba(255,255,255,0.08);color:#E2E8F0;border:1px solid rgba(255,255,255,0.15);padding:12px 18px;border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;">Сбросить кэш</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }
+    });
+  </script>
 </head>
 <body>
   <canvas id="ambient-canvas"></canvas>
   <div id="app"></div>
   <script src="xlsx.full.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';"></script>
-  <script src="app.js?v=8.49"></script>
+  <script src="app.js?v=8.50"></script>
 </body>
 </html>
