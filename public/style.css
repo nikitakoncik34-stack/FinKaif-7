@@ -164,7 +164,6 @@ input[type="number"] {
 
 .view-container {
   animation: viewFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
 }
 
 @keyframes viewFadeSlide {
@@ -8320,16 +8319,15 @@ input[type="number"] {
   cursor: pointer;
 }
 
-/* Express Guide Banner (Luxury Fintech Glassmorphism) */
+/* Express Guide Banner (Compact Monolithic Luxury Design) */
 .express-guide-banner {
-  margin-top: 14px;
-  padding: 14px 16px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(45, 212, 191, 0.035) 100%);
-  border: 1px solid rgba(45, 212, 191, 0.15);
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(45, 212, 191, 0.03) 100%);
+  border: 1px solid rgba(45, 212, 191, 0.12);
   border-radius: var(--r-md);
   display: flex;
-  flex-direction: column;
-  gap: 11px;
+  align-items: center;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   position: relative;
   overflow: hidden;
@@ -8340,6 +8338,7 @@ input[type="number"] {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .express-ai-chip {
@@ -8387,104 +8386,334 @@ input[type="number"] {
   vertical-align: middle;
 }
 
-.express-guide-samples {
+/* ==========================================================================
+   MULTI-SELECT TRANSACTIONS & FLOATING BULK DOCK
+   ========================================================================== */
+.tx-checkbox-wrap {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.express-samples-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text-muted);
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.express-samples-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent-jade);
-  box-shadow: 0 0 6px rgba(45, 212, 191, 0.6);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
   flex-shrink: 0;
+  margin-right: 4px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.45;
 }
 
-.express-pills-list {
+.tx-card:hover .tx-checkbox-wrap,
+.tx-card.selected .tx-checkbox-wrap,
+.tx-card.select-mode .tx-checkbox-wrap {
+  opacity: 1;
+}
+
+.tx-custom-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.tx-checkbox-wrap:hover .tx-custom-checkbox {
+  border-color: var(--accent-jade);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.tx-custom-checkbox.checked,
+.tx-checkbox-wrap.checked .tx-custom-checkbox {
+  background: linear-gradient(135deg, #2DD4BF 0%, #0D9488 100%);
+  border-color: #2DD4BF;
+  color: #022C22;
+  box-shadow: 0 0 12px rgba(45, 212, 191, 0.5);
+  animation: checkPop 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tx-card.selected {
+  background: rgba(45, 212, 191, 0.07) !important;
+  border-color: rgba(45, 212, 191, 0.42) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 0 20px rgba(45, 212, 191, 0.05) !important;
+  transform: translateX(3px);
+}
+
+/* Floating Bulk Dock (Raycast / Dynamic Island Style) */
+.tx-bulk-dock {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1800;
+  background: rgba(14, 20, 24, 0.94);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  border-radius: 9999px;
+  padding: 10px 18px 10px 22px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(45, 212, 191, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  animation: dockSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.tx-bulk-info {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
-.express-sample-pill {
-  all: unset;
-  box-sizing: border-box;
+.tx-bulk-badge {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tx-bulk-badge strong {
+  color: var(--accent-jade);
+  font-weight: 700;
+}
+
+.tx-bulk-dot {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.tx-bulk-sum {
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+}
+
+.tx-bulk-sum.inc {
+  color: var(--accent-jade);
+}
+
+.tx-bulk-sum.exp {
+  color: var(--accent-coral);
+}
+
+.tx-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-bulk-sec {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #E2E8F0;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.btn-bulk-sec:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+}
+
+.btn-bulk-delete {
+  background: linear-gradient(135deg, #F43F5E 0%, #BE123C 100%);
+  border: none;
+  color: #FFFFFF;
+  border-radius: 20px;
+  padding: 7px 18px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9999px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
   cursor: pointer;
-  user-select: none;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.4);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.btn-bulk-delete:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(244, 63, 94, 0.55);
+  filter: brightness(1.08);
+}
+
+.btn-bulk-delete:active {
+  transform: scale(0.97);
+}
+
+/* ==========================================================================
+   CUSTOM PROMPT MODAL & IN-APP TOAST NOTIFICATIONS
+   ========================================================================== */
+.prompt-card {
+  max-width: 440px;
+}
+
+.prompt-input-box {
+  width: 100%;
+  margin: 14px 0 20px;
+}
+
+.prompt-input-field {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(6, 10, 14, 0.85);
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #FFFFFF;
+  font-family: inherit;
+  outline: none;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.express-sample-pill > * {
+.prompt-input-field:focus {
+  border-color: var(--accent-jade);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18), inset 0 2px 4px rgba(0, 0, 0, 0.4);
+  background: rgba(6, 10, 14, 0.98);
+}
+
+/* In-App Toast Container */
+.finkaif-toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   pointer-events: none;
+  max-width: 420px;
+  width: calc(100vw - 48px);
 }
 
-.express-sample-pill .pill-emoji {
-  font-size: 13px;
-  line-height: 1;
-}
-
-.express-sample-pill .pill-text {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  letter-spacing: 0.01em;
-}
-
-.express-sample-pill .pill-arrow {
-  font-size: 10.5px;
-  opacity: 0.4;
-  color: var(--text-muted);
-  font-family: var(--font-mono, monospace);
-  transition: all 0.2s ease;
-  margin-left: 2px;
-}
-
-.express-sample-pill:hover {
-  background: linear-gradient(135deg, rgba(45, 212, 191, 0.16) 0%, rgba(16, 185, 129, 0.08) 100%);
-  border-color: rgba(45, 212, 191, 0.45);
+.finkaif-toast-card {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  background: rgba(18, 24, 28, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
   color: #FFFFFF;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px -2px rgba(45, 212, 191, 0.25);
+  font-size: 13.5px;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(-16px) scale(0.96);
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.express-sample-pill:hover .pill-arrow {
+.finkaif-toast-card.visible {
   opacity: 1;
-  color: var(--accent-jade);
-  transform: translateX(1px);
+  transform: translateY(0) scale(1);
 }
 
-.express-sample-pill:active {
-  transform: translateY(0) scale(0.96);
-  background: rgba(45, 212, 191, 0.22);
-  border-color: rgba(45, 212, 191, 0.6);
+.finkaif-toast-card.success {
+  border-color: rgba(45, 212, 191, 0.35);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(45, 212, 191, 0.15);
+}
+
+.finkaif-toast-card.error {
+  border-color: rgba(244, 63, 94, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(244, 63, 94, 0.15);
+}
+
+.finkaif-toast-card.warning {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(245, 158, 11, 0.15);
+}
+
+.toast-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.toast-msg {
+  flex: 1;
+  color: #F1F5F9;
+  font-weight: 500;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.toast-close:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ==========================================================================
+   GLOBAL ANIMATIONS & SMOOTHNESS AUDIT POLISH
+   ========================================================================== */
+@keyframes dockSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 24px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0.4); opacity: 0; }
+  65% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes modalBackdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Smooth custom scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(45, 212, 191, 0.38);
+}
+
+/* Enhanced Modal Backdrops Smooth Fade */
+.modal-backdrop {
+  animation: modalBackdropFade 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .express-kbd-hint {
