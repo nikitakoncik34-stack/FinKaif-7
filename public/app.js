@@ -4027,7 +4027,7 @@ function renderAnalyticsView() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
             </button>
           </div>
-          <span class="metric-icon inc">${userRank.badge}</span>
+          <span class="metric-icon inc">${icon(userRank.badge, 18)}</span>
         </div>
         <div class="metric-value rank-text">${userRank.title}</div>
         <div class="metric-footnote">${userRank.desc}</div>
@@ -5474,7 +5474,7 @@ function renderProfileModal() {
           <div class="form-group" style="margin-bottom: 20px;">
             <div class="avatar-section-title">
               <label class="form-label" style="margin-bottom: 0;">Фото профиля</label>
-              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.20</span>
+              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.60</span>
             </div>
 
             <label class="avatar-upload-zone" for="input-avatar-upload" title="Нажмите для выбора фото с устройства">
