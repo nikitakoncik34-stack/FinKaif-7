@@ -4075,7 +4075,6 @@ function renderAnalyticsView() {
                   data-cat="${esc(s.cat)}"
                   data-amt="${s.amt}"
                   data-pct="${s.pct}"
-                  data-icon="${s.icon}"
                   cx="100" cy="100" r="${radius}"
                   fill="none"
                   stroke="${s.color}"
@@ -4107,7 +4106,7 @@ function renderAnalyticsView() {
           <!-- Category Legend & Progress Bars -->
           <div class="donut-legend-stream">
             ${sortedCats.length > 0 ? donutSlices.map(s => `
-              <div class="donut-cat-item ${activeAnalyticsCat === s.cat ? 'selected' : ''}" data-cat="${esc(s.cat)}" data-amt="${s.amt}" data-pct="${s.pct}" data-icon="${s.icon}">
+              <div class="donut-cat-item ${activeAnalyticsCat === s.cat ? 'selected' : ''}" data-cat="${esc(s.cat)}" data-amt="${s.amt}" data-pct="${s.pct}">
                 <div class="donut-cat-head">
                   <div class="donut-cat-meta">
                     <span class="donut-cat-dot" style="background: ${s.color};"></span>
@@ -6611,12 +6610,13 @@ function bindInteractiveEvents() {
   });
 
   // Analytics Donut Segment & Legend In-Place Hover Interactions
-  const updateDonutCenter = (cat, amt, pct, icon) => {
+  const updateDonutCenter = (cat, amt, pct) => {
     const center = document.getElementById('donut-center-info');
     if (!center) return;
     if (cat) {
+      const catIcon = getCategoryIcon(cat, 'expense', 20);
       center.innerHTML = `
-        <div class="donut-center-icon">${icon || icon('creditCard', 20)}</div>
+        <div class="donut-center-icon">${catIcon}</div>
         <div class="donut-center-amt num">${money(amt)}</div>
         <div class="donut-center-cat" title="${esc(cat)}">${esc(cat)}</div>
         <div class="donut-center-badge">${pct}% трат</div>
@@ -6632,8 +6632,8 @@ function bindInteractiveEvents() {
     }
   };
 
-  const highlightCategory = (cat, amt, pct, icon) => {
-    updateDonutCenter(cat, amt, pct, icon);
+  const highlightCategory = (cat, amt, pct) => {
+    updateDonutCenter(cat, amt, pct);
     const segments = $$('.donut-segment');
     const items = $$('.donut-cat-item');
 
@@ -6677,9 +6677,8 @@ function bindInteractiveEvents() {
     const cat = seg.getAttribute('data-cat');
     const amt = seg.getAttribute('data-amt');
     const pct = seg.getAttribute('data-pct');
-    const icon = seg.getAttribute('data-icon');
 
-    seg.onmouseenter = () => highlightCategory(cat, amt, pct, icon);
+    seg.onmouseenter = () => highlightCategory(cat, amt, pct);
     seg.onmouseleave = () => {
       if (activeAnalyticsCat) {
         const actSeg = document.querySelector(`.donut-segment[data-cat="${activeAnalyticsCat}"]`);
@@ -6687,8 +6686,7 @@ function bindInteractiveEvents() {
           highlightCategory(
             activeAnalyticsCat,
             actSeg.getAttribute('data-amt'),
-            actSeg.getAttribute('data-pct'),
-            actSeg.getAttribute('data-icon')
+            actSeg.getAttribute('data-pct')
           );
         } else {
           highlightCategory(null);
@@ -6707,9 +6705,8 @@ function bindInteractiveEvents() {
     const cat = item.getAttribute('data-cat');
     const amt = item.getAttribute('data-amt');
     const pct = item.getAttribute('data-pct');
-    const icon = item.getAttribute('data-icon');
 
-    item.onmouseenter = () => highlightCategory(cat, amt, pct, icon);
+    item.onmouseenter = () => highlightCategory(cat, amt, pct);
     item.onmouseleave = () => {
       if (activeAnalyticsCat) {
         const actSeg = document.querySelector(`.donut-segment[data-cat="${activeAnalyticsCat}"]`);
@@ -6717,8 +6714,7 @@ function bindInteractiveEvents() {
           highlightCategory(
             activeAnalyticsCat,
             actSeg.getAttribute('data-amt'),
-            actSeg.getAttribute('data-pct'),
-            actSeg.getAttribute('data-icon')
+            actSeg.getAttribute('data-pct')
           );
         } else {
           highlightCategory(null);
