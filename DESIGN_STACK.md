@@ -21,28 +21,29 @@ This document is the **authoritative single point of entry** for all UI/UX desig
 
 ```mermaid
 flowchart TD
-    subgraph Phase1["Phase 1: Direction & Research"]
-        S1["1. Product Intent (PRODUCT.md)"] --> S2["2. Design Memory (DESIGN.md)"]
-        S2 --> S3["3. Taste Configuration (Taste Skill Dials)"]
+    subgraph Phase1["Phase 1: Memory, Direction & Intent"]
+        S1["1. Product Intent (PRODUCT.md & ui-craft/brief)"] --> S2["2. Design Memory (.ui-craft/tokens.md & DESIGN.md)"]
+        S2 --> S3["3. Taste & Knobs Calibration (CRAFT_LEVEL 8, Taste Dials)"]
         S3 --> S4["4. Real-World Benchmarks (Awesome DESIGN.md & Mobbin)"]
         S4 --> S5["5. Intelligence & Options (UI UX Pro Max DB)"]
-        S5 --> S6["6. Creative Art Direction (MengTo Skills)"]
-        S6 --> S7["7. Anti-Slop Filter (Impeccable Audit + UI/UX Kit)"]
-        S7 --> S8["8. Concrete Concept Selection"]
+        S5 --> S6["6. Creative Art Direction (MengTo Awwwards Skills)"]
+        S6 --> S7["7. Anti-Slop Filter (Impeccable Audit + UI-Craft Anti-Slop)"]
+        S7 --> S8["8. Archetype & Concept (ui-craft-dense-dashboard / minimal)"]
     end
 
-    subgraph Phase2["Phase 2: Implementation & Motion"]
-        S8 --> S9["9. Semantic & Responsive Markup (Static First Frame)"]
-        S9 --> S10["10. Motion Choreography (Official GSAP Skills)"]
+    subgraph Phase2["Phase 2: Implementation, Typography & Motion"]
+        S8 --> S9["9. Semantic Build & Typesetting (Static First Frame, ui-craft/typeset & colorize)"]
+        S9 --> S10["10. Motion Choreography (Official GSAP Skills + ui-craft/animate)"]
         S9 --> S11["11. Route & State Transitions (Vercel View Transitions)"]
         S9 --> S12["12. Procedural 3D & Shaders (Three.js & img2threejs)"]
         S9 --> S13["13. Micro-Interactions (React Bits Recipes)"]
     end
 
-    subgraph Phase3["Phase 3: Automated Audit & Polish"]
-        S10 & S11 & S12 & S13 --> S14["14. Browser Inspection (Playwright CLI & Chrome DevTools)"]
-        S14 --> S15["15. Deterministic Anti-Slop Audit (impeccable detect & critique)"]
-        S15 --> S16["16. Quality & Accessibility Gate (Vercel Guidelines)"]
+    subgraph Phase3["Phase 3: Automated Multi-Layer Audit & Memory Sync"]
+        S10 & S11 & S12 & S13 --> S14["14. Browser Inspection (Playwright CLI & Chrome DevTools: Desktop + Mobile)"]
+        S14 --> S15["15. Deterministic Zero-Tolerance Audit (impeccable detect: 0 anti-patterns)"]
+        S15 --> S16["16. Quality & Accessibility Hardening (ui-craft/audit, heuristic, harden, finalize)"]
+        S16 --> S17["17. Design Memory Sync (.ui-craft/decisions.md)"]
     end
 ```
 
@@ -147,8 +148,8 @@ flowchart TD
 13. **Micro-Interactions & Component Recipes ([React Bits](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/.agents/skills/react-bits/SKILL.md))**
     - Pick individual recipes from the local catalog without bloating the bundle.
     - Adapt all colors, typography, borders, and radiuses to FinKaif's Velvet Slate & Cashmere Jade palette.
-    - Component Library: Text animations, Background shaders (Aurora, Beams), Spotlight cards, and interactive docks.
-    - Reference: [React Bits Master Skill](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/.agents/skills/react-bits/SKILL.md)
+     - Component Library: Text animations, Background shaders (Aurora, Beams), Spotlight cards, and interactive docks.
+     - Reference: [React Bits Master Skill](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/.agents/skills/react-bits/SKILL.md)
 
 ---
 
@@ -166,15 +167,18 @@ flowchart TD
 15. **Deterministic Anti-Slop & Polish Commands ([Impeccable](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/.agents/skills/impeccable/SKILL.md))**
     - Run deterministic code detection:
       ```bash
-      impeccable detect public/style.css
+      impeccable detect public/style.css public/index.html
       ```
-    - Apply specialized Impeccable review and polish commands:
-      * `impeccable audit` — Comprehensive design health and token audit against PRODUCT.md and DESIGN.md
-      * `impeccable critique` — Adversarial design critique identifying generic AI tropes
-      * `impeccable polish` — Surgical typographic, spacing, and micro-contrast polish
-      * `impeccable animate` — Physics-grounded easing and motion refinement
-      * `impeccable bolder` / `impeccable quieter` — Hierarchy and contrast calibration
-      * `impeccable distill` — Remove redundant decoration and clarify cognitive focus
+    - Apply specialized Impeccable review, audit, critique, and polish commands:
+      * `impeccable audit` — Technical quality check across A11y, Performance, Theming, Responsive, and Anti-patterns.
+      * `impeccable critique` — Two isolated sub-agents: Assessment A (Design Director review) + Assessment B (Detector & Browser evidence).
+      * `impeccable polish` — Surgical typographic, spacing rhythm, micro-contrast, and state polish without redesign.
+      * `impeccable animate` — Motion thesis, purposeful physics-grounded transitions, feedback, and continuity.
+      * `impeccable overdrive` — Pushing signature interactions past conventional limits (3 directions proposal first!).
+      * `impeccable delight` — Humane touches, celebration at milestones, and meaningful feedback.
+      * `impeccable adapt` — Rethinking the experience across viewports and touch targets.
+      * `impeccable optimize` — Diagnosing and eliminating UI bottlenecks (CWV, layout thrashing, image payloads).
+      * `impeccable live` — Interactive browser variant mode with dev server hot reload.
     - Reference: [.agents/skills/impeccable/SKILL.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/.agents/skills/impeccable/SKILL.md)
 
 16. **Final Quality & Accessibility Gate ([Vercel Web Interface Guidelines](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/.agents/skills/web-interface-guidelines/SKILL.md))**
@@ -188,12 +192,44 @@ flowchart TD
 
 ---
 
-## 3. Complete Design Stack Tool Registry
+## 3. Impeccable Capability Matrix & Integration
+
+Impeccable is integrated as a permanent core engine throughout the entire design lifecycle: from early pre-flight shaping and brief definition, through creative overdrive and motion, to automated browser audits, critique, and surgical polish.
+
+### Compact Capabilities Table
+
+| Capability | When to Apply | Required Tools | Limitations & Constraints |
+|:---|:---|:---|:---|
+| **`craft`** | Creating new UI surfaces or features from a blank slate. | `impeccable` CLI, `PRODUCT.md`, `DESIGN.md` | **Deprecated alias** for `new-work` (routes through `init` + `new-work`). Does not replace discovery interview (`shape`). |
+| **`shape`** | **BEFORE writing code**. Discovering user intent, constraints, inputs/outputs, edge cases, and architectural scope. | Impeccable discovery prompt, structured question tool (`ask_question`). | Diagnostic & planning only; outputs a confirmed design brief, not executable CSS/HTML. |
+| **`critique`** | Comprehensive UX design evaluation; assessing visual hierarchy, information architecture, cognitive load, and anti-patterns. | **2 isolated sub-agents** (Assessment A: design review; Assessment B: detector/browser evidence), `impeccable detect`, Headless Browser (`playwright-cli` / Chrome DevTools). | Evaluation only (does not mutate code directly). Running without isolated sub-agents requires explicit `⚠️ DEGRADED` banner. |
+| **`audit`** | Systematic code-level technical quality checks across 5 pillars: Accessibility (A11y), Performance, Theming, Responsive, and Anti-patterns. | `impeccable detect`, code inspection, Headless Browser (`playwright-cli` / Chrome DevTools) for DOM verification. | Code-level technical check, does not judge brand tone or copy. Documents issues rather than automatically fixing them. |
+| **`animate`** | Adding purposeful motion, micro-interactions, state transitions, spatial continuity, or focus cues to a static UI. | CSS, GSAP (`gsap-skills`), Browser preview (`playwright-cli`). | Strictly bans decorative animation debt. Requires GPU-only properties (`transform`, `opacity`) and mandatory `prefers-reduced-motion` compliance. |
+| **`overdrive`** | Pushing interfaces past conventional limits with ambitious, showcase-caliber visual effects, advanced shaders, canvas/WebGL, liquid physics, or high-fps virtualization. | 3D/Shader engines (`Three.js`, `img2threejs`), Canvas, CSS View Transitions, Browser Automation (`playwright-cli`), Media generators (`generate_image`). | **High risk of misfire**. MUST propose 2–3 directions first and get user confirmation before writing code. Requires active browser visual verification. |
+| **`delight`** | Adding moments of personality, warmth, and memorable touches at meaningful milestones (success states, empty states, loading, recovery, discovery). | Code editor, micro-interaction recipes (`react-bits`), audio/haptics/illustrations if applicable. | Cannot be sprayed everywhere. Never trivializes financial loss, errors, or sensitive actions. Must remain satisfying after 100 uses. |
+| **`polish`** | **Final pre-flight quality pass before shipping**. Surgical alignment, spacing rhythm, micro-contrast, typography, and state completeness. | `impeccable detect`, `DESIGN.md` tokens, `playwright-cli` for multi-viewport inspection (desktop & mobile). | Strictly refinement, **NEVER disguised redesign**. Preserves existing layout, business logic, and copy. |
+| **`optimize`** | Diagnosing and eliminating UI bottlenecks: slow initial load, layout thrashing, high CLS/INP/LCP, massive asset payloads, or frame drops. | Chrome DevTools MCP (`performance_start_trace`, `lighthouse_audit`, `list_network_requests`), code profiler, image compression tools. | Measure before and after. Banned from premature optimization of non-bottleneck components. |
+| **`adapt`** | Adapting an interface across device viewports (desktop, tablet, mobile), touch vs pointer input, or orientation contexts. | Headless Browser (`playwright-cli resize 390 844` / Chrome DevTools `emulate`), CSS Media Queries / Container Queries. | Not just CSS scaling; requires rethinking the experience (e.g., bottom navigation, 44x44px touch targets, zero horizontal scroll, tap feedback). |
+| **`document`** | Generating or synchronizing canonical `DESIGN.md` specifications from codebase tokens, CSS variables, and design patterns. | `impeccable` CLI / scripts, AST token extraction. | Captures existing codebase truth; does not invent new design tokens out of thin air without user guidance. |
+| **`live`** | Interactive live variant exploration in the browser; selecting elements on screen, selecting a direction, and hot-reloading variants in real time. | Running dev server with HMR (`http://localhost:3015`), interactive browser session (`live-browser.js`), poll loop script. | Local dev server only (unsupported on external HTTPS production builds). Requires active polling background process. |
+
+### Special Tooling Dependencies
+- **External CLI / Scripts**: In Windows PowerShell, run via `& "C:\Users\DNS\AppData\Roaming\Antigravity\bin\impeccable.exe"` or `.agents/skills/impeccable/scripts/impeccable.cmd`.
+- **Media Generators (`generate_image`)**: When designing Persuade or Experience surfaces requiring rich visual imagery, photorealistic hero backgrounds, or custom textures, use `generate_image` as Impeccable specifies asset needs but does not synthesize binary imagery directly.
+- **Headless Browser Access (`playwright-cli` / Chrome DevTools MCP)**: Essential for `live` variant mode, `critique` visual evaluation, `audit` DOM inspection, `adapt` mobile viewport checks (390x844), and `overdrive` visual iteration.
+
+### Precedence Hierarchy
+> [!IMPORTANT]
+> **User Instructions & Project Design System Take Strict Precedence**: If any recommendation from Impeccable conflicts with explicit user preferences or FinKaif's established design system in [DESIGN.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/DESIGN.md) (Velvet Slate `#080D0B`, Midnight Emerald `#111A16`, Cashmere Jade `#10B981` / `#34D399`, tabular figures, editorial typography), **the project design system and user instructions strictly override Impeccable**.
+
+---
+
+## 4. Complete Design Stack Tool Registry
 
 | # | Tool / Resource | Category | Location / Command | Primary Purpose |
 |---|---|---|---|---|
 | 1 | **Taste Skill** | Workspace Skill | `.agents/skills/taste-skill/` (alias `design-taste-frontend`) | Anti-slop frontend taste layer, dials: VARIANCE, MOTION, DENSITY |
-| 2 | **Impeccable** | CLI & Skill Engine | `.agents/skills/impeccable/` (`impeccable`) | 23 review/polish commands, 61 anti-slop rules, PRODUCT/DESIGN.md integration |
+| 2 | **Impeccable** | CLI & Skill Engine | `.agents/skills/impeccable/` (`impeccable`) | 24 review/polish commands, 61 anti-slop rules, PRODUCT/DESIGN.md integration |
 | 3 | **Playwright CLI** | CLI & Skill Suite | `.agents/skills/playwright-cli/` (`playwright-cli`) | Token-efficient browser automation, snapshots, screenshots, testing |
 | 4 | **Awesome DESIGN.md** | Reference Library | `.shared/awesome-design-md/` + `.agents/skills/awesome-design-md/` | 65+ real-world design systems (Revolut, Stripe, Linear, Wise, Apple) |
 | 5 | **img2threejs** | Workspace Skill & Forge | `.agents/skills/img2threejs/` | Image-to-procedural Three.js code reconstruction, materials, shaders |
@@ -209,3 +245,4 @@ flowchart TD
 | 15 | **Figma MCP** | MCP Server | Registered in Antigravity | Inspect design files, tokens, styles |
 | 16 | **21st-dev MCP** | MCP Server | Registered in Antigravity | Inspiration, component catalog search |
 | 17 | **Chrome DevTools MCP**| MCP Server | Registered in Antigravity | Visual screenshot inspection, console check, mobile emulation |
+| 18 | **UI-Craft (29 Skills)** | Suite & MCP | `~/.gemini/skills/` (`ui-craft`, `craft`, `tokens`, etc.) | Anti-slop engineering, archetypes, typography, color budget, memory |
