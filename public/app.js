@@ -2475,6 +2475,40 @@ function normalizeCategoryToAvailable(cat, availableCats = getAllCategories()) {
   return 'Прочее';
 }
 
+let RUSSIAN_MERCHANTS_KB = null;
+if (typeof window !== 'undefined') {
+  fetch('/russian_merchants_kb.json')
+    .then(r => r.ok ? r.json() : null)
+    .then(d => { if (d) RUSSIAN_MERCHANTS_KB = d; })
+    .catch(() => {});
+}
+
+function isCategoryVerifiedInSystem(cat, availableCats = getAllCategories()) {
+  if (!cat || typeof cat !== 'string') return false;
+  const clean = cat.replace(/^[\p{Emoji}\u200d\s]+/u, '').trim().toLowerCase();
+  if (!clean || clean === 'прочее' || clean === 'другое') return false;
+  if (!Array.isArray(availableCats) || availableCats.length === 0) return false;
+
+  const matchesClean = (name) => {
+    if (!name || typeof name !== 'string') return false;
+    const n = name.replace(/^[\p{Emoji}\u200d\s]+/u, '').trim().toLowerCase();
+    return availableCats.some(c => {
+      if (!c || typeof c !== 'string') return false;
+      const ac = c.replace(/^[\p{Emoji}\u200d\s]+/u, '').trim().toLowerCase();
+      return ac === n;
+    });
+  };
+
+  if (matchesClean(clean)) return true;
+
+  if (RUSSIAN_MERCHANTS_KB && RUSSIAN_MERCHANTS_KB.synonym_mappings) {
+    const mapped = RUSSIAN_MERCHANTS_KB.synonym_mappings[clean];
+    if (mapped && matchesClean(mapped)) return true;
+  }
+
+  return false;
+}
+
 function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCategories()) {
   if (!rawDesc || typeof rawDesc !== 'string') {
     return {
@@ -2489,41 +2523,8 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
   const orig = rawDesc.trim();
   const low = orig.toLowerCase().replace(/ё/g, 'е');
 
-  // 1. Metro Transit vs Metro C&C
-  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|станци[а-я]*\s+метро|турникет|валидатор|тройк|подорожник|метро)/i.test(low)) {
-    return {
-      category: normalizeCategoryToAvailable('Транспорт', availableCats),
-      clean_description: 'Московский метрополитен (проезд)',
-      confidence: 0.99,
-      needs_confirmation: false,
-      reason: 'metro_transit'
-    };
-  }
-
-  // 2. Metro Cash & Carry (Groceries)
-  if (/(?:metro cash|metro c&c|метро кэш)/i.test(low)) {
-    return {
-      category: normalizeCategoryToAvailable('Продукты', availableCats),
-      clean_description: 'Metro Cash & Carry',
-      confidence: 0.98,
-      needs_confirmation: false,
-      reason: 'metro_cash_carry'
-    };
-  }
-
-  // 3. Fishing, Tackle & Outdoor Hobbies
-  if (/(?:рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв|клев|кайда|kaida|spinningline|fmagazin|волжанка|серебряный ручей|воблер|блесн|удочк|спиннинг)/i.test(low)) {
-    return {
-      category: normalizeCategoryToAvailable('Хобби', availableCats),
-      clean_description: orig.replace(/^(?:оплата|покупка|списание)\s+/i, '').trim(),
-      confidence: 0.98,
-      needs_confirmation: false,
-      reason: 'fishing_hobby'
-    };
-  }
-
-  // 4. Check Individual Entrepreneur (ИП / IP / Индивидуальный предприниматель)
-  const isIp = /^(?:индивидуальный\s+предприниматель|ип|ip)\b/i.test(orig) || /(?:^|\s)(?:ип|ip)\s+[А-Яа-яЁёA-Za-z]/iu.test(orig);
+  // Check Individual Entrepreneur (ИП / IP / Индивидуальный предприниматель)
+  const isIp = /^(?:индивидуальный\s+предприниматель|ип|ip)(?:\s+|$)/i.test(orig) || /(?:^|\s)(?:ип|ip)\s+[А-Яа-яЁёA-Za-z]/iu.test(orig);
   let ipPersonName = '';
   let ipSubtitle = '';
 
@@ -2556,7 +2557,75 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
     }
   }
 
-  // Deep Russian merchant knowledge base rules
+  // Consistent result formatter with strict category existence validation
+  const formatResult = (rawCat, cleanTitle, highConfidence, defaultReason) => {
+    const verified = isCategoryVerifiedInSystem(rawCat, availableCats);
+    const normCat = normalizeCategoryToAvailable(rawCat, availableCats);
+    let finalDesc = cleanTitle;
+    if (ipSubtitle && ipPersonName) {
+      finalDesc = `${ipSubtitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+    } else if (ipPersonName && !finalDesc.includes('ИП')) {
+      finalDesc = `${finalDesc} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+    }
+
+    if (!verified) {
+      return {
+        category: normCat,
+        clean_description: finalDesc,
+        confidence: 0.50,
+        needs_confirmation: true,
+        suggested_category: normCat,
+        reason: 'category_not_in_system'
+      };
+    }
+
+    return {
+      category: normCat,
+      clean_description: finalDesc,
+      confidence: highConfidence,
+      needs_confirmation: false,
+      reason: defaultReason
+    };
+  };
+
+  // 1. Metro Transit vs Metro C&C
+  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|станци[а-я]*\s+метро|турникет|валидатор|тройк|подорожник|метро)/i.test(low)) {
+    return formatResult('Транспорт', 'Московский метрополитен (проезд)', 0.99, 'metro_transit');
+  }
+
+  // 2. Metro Cash & Carry (Groceries)
+  if (/(?:metro cash|metro c&c|метро кэш)/i.test(low)) {
+    return formatResult('Продукты', 'Metro Cash & Carry', 0.98, 'metro_cash_carry');
+  }
+
+  // 3. Fishing, Tackle & Outdoor Hobbies
+  if (/(?:рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв|клев|кайда|kaida|spinningline|fmagazin|волжанка|серебряный ручей|воблер|блесн|удочк|спиннинг)/i.test(low)) {
+    return formatResult('Хобби', orig.replace(/^(?:оплата|покупка|списание)\s+/i, '').trim(), 0.98, 'fishing_hobby');
+  }
+
+  // 4. Query Russian Merchant & Brand Knowledge Base catalog
+  if (RUSSIAN_MERCHANTS_KB && Array.isArray(RUSSIAN_MERCHANTS_KB.merchants_catalog)) {
+    for (const m of RUSSIAN_MERCHANTS_KB.merchants_catalog) {
+      const aliasMatch = m.aliases && m.aliases.some(a => low.includes(a.toLowerCase()));
+      if (aliasMatch) {
+        const title = m.default_title || m.name;
+        return formatResult(m.category, title, 0.97, 'kb_catalog_matched');
+      }
+    }
+  }
+
+  // 5. Query OKVED activities dictionary
+  if (RUSSIAN_MERCHANTS_KB && Array.isArray(RUSSIAN_MERCHANTS_KB.okved_dictionary)) {
+    for (const ok of RUSSIAN_MERCHANTS_KB.okved_dictionary) {
+      const kwMatch = ok.keywords && ok.keywords.some(k => low.includes(k.toLowerCase()));
+      if (kwMatch) {
+        const title = ipSubtitle || ok.keywords[0] || orig;
+        return formatResult(ok.category, title, 0.95, 'kb_okved_matched');
+      }
+    }
+  }
+
+  // 6. Deep Russian merchant knowledge base rules
   const knowledgeRules = [
     // A. Bakeries, Cafes & Coffee
     {
@@ -2646,23 +2715,13 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
 
   for (const r of knowledgeRules) {
     if (r.re.test(low)) {
-      const normalizedCat = normalizeCategoryToAvailable(r.cat, availableCats);
-      let cleanTitle = orig;
-      if (ipSubtitle) {
-        cleanTitle = `${ipSubtitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
-      } else if (ipPersonName) {
-        cleanTitle = `${r.defaultTitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
-      }
-      return {
-        category: normalizedCat,
-        clean_description: cleanTitle,
-        confidence: r.confidence,
-        needs_confirmation: false,
-        reason: 'rule_matched'
-      };
+      const title = ipSubtitle || r.defaultTitle || orig;
+      return formatResult(r.cat, title, r.confidence, 'rule_matched');
     }
   }
 
+  // 7. Generic Individual Entrepreneur (ИП without clear category hints)
+  // CANNOT be reliably auto-determined! ALWAYS highlight for confirmation!
   if (isIp) {
     const surnameParts = (ipPersonName || orig.replace(/^(?:индивидуальный\s+предприниматель|ип|ip)\s+/i, '')).trim().split(/[\s.]+/);
     const personSurname = surnameParts[0] || 'Контрагент';
@@ -2674,27 +2733,29 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
     else if (amount > 3000 && amount <= 15000) candidateCat = 'Здоровье';
     else if (amount > 50000) candidateCat = 'Переводы';
 
+    const normCat = normalizeCategoryToAvailable(candidateCat, availableCats);
     return {
-      category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      category: normCat,
       clean_description: cleanTitle,
       confidence: 0.50,
       needs_confirmation: true,
-      suggested_category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      suggested_category: normCat,
       reason: 'ip_generic_unconfirmed'
     };
   }
 
-  // Fallback check for common keywords
+  // 8. Fallbacks
   if (/зарплат[а-я]*|аванс|оклад|расчет|преми[яи]|гонорар/i.test(low)) {
-    return { category: normalizeCategoryToAvailable('Зарплата', availableCats), clean_description: orig, confidence: 0.95, needs_confirmation: false };
+    return formatResult('Зарплата', orig, 0.95, 'keyword_salary');
   }
   if (/дивиденд[а-я]*|купон[а-я]*|брокер|вклад|процент по вкладу/i.test(low)) {
-    return { category: normalizeCategoryToAvailable('Инвестиции', availableCats), clean_description: orig, confidence: 0.95, needs_confirmation: false };
+    return formatResult('Инвестиции', orig, 0.95, 'keyword_invest');
   }
   if (/перевод от|пополнение счета|сбп/i.test(low)) {
-    return { category: normalizeCategoryToAvailable('Переводы', availableCats), clean_description: orig, confidence: 0.90, needs_confirmation: false };
+    return formatResult('Переводы', orig, 0.90, 'keyword_transfers');
   }
 
+  // 9. Unknown
   return {
     category: 'Прочее',
     clean_description: orig,
@@ -2757,10 +2818,15 @@ async function enrichTransactionsWithMerchantIntelligence(transactions) {
         for (const item of res.results) {
           const target = transactions[item.index];
           if (target && item.category) {
+            const verified = isCategoryVerifiedInSystem(item.category, availableCats);
             target.category = normalizeCategoryToAvailable(item.category, availableCats);
             if (item.clean_description) target.description = item.clean_description;
             target.confidence = item.confidence !== undefined ? item.confidence : target.confidence;
-            target.needs_confirmation = item.needs_confirmation !== undefined ? item.needs_confirmation : target.confidence < 0.85;
+            if (verified && target.confidence >= 0.85) {
+              target.needs_confirmation = false;
+            } else {
+              target.needs_confirmation = true;
+            }
             target.suggested_category = target.category;
           }
         }
