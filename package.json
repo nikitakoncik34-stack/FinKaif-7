@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "prestart": "node db/migrate.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy": "node deploy.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
