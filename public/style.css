@@ -10747,4 +10747,34 @@ input[type="number"] {
   padding: 1px 5px;
 }
 
+.ai-recommendation-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 8px 0;
+  padding: 4px 10px;
+  background: rgba(45, 212, 191, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: #E2E8F0;
+  animation: fadeIn 0.2s ease;
+}
+
+.ai-recommendation-pill strong {
+  color: var(--accent-jade);
+  font-weight: 700;
+}
+
+.ai-conf-val {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: auto;
+}
+
+
 
