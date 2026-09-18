@@ -3402,20 +3402,6 @@ function renderHomeView() {
       <!-- Live parse preview bar -->
       <div id="quick-parse-preview" class="quick-parse-preview" style="display: none;"></div>
 
-      <!-- Quick Suggestion Chips (1-Tap Fast Logging) -->
-      <div class="quick-chips-row">
-        <span class="quick-chips-label">Быстрый ввод:</span>
-        <div class="quick-chips-scroll">
-          <button type="button" class="quick-chip" data-chip="Кофе 350">${icon("coffee", 13)} <span>Кофе 350</span></button>
-          <button type="button" class="quick-chip" data-chip="Продукты 2500">${icon("cart", 13)} <span>Продукты 2500</span></button>
-          <button type="button" class="quick-chip" data-chip="Такси 600">${icon("car", 13)} <span>Такси 600</span></button>
-          <button type="button" class="quick-chip" data-chip="Обед 850">${icon("utensils", 13)} <span>Обед 850</span></button>
-          <button type="button" class="quick-chip" data-chip="АЗС 2000">${icon("car", 13)} <span>АЗС 2000</span></button>
-          <button type="button" class="quick-chip" data-chip="Подписка 499">${icon("layers", 13)} <span>Подписка 499</span></button>
-          <button type="button" class="quick-chip" data-chip="Зарплата 85000">${icon("banknote", 13)} <span>Зарплата 85к</span></button>
-        </div>
-      </div>
-
       <!-- Express Smart Guide Explanation Banner -->
       <div class="express-guide-banner">
         <div class="express-guide-header">
@@ -3493,7 +3479,7 @@ function renderHomeView() {
     </div>
 
     <div class="tx-list">
-      ${recentTransactions.length > 0 ? recentTransactions.map(t => renderTxCard(t)).join('') : `
+      ${recentTransactions.length > 0 ? recentTransactions.map(t => renderTxCard(t, { allowSelect: false })).join('') : `
         <div style="text-align: center; padding: 40px 20px; background: var(--bg-surface); border: 1px dashed var(--border-medium); border-radius: var(--r-lg);">
           <p style="color: var(--text-secondary); margin-bottom: 12px;">Пока нет зафиксированных операций.</p>
           <button class="btn-primary" id="btn-first-op">${icon('plus', 13)} Добавить первую операцию</button>
@@ -3896,7 +3882,6 @@ function renderAnalyticsView() {
       <div class="analytics-period-bar">
         <button class="analytics-period-btn ${analyticsPeriod === '7d' ? 'active' : ''}" data-aperiod="7d">Неделя</button>
         <button class="analytics-period-btn ${analyticsPeriod === '30d' ? 'active' : ''}" data-aperiod="30d">30 дней</button>
-        <button class="analytics-period-btn ${analyticsPeriod === 'month' ? 'active' : ''}" data-aperiod="month">Этот месяц</button>
         <button class="analytics-period-btn ${analyticsPeriod === 'all' ? 'active' : ''}" data-aperiod="all">Все время</button>
         <button class="analytics-period-btn ${analyticsPeriod === 'custom' ? 'active' : ''}" data-aperiod="custom" id="btn-analytics-custom-toggle" title="Выбрать произвольный период">
           ${icon('calendar', 12)}
@@ -4369,7 +4354,7 @@ function renderAnalyticsView() {
     </div>
 
     <div class="tx-list">
-      ${drilldownTxs.length > 0 ? drilldownTxs.map(t => renderTxCard(t)).join('') : `
+      ${drilldownTxs.length > 0 ? drilldownTxs.map(t => renderTxCard(t, { allowSelect: false })).join('') : `
         <div style="text-align: center; padding: 30px; color: var(--text-muted); background: var(--bg-surface); border-radius: var(--r-md);">
           В категории нет операций за выбранный период.
         </div>
@@ -4435,10 +4420,6 @@ function renderTransactionsView() {
         <p class="view-subtitle">Полный журнал поступлений и списаний средств с быстрым поиском и итогами.</p>
       </div>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-        <button class="btn-secondary ${isTxSelectMode ? 'active' : ''}" id="btn-toggle-select-mode" title="Включить режим множественного выбора операций">
-          ${icon('check', 14)}
-          <span>${isTxSelectMode ? 'Режим выбора: ВКЛ' : 'Выбрать несколько'}</span>
-        </button>
         <button class="btn-secondary" id="btn-import-bank" title="Импортировать выписку банка (Т-Банк, Сбер, Альфа, ВТБ...)">
           ${icon('upload', 14)}
           <span>Импорт выписки</span>
@@ -4520,7 +4501,7 @@ function renderTransactionsView() {
               </div>
             </div>
             <div class="tx-list">
-              ${dayTxs.map(t => renderTxCard(t)).join('')}
+              ${dayTxs.map(t => renderTxCard(t, { allowSelect: true })).join('')}
             </div>
           </div>
         `;
@@ -4575,18 +4556,21 @@ function formatDateLabel(dStr) {
   }
 }
 
-function renderTxCard(t) {
+function renderTxCard(t, opts = {}) {
+  const allowSelect = opts.allowSelect !== undefined ? opts.allowSelect : (tab === 'transactions');
   const isInc = t.type === 'income';
   const catIcon = getCategoryIcon(t.category);
-  const isSelected = selectedTxIds.has(t.id);
+  const isSelected = allowSelect && selectedTxIds.has(t.id);
 
   return `
-    <div class="tx-card tx-row-clickable ${isSelected ? 'selected' : ''} ${isTxSelectMode ? 'select-mode' : ''}" data-id="${t.id}" title="Нажмите для редактирования операции">
-      <div class="tx-checkbox-wrap ${isSelected ? 'checked' : ''}" data-id="${t.id}" title="${isSelected ? 'Снять выбор' : 'Выбрать для удаления'}">
-        <span class="tx-custom-checkbox ${isSelected ? 'checked' : ''}">
-          ${isSelected ? icon('check', 11) : ''}
-        </span>
-      </div>
+    <div class="tx-card tx-row-clickable ${isSelected ? 'selected' : ''} ${allowSelect ? 'select-mode' : ''}" data-id="${t.id}" title="Нажмите для редактирования операции">
+      ${allowSelect ? `
+        <div class="tx-checkbox-wrap ${isSelected ? 'checked' : ''}" data-id="${t.id}" title="${isSelected ? 'Снять выбор' : 'Выбрать операцию'}">
+          <span class="tx-custom-checkbox ${isSelected ? 'checked' : ''}">
+            ${isSelected ? icon('check', 11) : ''}
+          </span>
+        </div>
+      ` : ''}
       <div class="tx-left">
         <div class="tx-icon-box ${isInc ? 'inc' : 'exp'}">
           ${catIcon}
@@ -4675,18 +4659,6 @@ function renderBudgetsView() {
           ${allAvailableCats.slice(0, 10).map(c => `
             <button type="button" class="budget-chip" data-cat="${esc(c)}">
               ${getCategoryIcon(c)} <span>${esc(c)}</span>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- Amount Preset Chips -->
-      <div class="budget-quick-chips" style="margin-top: 6px;">
-        <span class="budget-quick-lbl">Рекомендуемая сумма лимита:</span>
-        <div class="budget-chips-stream">
-          ${[5000, 10000, 20000, 35000, 50000, 80000].map(amt => `
-            <button type="button" class="budget-amt-chip" data-amt="${amt}">
-              ${money(amt)}
             </button>
           `).join('')}
         </div>
@@ -4797,9 +4769,6 @@ function renderBudgetsView() {
         </div>
       `}
     </div>
-
-    <!-- Subscriptions & Recurring Bills in Budgets View -->
-    ${renderSubscriptionRadar()}
   `;
 }
 
@@ -5920,6 +5889,9 @@ function switchTab(newTab, options = {}) {
     return;
   }
 
+  if (tab !== newTab && newTab !== 'transactions') {
+    selectedTxIds.clear();
+  }
   tab = newTab;
   window.location.hash = tab;
 
@@ -7610,22 +7582,12 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Toggle Select Mode in History
-  const btnToggleSelectMode = document.getElementById('btn-toggle-select-mode');
-  if (btnToggleSelectMode) {
-    btnToggleSelectMode.onclick = () => {
-      isTxSelectMode = !isTxSelectMode;
-      if (!isTxSelectMode) selectedTxIds.clear();
-      renderApp();
-    };
-  }
 
   // Bulk Selection: Select All
   const btnBulkSelectAll = document.getElementById('btn-bulk-select-all');
   if (btnBulkSelectAll) {
     btnBulkSelectAll.onclick = () => {
       (data.transactions || []).forEach(t => selectedTxIds.add(t.id));
-      isTxSelectMode = true;
       renderApp();
     };
   }
@@ -7635,7 +7597,6 @@ function bindInteractiveEvents() {
   if (btnBulkDeselect) {
     btnBulkDeselect.onclick = () => {
       selectedTxIds.clear();
-      isTxSelectMode = false;
       renderApp();
     };
   }
@@ -7663,7 +7624,6 @@ function bindInteractiveEvents() {
           const ids = Array.from(selectedTxIds);
           await Promise.all(ids.map(id => api('transactions/' + id, { method: 'DELETE' })));
           selectedTxIds.clear();
-          isTxSelectMode = false;
           await refreshAllData();
           renderApp();
           showToast(`Успешно удалено ${count} операций`, 'success');
@@ -7682,9 +7642,6 @@ function bindInteractiveEvents() {
       if (!id) return;
       if (selectedTxIds.has(id)) {
         selectedTxIds.delete(id);
-        if (selectedTxIds.size === 0 && !isTxSelectMode) {
-          // keep mode as is
-        }
       } else {
         selectedTxIds.add(id);
       }
@@ -7697,7 +7654,7 @@ function bindInteractiveEvents() {
     card.onclick = e => {
       if (e.target.closest('.tx-delete-btn') || e.target.closest('.tx-edit-btn') || e.target.closest('.tx-duplicate-btn') || e.target.closest('.tx-checkbox-wrap')) return;
       const id = card.getAttribute('data-id');
-      if (isTxSelectMode) {
+      if (tab === 'transactions' && selectedTxIds.size > 0) {
         if (selectedTxIds.has(id)) {
           selectedTxIds.delete(id);
         } else {
