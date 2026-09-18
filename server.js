@@ -790,148 +790,53 @@ app.post("/api/transactions/bulk", auth, async (req, res) => {
   }
 });
 
-const STATEMENT_AI_SYSTEM_PROMPT = `Ты — экспертный финансовый искусственный интеллект FinKaif AI для распознавания и анализа банковских выписок любых банков РФ (Т-Банк, Сбер, Альфа, ВТБ, Райффайзен, 1С, Точка и др.), а также ЛЮБЫХ пользовательских файлов учета расходов/доходов из других программ (Excel/XLSX, Google Таблицы, CoinKeeper, Дзен-мани, 1С, выгрузки личных заметок, произвольный текст TXT/CSV/TSV/JSON).
+const STATEMENT_AI_SYSTEM_PROMPT = `Ты — экспертный финансовый искусственный интеллект FinKaif AI для распознавания и анализа банковских выписок любых банков РФ (Т-Банк, Сбер, Альфа, ВТБ, Райффайзен, 1С, Точка и др.), а также любых таблиц учета расходов/доходов (Excel/XLSX, Google Таблицы, 1С, выгрузки TXT/CSV/TSV/JSON).
 
 ТВОЯ ЗАДАЧА:
-1. Определить источник данных (bank_name):
-   - Если банковская выписка: "Т-Банк", "Сбербанк", "Альфа-Банк", "ВТБ", "Райффайзенбанк", "Точка" или "1С / Банк-Клиент".
-   - Если пользовательский файл/таблица из другой программы: "Архив Excel / Таблица", "CoinKeeper", "Дзен-мани", "Google Sheets" или "Личные заметки (TXT)".
+1. Определить источник данных (bank_name): "Т-Банк", "СберБанк", "Альфа-Банк", "ВТБ", "Райффайзенбанк", "Точка" или "1С / Банк-Клиент".
 2. Определить точный период выписки (period: { from: "YYYY-MM-DD", to: "YYYY-MM-DD", label: "ДД.ММ.ГГГГ — ДД.ММ.ГГГГ" }).
-   - Если явного периода в заголовке нет, обязательно вычисли его по минимальной и максимальной дате найденных операций!
-   - Пример label: "01.08.2026 — 31.08.2026".
-3. Посчитать total_income (сумма income) и total_expense (сумма expense). Переводы (transfer) — НЕ включать в эти суммы.
-4. Извлечь ВСЕ транзакции:
-   - В пользовательских таблицах сопоставь колонки даты, суммы, категории и комментария.
-   - Если сумма с минусом или в колонке «Расход» → type="expense".
-   - Если сумма с плюсом или в колонке «Доход» → type="income".
+3. Посчитать total_income и total_expense (переводы между своими счетами не включать).
+4. Извлечь ВСЕ транзакции с точным сохранением копеек без округления!
 
 ═══════════════════════════════════════
-ОПРЕДЕЛЕНИЕ ТИПА (type)
+СТРОГИЕ СИСТЕМНЫЕ КАТЕГОРИИ (БЕЗ ЭМОДЗИ!):
 ═══════════════════════════════════════
+Для расходов (type="expense"):
+• Продукты: супермаркеты (Пятёрочка, Магнит, Перекрёсток, ВкусВилл, Дикси, Лента, Ашан, Metro Cash & Carry, Spar, Чижик, К&Б, Бристоль), мясные, рыбные, овощные лавки, минимаркеты у дома, гастрономы.
+• Кафе: кофейни (Coffee Like, Cofix, Surf Coffee, One Price, Stars Coffee, Шоколадница, Кофемания, Дринкит), пекарни (Буханка, Хлебница, Цех 85, Вольчек), булочные, кондитерские, круассаны, кофе с собой.
+• Рестораны: рестораны, фастфуд (Додо Пицца, Вкусно и точка, Burger King, Rostic's/KFC, Subway, Теремок), шаурма/донер/кебаб, бургерные, пиццерии, суши/роллы, хинкальные, чайхана, столовые, доставка еды (Яндекс Еда, Купер), бары, пабы.
+• Транспорт: метро (Мосметро, турникет, валидатор, Тройка, Подорожник — ВСЕГДА Транспорт!), общественный транспорт, автобус, поезд, электричка, такси (Яндекс Go, Uber), каршеринг (Делимобиль, Ситидрайв), АЗС, бензин, парковки, платные дороги.
+• Авто: автосервис, СТО, шиномонтаж, автомойка, детейлинг, автозапчасти (Exist, Autodoc, Emex), эвакуатор, шины/диски.
+• Хобби: рыбалка и рыболовные снасти (Кайда, спиннинг, воблеры, удочки, приманки — ВСЕГДА Хобби!), товары для охоты, туризм, настольные игры (Hobby Games, Мосигра), творчество (Леонардо).
+• Здоровье: аптеки (Ригла, Горздрав, Апрель, Планета Здоровья, Еаптека), клиники, анализы (Инвитро, Гемотест), стоматология, доктора, оптика, салоны красоты, парикмахерские, барбершопы (TopGun, Borodach), маникюр, косметология, массаж.
+• Спорт: фитнес-клубы (World Class, DDX), тренажерный зал, бассейн, спортивные секции.
+• Покупки: маркетплейсы (Wildberries, Ozon, Яндекс Маркет, Мегамаркет), ПВЗ, одежда, обувь, электроника (DNS, М.Видео), косметика (Золотое Яблоко, Л'Этуаль), цветы и букеты, подарки, зоомагазины.
+• Подписки: онлайн-кинотеатры (Кинопоиск, Иви, Okko), музыка, Яндекс Плюс, Telegram Premium, VPN, сотовая связь (МТС, Билайн, Мегафон, T2), интернет.
+• Жилье: ЖКХ, коммунальные платежи, квартплата, аренда, управляющие компании, домофон, стройматериалы (Леруа/Лемана Про, Петрович), мебель, ремонт.
+• Развлечения: кинотеатры, театры, концерты, квесты, парки, игры (Steam, PlayStation).
+• Путешествия: авиабилеты (Аэрофлот, Победа, S7), отели, бронирование жилья, экскурсии.
+• Инвестиции: брокерские счета, ценные бумаги, криптоактивы.
+• Прочее: если ни одна категория выше объективно не подходит.
 
-▶ type = "transfer" (ПЕРЕВОДЫ — не доход, не расход):
-   is_self_transfer = true — переводы МЕЖДУ СВОИМИ счетами:
-   • Ключевые слова: "Перевод между счетами", "На вклад", "Накопительный счёт", "Накопит. счёт", "Пополнение карты",
-     "Перевод на карту", "Перевод на счёт", "Перевод со счёта", "С карты на карту", "Внутренний перевод",
-     "На депозит", "Пополнение вклада", "Перевод на депозит"
-   • Получатель совпадает с именем владельца счёта (те же Ф.И.О.)
-   is_self_transfer = false — переводы ФИЗИЧЕСКИМ ЛИЦАМ:
-   • Ключевые слова: "СБП перевод", "Перевод по номеру телефона", "Перевод по СБП", "Transfer to", "Перевод физ."
-   • Получатель — три слова ЗАГЛАВНЫМИ БУКВАМИ (ФИО): "ИВАНОВ ИВАН ИВАНОВИЧ", "Петров Сергей"
-   • ИСКЛЮЧЕНИЕ: плательщик — ООО, ИП, АО, организация → это НЕ transfer, а income/expense
+Для доходов (type="income"):
+• Зарплата: оклад, аванс, премия, выплата по трудовому договору.
+• Фриланс: гонорар, проектная оплата, самозанятость.
+• Дивиденды: доход от акций, купоны по облигациям, проценты по вкладу.
+• Кэшбэк: банковский кэшбэк, бонусы.
+• Переводы: входящий перевод от другого человека.
 
-▶ type = "income" (ПОСТУПЛЕНИЯ):
-   • Зарплата, аванс, премия, бонус, выплата от организации
-   • Возврат средств, кэшбэк, cashback, бонусы банка
-   • Начисление процентов, дивиденды
-   • Поступление от физлица (не перевод между своими счетами)
-   • Ключевые слова: "Зарплата", "Аванс", "Премия", "Выплата", "Начисление", "Кэшбэк", "Cashback",
-     "Возврат", "Проценты по", "Дивиденды", "Пополнение от"
-
-▶ type = "expense" (РАСХОДЫ — всё остальное):
-   • Покупки в магазинах, кафе, аптеках, сервисах
-   • Оплата ЖКХ, связи, подписок
-   • Комиссии, штрафы, налоги, снятие наличных
-
-═══════════════════════════════════════
-КАТЕГОРИИ (строго с эмодзи)
-═══════════════════════════════════════
-
-Для type="expense":
-
-  🛒 Продукты
-    Торговые точки: Пятёрочка, Магнит, Перекрёсток, ВкусВилл, Дикси, Лента, Ашан, О'КЕЙ, Атак,
-      Metro Cash & Carry (гипермаркет опт), Spar, Billa, Азбука вкуса, Eurospar, Мираторг
-    Доставка: СберМаркет, Самокат, Яндекс.Лавка, Яндекс Лавка, Купер, Доброцен, iGooods
-    Ключевые слова: "продукты", "grocery", "food", "универсам", "гастроном", "супермаркет", "продовольственный", "мясной", "пекарня"
-    ВАЖНО: Wildberries, Ozon, Lamoda — это 🛍️ Одежда и шопинг, а НЕ продукты!
-    ВАЖНО: Городское Метро (проезд, турникеты, Тройка) — это 🚗 Транспорт, а НЕ Продукты!
-
-  ☕ Кафе и рестораны
-    Рестораны: McDonald's, Вкусно и точка, KFC, Rostic's, Burger King, Subway, Чайхана, Якитория, Суши Wok, Сушкоф
-    Кофейни: Starbucks, Stars Coffee, Кофемания, Coffeemania, Шоколадница, Coffee Like, Cofix, Lavazza, Surf Coffee, Drinkit
-    Доставка еды: Яндекс.Еда, Delivery Club, DoDo Pizza, Додо Пицца, Domino's Pizza, Купер Еда
-    Фастфуд: Теремок, Крошка Картошка, Sbarro, Burger Heroes, Frank
-    Ключевые слова: "cafe", "кафе", "ресторан", "pizza", "пицца", "суши", "бар", "столовая", "фастфуд", "sushi", "кофейня"
-    ВАЖНО: Рыболовные магазины, снасти, приманки — это 🎣 Хобби и отдых, а НЕ рестораны!
-
-  🚗 Транспорт
-    Метро и городской транспорт: Метро, Мосметро, Московский метрополитен, Петербургский метрополитен, станция метро, турникет, валидатор, Тройка, Подорожник, Мосгортранс, автобус, трамвай, троллейбус
-    Такси: Яндекс Такси, Яндекс Go, Яндекс.Такси, Uber, Ситимобил, inDriver, Gett
-    Каршеринг: Яндекс Драйв, BelkaCar, Делимобиль, Ситидрайв, CAR5, YouDrive
-    Поезда и пригород: Электричка, МЦД, МЦК, ЦППК, ОАО РЖД, РЖД (билеты/пригородное)
-    Авиа: Аэрофлот, S7 Airlines, Ютэйр, Победа, Smartavia, авиабилеты
-    АЗС: Газпромнефть, Лукойл, Роснефть, Татнефть, Тебойл, Shell, BP, АЗС, бензин
-    Парковки и дороги: Московская парковка, ПАО Сбер Парковки, Автодор, ЗСД, EasyPark
-    Ключевые слова: "такси", "taxi", "каршеринг", "автобус", "метро", "мосметро", "транспорт", "парковка", "avia", "авиа", "азс"
-
-  🎣 Хобби и отдых
-    Рыбалка и снасти: Рыболов, Рыболовный магазин, Снасти, Хищник, Трофей, Клёвое место, Клёв, Мир охоты, Охота и рыбалка, Spinningline, Fmagazin, Kaida, Кайда, Волжанка, Серебряный ручей, Удочки, Спиннинг, Блесна, Воблер, ОхотАктив
-    Творчество и настольные игры: Леонардо, Хобби Центр, Иголочка, Hobby Games, Мосигра
-    Ключевые слова: "рыбалка", "рыболов", "снасти", "удочка", "спиннинг", "хищник", "клёв", "хобби", "настольные игры"
-    ВАЖНО: Рыболовные снасти и магазины для рыбалки — это 🎣 Хобби и отдых, а НЕ рестораны и НЕ развлечения!
-
-  💻 Сервисы и подписки
-    Стриминг: Netflix, Нетфликс, YouTube Premium, Spotify, Apple Music, IVI, Okko, Кинопоиск, START, Premier
-    Яндекс-сервисы: Яндекс Плюс, Яндекс 360, Яндекс Диск, Яндекс.Музыка
-    Мобильная связь: МТС, Билайн, МегаФон, Tele2, Т-Мобайл, Ростелеком, МГТС, Yota
-    Интернет: Дом.ру, ТТК, NetByNet
-    ПО и подписки: Microsoft 365, Adobe, Google One, 1С, антивирус, Kaspersky, VPN, ChatGPT, Telegram Premium
-    Ключевые слова: "подписка", "subscription", "сервис", "интернет", "связь", "оператор", "тариф"
-
-  🏠 Жилье и ЖКХ
-    Коммунальные: ГКУ, ДЕЗ, ЖЭК, УК, Управляющая компания, Мосэнергосбыт, Мосводоканал, ТСЖ
-    Газ и тепло: Газпром Межрегионгаз, Мостеплоэнерго, теплоснабжение
-    Аренда: аренда жилья, аренда квартиры, съём
-    Ключевые слова: "ЖКХ", "квартплата", "аренда", "управляющая", "жилищный", "коммунальные", "ЖЭК"
-
-  💊 Здоровье и аптеки
-    Аптеки: Аптека, Апрель, 36.6, Ригла, Самсон-Фарма, Горздрав, Farmacy, Аптека низких цен, Планета Здоровья, Еаптека
-    Клиники: Медси, Инвитро, Гемотест, CMD, СМ-Клиника, Доктор рядом, Helix, Ситилаб
-    Стоматология, оптика
-    Ключевые слова: "аптека", "pharmacy", "клиника", "анализы", "медицинский", "здоровье", "стоматолог", "оптика"
-
-  🛍️ Одежда и шопинг
-    Маркетплейсы: Wildberries, WB, OZON, Lamoda, AliExpress, СберМегаМаркет, Яндекс Маркет, Авито
-    Одежда: Zara, H&M, Uniqlo, Adidas, Nike, Спортмастер, Columbia, Декатлон, Befree, Lime, Zarina
-    Косметика: Золотое Яблоко, Л'Этуаль, Рив Гош, Sephora, Brocard, YVES ROCHER
-    Электроника: DNS, М.Видео, Эльдорадо, Ситилинк, re:Store, Apple Store, iStore
-    Ключевые слова: "одежда", "обувь", "шопинг", "shop", "store", "маркетплейс", "электроника", "косметика"
-
-  🎉 Развлечения
-    Кино: Кинотеатр, Синема, Каро Фильм, Москино, IMAX, Cinemapark
-    Игры: Steam, PlayStation Store, App Store игры, Google Play игры, Xbox Game Pass
-    Спорт и активности: Боулинг, Квест-комната, Картинг, Аквапарк, Фитнес-клуб, World Class
-    Концерты: Билетер, Kassir.ru, Ticketmaster, Eventim, Яндекс Афиша
-    Ключевые слова: "кино", "театр", "развлечение", "билет", "концерт", "игра", "квест"
-
-  📦 Прочие расходы (если не подошло ни к одной выше)
-    • Комиссии банка, штрафы ГИБДД, налоги, снятие наличных в банкомате
-
-Для type="income":
-  💰 Зарплата
-    • Зарплата, аванс, оклад, премия, выплата ЗП, выплата заработной платы, выплата по трудовому договору
-
-  💎 Прочие доходы
-    • Кэшбэк, cashback, бонусы банка
-    • Проценты по вкладу, дивиденды
-    • Поступление от физлица, возврат долга
-
-Для type="transfer":
-  🔄 Переводы (всегда, при любом значении is_self_transfer)
+Для переводов (type="transfer"):
+• Переводы: перевод между своими счетами или сторонний перевод.
 
 ═══════════════════════════════════════
-ПРАВИЛА ОЧИСТКИ ОПИСАНИЯ (description)
+ПРАВИЛА ДЛЯ ИП (ИНДИВИДУАЛЬНЫХ ПРЕДПРИНИМАТЕЛЕЙ):
 ═══════════════════════════════════════
-• Убрать: коды терминалов, MCC, номера карт/счетов, технические идентификаторы, лишние кавычки.
-• Магазин/сервис: только название. "PYATEROCHKA 12345 MOSCOW" → "Пятёрочка"
-• Перевод физлицу: "СБП ИВАНОВ ИВАН ИВАНОВИЧ" → "Перевод: Иванов И.И."
-• Перевод себе: "ПЕРЕВОД НА НАКОПИТЕЛЬНЫЙ СЧЁТ 40817..." → "Накопительный счёт"
-• Максимум 50 символов.
+- Если платеж в пользу "ИП [Фамилия]" и есть название точки или сфера деятельности (кафе, автосервис, шиномонтаж, салон красоты, стоматология, ПВЗ Wildberries/Ozon, снасти, пекарня, продукты) — классифицируй в соответствующую точную категорию!
+- Очищай описание: убирай юридический шум ("ИП Смирнов А.В. / Кафе Зерно" -> "Кафе Зерно (ИП Смирнов)").
+- Если указано чистое ФИО ИП без каких-либо намеков и невозможно определить назначение: выбери наиболее вероятную категорию ("Покупки" или "Кафе"), но поставь confidence: 0.50 и needs_confirmation: true.
+- Для четко распознанных мерчантов ставь confidence: 0.95+ и needs_confirmation: false.
 
-═══════════════════════════════════════
-ФОРМАТ ОТВЕТА (строго валидный JSON)
-═══════════════════════════════════════
+ФОРМАТ ВЫХОДНОГО JSON (СТРОГО ВАЛИДНЫЙ JSON БЕЗ MARKDOWN):
 {
   "bank_name": "...",
   "period": { "from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "label": "ДД.ММ.ГГГГ — ДД.ММ.ГГГГ" },
@@ -943,11 +848,294 @@ const STATEMENT_AI_SYSTEM_PROMPT = `Ты — экспертный финансо
       "amount": 0,
       "type": "income" | "expense" | "transfer",
       "is_self_transfer": true | false,
-      "category": "...",
-      "description": "..."
+      "category": "КатегорияБезЭмодзи",
+      "description": "ПонятноеНазваниеМерчанта",
+      "confidence": 0.95,
+      "needs_confirmation": false
     }
   ]
 }`;
+
+// Russian Merchant & IP Knowledge Base Engine (Shared Server / Client Specs)
+const SERVER_EXPENSE_CATEGORIES = [
+  'Продукты', 'Кафе', 'Рестораны', 'Транспорт', 'Такси', 'Хобби',
+  'Подписки', 'Здоровье', 'Спорт', 'Покупки', 'Жилье',
+  'ЖКХ', 'Путешествия', 'Развлечения', 'Авто', 'Инвестиции'
+];
+const SERVER_INCOME_CATEGORIES = [
+  'Зарплата', 'Фриланс', 'Дивиденды', 'Кэшбэк', 'Переводы'
+];
+const SERVER_DEFAULT_CATEGORIES = [...SERVER_EXPENSE_CATEGORIES, ...SERVER_INCOME_CATEGORIES, 'Прочее'];
+
+function normalizeCategoryToAvailable(cat, availableCats = SERVER_DEFAULT_CATEGORIES) {
+  if (!cat) return 'Прочее';
+  const clean = String(cat).replace(/^[\p{Emoji}\u200d\s]+/u, '').trim();
+  const low = clean.toLowerCase();
+
+  const exact = availableCats.find(c => c.toLowerCase() === low);
+  if (exact) return exact;
+
+  const synonymMap = [
+    { re: /фастфуд|столов|пицц|суши|ресторан|бургер|шаурм|шаверм|донер|кебаб|гриль|шашлык|бар\b|паб\b/i, target: 'Рестораны' },
+    { re: /кафе(?!др)|кофе|кофейн|пекарн|выпечк|булочн|кондитерск|круассан/i, target: 'Кафе' },
+    { re: /супермаркет|продукты|гастроном|универсам|бакалея|мясн|рыбн|овощ|фрукт/i, target: 'Продукты' },
+    { re: /такси|uber/i, target: 'Такси' },
+    { re: /метро|автобус|троллейбус|трамвай|поезд|электричк|каршеринг|ржд|цппк|проезд|парковк/i, target: 'Транспорт' },
+    { re: /автосервис|сто\b|шиномонтаж|автомойка|детейлинг|автозапчаст|автодок|exist|экзист|бензин|азс|газпром|лукойл/i, target: 'Авто' },
+    { re: /рыбал|рыболов|снаст|воблер|блесн|удочк|спиннинг|охот|туризм|моделизм|настолк|рукоделие|хобби/i, target: 'Хобби' },
+    { re: /аптек|фарм|клиник|стоматолог|зубн|врач|доктор|медцентр|анализ|салон красоты|парикмахер|барбер|маникюр|педикюр|косметолог|здоровье/i, target: 'Здоровье' },
+    { re: /фитнес|спортзал|тренажер|бассейн|спорт/i, target: 'Спорт' },
+    { re: /одежд|обувь|маркетплейс|вайлдберриз|wildberries|wb\b|ozon|озон|шопинг|покупк|электроник|днс|dns|мвидео|цветы|флористик|подарк/i, target: 'Покупки' },
+    { re: /жкх|квартплат|еирц|ук\b|тсж|коммунал|аренда жил|стройматериал|сантехник|электрик|мебель|обои/i, target: 'Жилье' },
+    { re: /подписк|интернет|связь|мтс|билайн|мегафон|теле2|t2|кинопоиск|spotify|яндекс плюс/i, target: 'Подписки' },
+    { re: /кино|театр|концерт|парк|развлечен|квест/i, target: 'Развлечения' },
+    { re: /авиа|отел|путешеств/i, target: 'Путешествия' },
+    { re: /зарплат|аванс|оклад|получк/i, target: 'Зарплата' },
+    { re: /фриланс|гонорар/i, target: 'Фриланс' },
+    { re: /дивиденд|процент.*вклад|инвестиц/i, target: 'Инвестиции' },
+    { re: /кэшбэк|cashback/i, target: 'Кэшбэк' },
+    { re: /перевод|сбп/i, target: 'Переводы' }
+  ];
+
+  for (const s of synonymMap) {
+    if (s.re.test(low)) {
+      const found = availableCats.find(c => c.toLowerCase() === s.target.toLowerCase());
+      if (found) return found;
+      if (s.target === 'Авто' || s.target === 'Такси') {
+        const tr = availableCats.find(c => c.toLowerCase() === 'транспорт');
+        if (tr) return tr;
+      }
+      if (s.target === 'Кафе') {
+        const rest = availableCats.find(c => c.toLowerCase() === 'рестораны');
+        if (rest) return rest;
+      }
+    }
+  }
+
+  const partial = availableCats.find(c => c.toLowerCase().includes(low) || low.includes(c.toLowerCase()));
+  if (partial) return partial;
+
+  return 'Прочее';
+}
+
+function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = SERVER_DEFAULT_CATEGORIES) {
+  if (!rawDesc || typeof rawDesc !== 'string') {
+    return {
+      category: 'Прочее',
+      clean_description: 'Не указано',
+      confidence: 0,
+      needs_confirmation: true,
+      reason: 'empty'
+    };
+  }
+
+  const orig = rawDesc.trim();
+  const low = orig.toLowerCase().replace(/ё/g, 'е');
+
+  // 1. Metro Transit vs Metro C&C
+  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|станци[а-я]*\s+метро|турникет|валидатор|тройк|подорожник|метро)/i.test(low)) {
+    return {
+      category: normalizeCategoryToAvailable('Транспорт', availableCats),
+      clean_description: 'Московский метрополитен (проезд)',
+      confidence: 0.99,
+      needs_confirmation: false,
+      reason: 'metro_transit'
+    };
+  }
+
+  // 2. Metro Cash & Carry (Groceries)
+  if (/(?:metro cash|metro c&c|метро кэш)/i.test(low)) {
+    return {
+      category: normalizeCategoryToAvailable('Продукты', availableCats),
+      clean_description: 'Metro Cash & Carry',
+      confidence: 0.98,
+      needs_confirmation: false,
+      reason: 'metro_cash_carry'
+    };
+  }
+
+  // 3. Fishing, Tackle & Outdoor Hobbies
+  if (/(?:рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв|клев|кайда|kaida|spinningline|fmagazin|волжанка|серебряный ручей|воблер|блесн|удочк|спиннинг)/i.test(low)) {
+    return {
+      category: normalizeCategoryToAvailable('Хобби', availableCats),
+      clean_description: orig.replace(/^(?:оплата|покупка|списание)\s+/i, '').trim(),
+      confidence: 0.98,
+      needs_confirmation: false,
+      reason: 'fishing_hobby'
+    };
+  }
+
+  // 4. Check Individual Entrepreneur (ИП / IP / Индивидуальный предприниматель)
+  const isIp = /^(?:индивидуальный\s+предприниматель|ип|ip)\b/i.test(orig) || /(?:^|\s)(?:ип|ip)\s+[А-Яа-яЁёA-Za-z]/iu.test(orig);
+  let ipPersonName = '';
+  let ipSubtitle = '';
+
+  if (isIp) {
+    const afterIp = orig.replace(/^(?:индивидуальный\s+предприниматель|ип|ip)\s+/i, '').trim();
+    const sepMatch = afterIp.match(/^([А-Яа-яЁёA-Za-z\s.]+?)(?:\s*[\/\-–—|(]\s*(.+?)[)\]]?$|\s+["«](.+?)["»]$)/u);
+    if (sepMatch) {
+      ipPersonName = (sepMatch[1] || '').trim();
+      ipSubtitle = (sepMatch[2] || sepMatch[3] || '').trim();
+    } else {
+      const words = afterIp.split(/\s+/);
+      if (words.length <= 3 && words.every(w => /^[А-Яа-яЁёA-Za-z.]+$/u.test(w) && !/салон|кафе|стоматолог|шиномонтаж|магазин|пекарн|аптек/i.test(w))) {
+        ipPersonName = afterIp;
+        ipSubtitle = '';
+      } else {
+        const nameParts = [];
+        const restParts = [];
+        let inName = true;
+        for (const w of words) {
+          if (inName && (/^[А-Яа-яЁёA-Za-z]\.?$/u.test(w) || nameParts.length < 1)) {
+            nameParts.push(w);
+          } else {
+            inName = false;
+            restParts.push(w);
+          }
+        }
+        ipPersonName = nameParts.join(' ');
+        ipSubtitle = restParts.join(' ');
+      }
+    }
+  }
+
+  // Deep Russian merchant knowledge base rules
+  const knowledgeRules = [
+    // A. Bakeries, Cafes & Coffee
+    {
+      re: /(?:кафе(?!др)|кофе|кофейн[а-я]*|пекарн[а-я]*|булочн[а-я]*|буханка|хлебниц[а-я]*|цех\s*85|вольчек|дринкит|drinkit|surf coffee|серф кофе|coffee like|кофе лайк|cofix|кофикс|one price|ван прайс|stars coffee|starbucks|шоколадниц[а-я]*|кофемания|coffeemania|синнабон|cinnabon|кулинари[яи]|кондитерск[а-я]*|круассан|чизкейк|пончик)/i,
+      cat: 'Кафе',
+      confidence: 0.96,
+      defaultTitle: 'Кофейня / Кафе'
+    },
+    // B. Restaurants, Dining, Fast Food, Shawarma & Pizzeria
+    {
+      re: /(?:додо|dodo pizza|вкусно и точка|mcdonalds|макдоналдс|бургер кинг|burger king|kfc|ростикс|rostics|теремок|крошка картошка|subway|сабвей|шаурм[а-я]*|шаверм[а-я]*|донер|кебаб|шашлычн[а-я]*|гриль|хинкальн[а-я]*|чайхан[а-я]*|чайхон[а-я]*|столов[а-я]*|трапезн[а-я]*|блинн[а-я]*|пицц[а-я]*|суши|sushi|ролл[а-я]*|суши wok|суши sell|ёбидоёби|тануки|якитори[а-я]*|мята lounge|hookah|бар\b|паб\b|ресторан)/i,
+      cat: 'Рестораны',
+      confidence: 0.95,
+      defaultTitle: 'Ресторан / Фастфуд'
+    },
+    // C. Pick-up Points (ПВЗ), Marketplaces & Delivery
+    {
+      re: /(?:wildberries|вайлдберриз|вайлдбериз|\bwb\b|\bвб\b|ozon\b|озон\b|яндекс маркет|мегамаркет|авито\s*доставка|пвз|пункт выдачи|сдэк|cdek|boxberry|боксберри)/i,
+      cat: 'Покупки',
+      confidence: 0.97,
+      defaultTitle: 'Маркетплейс / ПВЗ'
+    },
+    // D. Auto Services, Tires, Car Wash, Parts & Gas
+    {
+      re: /(?:автосервис|шиномонтаж|автомойк[а-я]*|детейлинг|\bсто\b|автозапчаст[а-я]*|автодок|autodoc|exist|экзист|emex|емекс|автомаг|шины|диски|эвакуатор|техосмотр|лукойл|газпромнефть|роснефть|татнефть|тебойл|бензин|\bазс\b)/i,
+      cat: 'Транспорт',
+      confidence: 0.95,
+      defaultTitle: 'Автосервис / АЗС'
+    },
+    // E. Beauty Salons, Barbershops, Hairdressers, Nails & Cosmetics
+    {
+      re: /(?:салон красоты|парикмахерск[а-я]*|барбер[а-я]*|барбершоп|topgun|borodach|chop-chop|маникюр|педикюр|ногт[ейи]*|бьюти|ресниц[а-я]*|бров[ейи]*|косметолог[а-я]*|эпиляци[яи]|массаж|золотое яблоко|летуаль|рив гош)/i,
+      cat: 'Здоровье',
+      confidence: 0.95,
+      defaultTitle: 'Салон красоты / Барбершоп'
+    },
+    // F. Medical, Dentistry, Clinics, Pharmacies, Labs
+    {
+      re: /(?:стоматолог[а-я]*|зубн[а-я]*|клиник[а-я]*|медцентр|медицинск[а-я]*|доктор|инвитро|гемотест|\bcmd\b|хеликс|ситилаб|аптек[а-я]*|фарма|ригла|горздрав|планета здоровья|апрель|еаптека|оптика|линзы)/i,
+      cat: 'Здоровье',
+      confidence: 0.96,
+      defaultTitle: 'Медицина / Стоматология'
+    },
+    // G. Fitness, Gym, Sports
+    {
+      re: /(?:фитнес|спортзал|тренажер[а-я]*|бассейн|\bddx\b|world class|спортмастер|турник)/i,
+      cat: 'Спорт',
+      confidence: 0.95,
+      defaultTitle: 'Фитнес / Спорт'
+    },
+    // H. Supermarkets, Groceries, Meat, Fish, Dairy, Tobacco & Alcohol
+    {
+      re: /(?:пятерочк[а-я]*|пятёрочк[а-я]*|магнит\b|перекресток|перекрёсток|вкусвилл|чижик|дикси|лента\b|ашан|окей|спар\b|spar|красное\s*(&|и)\s*белое|\bк&б\b|\bкб\b|бристоль|ярче|азбука вкуса|самокат|яндекс лавка|купер|мясн[а-я]*|сыроварн[а-я]*|рыбн[а-я]*|овощ[ейи]*|фрукт[а-я]*|гастроном|универсам|продукты|минимаркет|табачн[а-я]*|пивоварн[а-я]*|разливн[а-я]*)/i,
+      cat: 'Продукты',
+      confidence: 0.95,
+      defaultTitle: 'Супермаркет / Продукты'
+    },
+    // I. Home, Construction, Hardware, Furniture & Repairs
+    {
+      re: /(?:стройматериал[а-я]*|сантехник[а-я]*|электрик[а-я]*|крепеж|метиз[а-я]*|мебель|обои|краск[а-я]*|леруа|лемана про|петрович|максидом|\bоби\b|\bobi\b|ремонт квартир|хозтовар[а-я]*|1000 мелочей)/i,
+      cat: 'Жилье',
+      confidence: 0.94,
+      defaultTitle: 'Стройматериалы / Ремонт'
+    },
+    // J. Flowers & Gifts
+    {
+      re: /(?:цвет[ыов]+|букет[а-я]*|флористик[а-я]*|цветочный ряд|мосцветторг|подарк[а-я]*|сувенир[а-я]*|воздушные шары)/i,
+      cat: 'Покупки',
+      confidence: 0.94,
+      defaultTitle: 'Цветы и подарки'
+    },
+    // K. Pets & Veterinary
+    {
+      re: /(?:зоомагазин|зоотовар[а-я]*|ветклиник[а-я]*|ветеринар|ветаптек[а-я]*|корм для животных|груминг|четыре лапы|бетховен)/i,
+      cat: 'Покупки',
+      confidence: 0.94,
+      defaultTitle: 'Зоотовары / Ветклиника'
+    },
+    // L. Tech & Phone Repair
+    {
+      re: /(?:ремонт телефонов|сервисный центр|днс|\bdns\b|м\.видео|мвидео|эльдорадо|ситилинк|re:store|чехлы для телефонов)/i,
+      cat: 'Покупки',
+      confidence: 0.94,
+      defaultTitle: 'Электроника / Сервис'
+    }
+  ];
+
+  for (const r of knowledgeRules) {
+    if (r.re.test(low)) {
+      const normalizedCat = normalizeCategoryToAvailable(r.cat, availableCats);
+      let cleanTitle = orig;
+      if (ipSubtitle) {
+        cleanTitle = `${ipSubtitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+      } else if (ipPersonName) {
+        cleanTitle = `${r.defaultTitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+      }
+      return {
+        category: normalizedCat,
+        clean_description: cleanTitle,
+        confidence: r.confidence,
+        needs_confirmation: false,
+        reason: 'rule_matched'
+      };
+    }
+  }
+
+  if (isIp) {
+    const surnameParts = (ipPersonName || orig.replace(/^(?:индивидуальный\s+предприниматель|ип|ip)\s+/i, '')).trim().split(/[\s.]+/);
+    const personSurname = surnameParts[0] || 'Контрагент';
+    const cleanTitle = `ИП ${personSurname}`;
+    
+    let candidateCat = 'Покупки';
+    if (amount > 0 && amount <= 500) candidateCat = 'Кафе';
+    else if (amount > 500 && amount <= 3000) candidateCat = 'Покупки';
+    else if (amount > 3000 && amount <= 15000) candidateCat = 'Здоровье';
+    else if (amount > 50000) candidateCat = 'Переводы';
+
+    return {
+      category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      clean_description: cleanTitle,
+      confidence: 0.50,
+      needs_confirmation: true,
+      suggested_category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      reason: 'ip_generic_unconfirmed'
+    };
+  }
+
+  return {
+    category: 'Прочее',
+    clean_description: orig,
+    confidence: 0.30,
+    needs_confirmation: true,
+    suggested_category: 'Покупки',
+    reason: 'unknown'
+  };
+}
 
 async function parseBankStatementWithGemini(fileContent, fileName = '', bankPreset = 'auto') {
   const truncated = String(fileContent || '').slice(0, 120000);
@@ -1107,6 +1295,118 @@ app.post("/api/ai/parse-statement", auth, async (req, res) => {
         error: aiErr.message
       });
     }
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/ai/categorize-batch", auth, aiLimiter, async (req, res) => {
+  try {
+    const { transactions, user_categories } = req.body || {};
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return res.status(400).json({ error: "Список транзакций для классификации пуст." });
+    }
+
+    const availableCats = Array.isArray(user_categories) && user_categories.length > 0
+      ? user_categories
+      : SERVER_DEFAULT_CATEGORIES;
+
+    // 1. First pass: run deterministic Russian Merchant & IP Knowledge Base (0ms)
+    const processed = transactions.map((t, idx) => {
+      const desc = String(t.description || t.title || '').trim();
+      const amt = Number(t.amount) || 0;
+      const localAnalysis = analyzeRussianMerchant(desc, amt, availableCats);
+      return {
+        index: idx,
+        id: t.id || idx,
+        original_description: desc,
+        amount: amt,
+        type: t.type || 'expense',
+        ...localAnalysis
+      };
+    });
+
+    // 2. Identify items that require Neural Gemini Classification
+    // (confidence < 0.85 or generic IP without subtitle, or unknown description)
+    const needingNeural = processed.filter(p => p.confidence < 0.85);
+
+    if (needingNeural.length > 0) {
+      const itemsForPrompt = needingNeural.slice(0, 40).map(p => ({
+        index: p.index,
+        description: p.original_description,
+        amount: p.amount,
+        type: p.type
+      }));
+
+      const neuralPrompt = `Ты — экспертный финансовый классификатор банковских выписок РФ в FinKaif OS.
+ТВОЯ ЗАДАЧА: Для каждой транзакции определить точную категорию и чистое название торговой точки.
+
+СПИСОК РАЗРЕШЕННЫХ КАТЕГОРИЙ (СТРОГО ВЫБИРАЙ ТОЛЬКО ИЗ ЭТОГО СПИСКА):
+${JSON.stringify(availableCats)}
+
+ПРАВИЛА АНАЛИЗА ОПЕРАЦИЙ И ИП (ИНДИВИДУАЛЬНЫХ ПРЕДПРИНИМАТЕЛЕЙ):
+1. В РФ огромное число торговых точек, кофеен, пекарен, ПВЗ, сервисов и аптек оформлены как "ИП [Фамилия]".
+2. Если в названии, описании или мерчанте есть намёк на сферу деятельности:
+   - Кофейня, пекарня, выпечка, булочная, кофе -> "Кафе" (уверенность 0.95+)
+   - Ресторан, шаурма, пицца, бургеры, суши, доставка еды, столовая, фастфуд -> "Рестораны" (уверенность 0.95+)
+   - ПВЗ Wildberries, Ozon, Яндекс Маркет, одежда, обувь, цветы, косметика, электроника -> "Покупки" (уверенность 0.95+)
+   - Автосервис, шиномонтаж, автомойка, автозапчасти, бензин, АЗС -> "Транспорт" или "Авто" (уверенность 0.95+)
+   - Салон красоты, парикмахерская, барбершоп, стоматология, аптека, клиника, анализы -> "Здоровье" (уверенность 0.95+)
+   - Супермаркет, овощи, фрукты, мясо, рыба, продукты питания -> "Продукты" (уверенность 0.95+)
+   - Снасти, рыбалка, охота, туризм, настольные игры -> "Хобби" (уверенность 0.98+)
+   - Метро, Мосметро, турникет, проездной, Тройка -> "Транспорт" (уверенность 1.0)
+   - Metro Cash & Carry (гипермаркет) -> "Продукты" (уверенность 0.98)
+3. Если указано только "ИП [Фамилия]" без каких-либо намёков и невозможно определить сферу:
+   - Сформируй чистое название "ИП [Фамилия]".
+   - Предложи наиболее вероятную категорию (например "Покупки" или "Кафе").
+   - Установи "confidence": 0.50 и "needs_confirmation": true.
+4. Если операция четко определена:
+   - Установи "needs_confirmation": false и "confidence": 0.90..1.0.
+
+ФОРМАТ ОТВЕТА (СТРОГО JSON-массив без markdown):
+[
+  {
+    "index": 0,
+    "category": "Категория_из_списка",
+    "clean_description": "Красивое название",
+    "confidence": 0.95,
+    "needs_confirmation": false
+  }
+]`;
+
+      const userText = JSON.stringify(itemsForPrompt);
+
+      for (const key of GEMINI_API_KEYS) {
+        try {
+          const raw = await callGeminiFast(key, neuralPrompt, userText);
+          if (raw) {
+            const cleanJson = raw.replace(/^```(?:json)?/im, '').replace(/```$/im, '').trim();
+            const aiResults = JSON.parse(cleanJson);
+            if (Array.isArray(aiResults)) {
+              for (const aiItem of aiResults) {
+                const target = processed.find(p => p.index === aiItem.index);
+                if (target && aiItem.category) {
+                  target.category = normalizeCategoryToAvailable(aiItem.category, availableCats);
+                  if (aiItem.clean_description) target.clean_description = String(aiItem.clean_description).trim();
+                  target.confidence = Math.max(0.1, Math.min(1.0, Number(aiItem.confidence) || 0.7));
+                  target.needs_confirmation = aiItem.needs_confirmation !== undefined ? Boolean(aiItem.needs_confirmation) : target.confidence < 0.85;
+                  target.reason = 'gemini_ai';
+                }
+              }
+              break;
+            }
+          }
+        } catch (geminiErr) {
+          console.warn("Gemini batch categorization notice:", geminiErr.message);
+        }
+      }
+    }
+
+    res.json({
+      ok: true,
+      count: processed.length,
+      results: processed
+    });
   } catch (e) {
     fail(res, e);
   }
