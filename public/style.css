@@ -162,21 +162,39 @@ input[type="number"] {
   padding: 24px 20px 80px;
 }
 
-/* Native View Transitions API Styling (Apple-grade fluid crossfade) */
+/* Native View Transitions API Styling (Apple-grade fluid crossfade, zero darkening) */
+.masthead {
+  view-transition-name: masthead;
+}
+.mobile-bottom-bar {
+  view-transition-name: mobile-bottom-bar;
+}
+::view-transition-old(masthead),
+::view-transition-new(masthead),
+::view-transition-old(mobile-bottom-bar),
+::view-transition-new(mobile-bottom-bar) {
+  animation: none !important;
+  mix-blend-mode: normal !important;
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 0.18s;
+  animation-duration: 0.12s;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .view-container {
-  animation: viewSubtleFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.12s ease;
 }
 
-@keyframes viewSubtleFade {
+.view-container.view-enter-active {
+  animation: viewFluidEnter 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes viewFluidEnter {
   from {
-    opacity: 0.72;
-    transform: translateY(3px);
+    opacity: 0.92;
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
@@ -7713,52 +7731,22 @@ input[type="number"] {
   animation: modalEntrance 0.32s var(--spring) both;
 }
 
-/* ─── View container stagger ─── */
-.view-container {
-  animation: fadeSlideUp 0.32s var(--spring) both;
+/* ─── Butter-smooth tactile card interaction (zero screen blink / zero darkening) ─── */
+.tx-card {
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
-
-/* ─── Transaction cards stagger-in ─── */
-.tx-list .tx-card:nth-child(1)  { animation: staggerFadeUp 0.28s var(--spring) 0ms   both; }
-.tx-list .tx-card:nth-child(2)  { animation: staggerFadeUp 0.28s var(--spring) 40ms  both; }
-.tx-list .tx-card:nth-child(3)  { animation: staggerFadeUp 0.28s var(--spring) 75ms  both; }
-.tx-list .tx-card:nth-child(4)  { animation: staggerFadeUp 0.28s var(--spring) 105ms both; }
-.tx-list .tx-card:nth-child(5)  { animation: staggerFadeUp 0.28s var(--spring) 130ms both; }
-.tx-list .tx-card:nth-child(6)  { animation: staggerFadeUp 0.28s var(--spring) 150ms both; }
-.tx-list .tx-card:nth-child(n+7){ animation: staggerFadeUp 0.28s var(--spring) 165ms both; }
-
-.tx-date-group:nth-child(1)  { animation: staggerFadeUp 0.32s var(--spring) 0ms   both; }
-.tx-date-group:nth-child(2)  { animation: staggerFadeUp 0.32s var(--spring) 60ms  both; }
-.tx-date-group:nth-child(3)  { animation: staggerFadeUp 0.32s var(--spring) 110ms both; }
-.tx-date-group:nth-child(4)  { animation: staggerFadeUp 0.32s var(--spring) 150ms both; }
-.tx-date-group:nth-child(n+5){ animation: staggerFadeUp 0.32s var(--spring) 180ms both; }
-
-/* ─── Budget cards stagger-in ─── */
-.budget-grid .budget-card:nth-child(1)  { animation: staggerFadeUp 0.3s var(--spring) 0ms   both; }
-.budget-grid .budget-card:nth-child(2)  { animation: staggerFadeUp 0.3s var(--spring) 55ms  both; }
-.budget-grid .budget-card:nth-child(3)  { animation: staggerFadeUp 0.3s var(--spring) 100ms both; }
-.budget-grid .budget-card:nth-child(n+4){ animation: staggerFadeUp 0.3s var(--spring) 135ms both; }
-
-/* ─── Goals cards stagger-in ─── */
-.goals-grid .goal-card:nth-child(1)  { animation: staggerFadeUp 0.3s var(--spring) 0ms   both; }
-.goals-grid .goal-card:nth-child(2)  { animation: staggerFadeUp 0.3s var(--spring) 60ms  both; }
-.goals-grid .goal-card:nth-child(3)  { animation: staggerFadeUp 0.3s var(--spring) 110ms both; }
-.goals-grid .goal-card:nth-child(n+4){ animation: staggerFadeUp 0.3s var(--spring) 150ms both; }
-
-/* ─── Analytics cards stagger ─── */
-.analytics-metrics-strip .analytics-metric-card:nth-child(1) { animation: staggerFadeUp 0.3s var(--spring) 0ms   both; }
-.analytics-metrics-strip .analytics-metric-card:nth-child(2) { animation: staggerFadeUp 0.3s var(--spring) 50ms  both; }
-.analytics-metrics-strip .analytics-metric-card:nth-child(3) { animation: staggerFadeUp 0.3s var(--spring) 95ms  both; }
-.analytics-metrics-strip .analytics-metric-card:nth-child(4) { animation: staggerFadeUp 0.3s var(--spring) 130ms both; }
-.analytics-main-grid .analytics-card:nth-child(1) { animation: staggerFadeUp 0.36s var(--spring) 80ms  both; }
-.analytics-main-grid .analytics-card:nth-child(2) { animation: staggerFadeUp 0.36s var(--spring) 140ms both; }
-
-/* ─── Hero balance card pop-in ─── */
-.hero-balance-card {
-  animation: staggerFadeUp 0.38s var(--spring) 0ms both;
+.tx-card.selected {
+  background: rgba(45, 212, 191, 0.08) !important;
+  border-color: rgba(45, 212, 191, 0.45) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), inset 0 0 16px rgba(45, 212, 191, 0.06) !important;
 }
-.stats-strip .stat-card:nth-child(1) { animation: staggerFadeUp 0.3s var(--spring) 60ms  both; }
-.stats-strip .stat-card:nth-child(2) { animation: staggerFadeUp 0.3s var(--spring) 100ms both; }
+.tx-cb {
+  transition: transform 0.12s var(--ease), border-color 0.15s ease, background-color 0.15s ease;
+  cursor: pointer;
+}
+.budget-card, .goal-card, .analytics-metric-card, .stat-card {
+  transition: border-color 0.2s ease, transform 0.14s ease, box-shadow 0.2s ease;
+}
 
 /* ─── Quick Express Card — animated top border glow ─── */
 .quick-express-card {
