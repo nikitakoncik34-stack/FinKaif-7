@@ -12,10 +12,54 @@ The product is a **premium personal finance operating system** (not a generic Sa
 
 1. **Активация стека:** Автоматически разворачивать полный 16-шаговый пайплайн из [DESIGN_STACK.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/DESIGN_STACK.md).
 2. **Последовательность вызова инструментов:**
-   - **Фаза 1 (Смысл и концепт):** Сверка с [PRODUCT.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/PRODUCT.md) и [DESIGN.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/DESIGN.md) ➔ Калибровка шкал Taste Skill (`VARIANCE: 4`, `MOTION: 5`, `DENSITY: 6`) ➔ Референсы из 71 системы Awesome DESIGN.md + Mobbin ➔ Выборка стилей из UI UX Pro Max ➔ Кинематографичные приемы MengTo ➔ Пре-флайт фильтр Impeccable Audit + UI/UX Kit.
-   - **Фаза 2 (Инженерия):** Семантическая верстка первого статического кадра ➔ Хореография GSAP ➔ Vercel View Transitions ➔ Процедурный 3D Three.js/img2threejs ➔ Рецепты React Bits.
-   - **Фаза 3 (Приемка и аудит):** Проверка через Playwright CLI (`playwright-cli open/snapshot/screenshot`) + Chrome DevTools ➔ Детерминированный аудит `impeccable detect public/style.css` + `impeccable polish` ➔ Контрольный гейт Vercel Web Guidelines.
+   - **Фаза 1 (Смысл и концепт):** Сверка с [PRODUCT.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/PRODUCT.md) и [DESIGN.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/DESIGN.md) ➔ Калибровка шкал Taste Skill (`VARIANCE: 4`, `MOTION: 5`, `DENSITY: 6`) ➔ Референсы из 71 системы Awesome DESIGN.md + Mobbin ➔ Выборка стилей из UI UX Pro Max ➔ Кинематографичные приемы MengTo ➔ Пре-флайт фильтр Impeccable (`impeccable shape` / `impeccable init`) + UI/UX Kit.
+   - **Фаза 2 (Инженерия):** Семантическая верстка первого статического кадра ➔ Хореография GSAP + `impeccable animate` / `impeccable overdrive` ➔ Vercel View Transitions ➔ Процедурный 3D Three.js/img2threejs ➔ Рецепты React Bits + `impeccable delight`.
+   - **Фаза 3 (Приемка и аудит):** Проверка через Playwright CLI (`playwright-cli open/snapshot/screenshot`) + Chrome DevTools ➔ Детерминированный аудит `impeccable detect public/style.css public/index.html` + `impeccable audit` / `impeccable critique` + `impeccable polish` / `impeccable optimize` ➔ Контрольный гейт Vercel Web Guidelines.
 3. **Отчётность:** В ответе чётко указывать, какие фазы протокола были пройдены и какие правила/инструменты применены.
+
+---
+
+## Mandatory Rule: IMPECCABLE_DESIGN_STANDARD
+
+При любых задачах, связанных с дизайном, интерфейсом, визуальной полировкой, анимациями и переходами (**дизайн**, **UI/UX**, **полировка**, **анимации**, **переходы**, **микро-взаимодействия**), агент **ОБЯЗАН обращаться к Impeccable** и применять соответствующие инструкции из `.agents/skills/impeccable/`.
+
+### Обязательный 6-этапный рабочий процесс (Fixed 6-Stage Workflow)
+1. **Понимание задачи и визуального направления (Understand Task & Visual Direction):**
+   - Запустить контекст: `.agents/skills/impeccable/scripts/impeccable.cmd context` (или прочитать `PRODUCT.md` и `DESIGN.md`).
+   - Определить моду посетителя (`Persuade`, `Operate`, `Read`, `Experience`).
+   - При необходимости провести discovery через `impeccable shape`.
+2. **Разработка композиции (Develop Composition):**
+   - Отказаться от шаблонного «AI slop» (запрет на 4 одинаковые KPI карточки, фиолетовые градиенты, бесцельный глассморфизм).
+   - Заложить асимметрию, напряжение негативного пространства и структурный ритм секций.
+3. **Реализация (Implement Semantic & Robust Code):**
+   - Построить качественный первый статический кадр (интерфейс выглядит великолепно до загрузки скриптов и шейдеров).
+   - Семантический HTML5, чистые CSS-переменные из `DESIGN.md`.
+4. **Настройка движения (Tune Motion):**
+   - Применять `impeccable animate` для формирования тезиса движения (motion thesis).
+   - Для ключевых и сигнатурных взаимодействий — `impeccable overdrive` (предложить 2–3 направления перед кодом).
+   - Анимировать исключительно `transform` и `opacity` (GPU-only). Никаких анимаций `width`, `height`, `margin`.
+5. **Проверка в браузере (Verify in Real Browser):**
+   - Провести инспекцию через Playwright CLI (`playwright-cli open`, `snapshot`, `screenshot`) или Chrome DevTools MCP.
+   - Проверить два разрешения: Desktop (1440×900) и Mobile (390×844).
+6. **Детали и производительность (Refine Details & Performance):**
+   - Запустить детерминированный сканер: `impeccable detect public/style.css public/index.html`.
+   - Провести микро-полировку через `impeccable polish` (выравнивание, ритм отступов, контраст, состояния hover/focus/active).
+   - Проверить Core Web Vitals и отсутствие layout shifts через `impeccable optimize`.
+
+### Стандарты качества (Quality Requirements)
+- **Выразительный дизайн, привязанный к контенту:** Финансовые данные FinKaif — это живой ландшафт капитала, а не таблица Excel, загнанная в одинаковые плашки.
+- **Характерная типографика:** Экспрессивный дисплейный гротеск для заголовков + строгие моноширинные/табличные цифры (`font-variant-numeric: tabular-nums`) для валют и метрик.
+- **Ритм секций:** Осмысленная пустота, чередование плотных информационных зон и визуального воздуха.
+- **Гармония медиа и движения:** Анимации объясняют причинно-следственные связи интерфейса, а не добавляют визуальный шум.
+- **Overdrive для ключевых элементов:** Главный баланс, интерактивный мастхед и графики должны производить «wow»-эффект благодаря выверенной физике пружин и плавной интерактивности.
+- **Мобильная адаптивность (`impeccable adapt`) & скорость:** Минимальная зона тапа `44x44px`, отсутствие горизонтального скролла, оптимизированные ассеты.
+- **Строгое соответствие `prefers-reduced-motion`:** Пользователи с отключенной анимацией получают мгновенные переходы с сохранением обратной связи.
+
+### Приоритет применения (Precedence Hierarchy)
+> [!IMPORTANT]
+> **При любых расхождениях между эстетическими рекомендациями Impeccable и проектными требованиями:**
+> 1. Прямые указания пользователя имеют высший приоритет.
+> 2. Утвержденная дизайн-система проекта ([DESIGN.md](file:///C:/Users/DNS/.gemini/antigravity/scratch/FinKaif-7/DESIGN.md) — палитра Velvet Slate `#080D0B`, Midnight Emerald `#111A16`, Cashmere Jade `#10B981` / `#34D399`) строго превалирует над универсальными советами Impeccable.
 
 ---
 
