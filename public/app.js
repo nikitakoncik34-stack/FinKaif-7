@@ -1087,16 +1087,23 @@ const getAllCategories = () => {
 };
 
 // ==========================================================================
-// ROBUST NEURAL VOICE INPUT CONTROLLER (Web Speech API + Micro permissions)
+// ==========================================================================
+// ROBUST NEURAL VOICE INPUT CONTROLLER (Web Speech API)
 // ==========================================================================
 function setupVoiceInputHandler({ btnEl, inputEl, onResult, onEnd, defaultPlaceholder, listeningPlaceholder }) {
   if (!btnEl || !inputEl) return;
+
+  // If this button had a previous voice session attached, cleanly terminate it
+  if (typeof btnEl._voiceStop === 'function') {
+    btnEl._voiceStop('rebind');
+  }
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
     btnEl.onclick = (e) => {
       e.preventDefault();
-      showToast('Голосовой ввод не поддерживается данным браузером.', 'warning');
+      e.stopPropagation();
+      showToast('Голосовой ввод не поддерживается данным браузером. Используйте Chrome, Safari, Edge или Яндекс.Браузер.', 'warning');
     };
     return;
   }
@@ -1104,102 +1111,129 @@ function setupVoiceInputHandler({ btnEl, inputEl, onResult, onEnd, defaultPlaceh
   let activeRecognition = null;
   let silenceTimer = null;
 
-  function stopCurrentSession() {
+  function clearSilence() {
     if (silenceTimer) {
       clearTimeout(silenceTimer);
       silenceTimer = null;
     }
+  }
+
+  function stopCurrentSession(reason = 'unknown') {
+    clearSilence();
     if (activeRecognition) {
-      try {
-        activeRecognition.onend = null;
-        activeRecognition.onerror = null;
-        activeRecognition.onresult = null;
-        activeRecognition.stop();
-      } catch (_) {}
+      const rec = activeRecognition;
       activeRecognition = null;
+      try {
+        rec.onstart = null;
+        rec.onend = null;
+        rec.onerror = null;
+        rec.onresult = null;
+        rec.stop();
+      } catch (_) {}
     }
     btnEl.classList.remove('recording');
     inputEl.classList.remove('voice-active');
     if (defaultPlaceholder) inputEl.placeholder = defaultPlaceholder;
     if (typeof onEnd === 'function') onEnd();
   }
+  btnEl._voiceStop = stopCurrentSession;
 
-  btnEl.onclick = async (e) => {
+  btnEl.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
 
     // Toggle off if already recording
     if (activeRecognition) {
-      stopCurrentSession();
+      stopCurrentSession('toggle-click');
       return;
-    }
-
-    // Solicit mic permissions first to avoid silent rejection in Chrome/Safari/Edge
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop());
-      } catch (micErr) {
-        if (micErr.name === 'NotAllowedError' || micErr.name === 'PermissionDeniedError') {
-          showToast('Доступ к микрофону заблокирован. Разрешите микрофон в настройках браузера.', 'warning');
-          return;
-        }
-      }
     }
 
     try {
       const recognition = new SpeechRecognition();
+      const currentRec = recognition;
       recognition.lang = 'ru-RU';
-      recognition.continuous = true;
+      
+      // On mobile devices (Android / iOS), continuous=true often causes audio-capture crash or instant abort
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+      recognition.continuous = !isMobile;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
-      const resetSilenceTimer = () => {
-        if (silenceTimer) clearTimeout(silenceTimer);
+      const resetSilenceTimer = (delay = 2500) => {
+        clearSilence();
         silenceTimer = setTimeout(() => {
-          stopCurrentSession();
-        }, 2200); // 2.2s of silence stops recording
+          if (activeRecognition === currentRec) {
+            stopCurrentSession('silence-timer');
+          }
+        }, delay);
       };
 
       recognition.onstart = () => {
-        activeRecognition = recognition;
+        if (!activeRecognition || activeRecognition !== currentRec) {
+          try { currentRec.stop(); } catch (_) {}
+          return;
+        }
         btnEl.classList.add('recording');
         inputEl.classList.add('voice-active');
         if (listeningPlaceholder) inputEl.placeholder = listeningPlaceholder;
-        resetSilenceTimer();
+        resetSilenceTimer(7000); // 7s to begin speaking before timeout
       };
 
       recognition.onresult = (event) => {
-        resetSilenceTimer();
+        if (!activeRecognition || activeRecognition !== currentRec) return;
+        resetSilenceTimer(2500); // 2.5s pause after speech finalizes session
+        
         let transcript = '';
         for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
         }
-        if (transcript) {
-          inputEl.value = transcript;
-          if (typeof onResult === 'function') onResult(transcript);
+        
+        const clean = transcript.trim();
+        if (clean) {
+          inputEl.value = clean;
+          inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          if (typeof onResult === 'function') onResult(clean);
         }
       };
 
       recognition.onerror = (event) => {
+        if (!activeRecognition || activeRecognition !== currentRec) return;
         console.warn('SpeechRecognition error:', event.error);
         if (event.error === 'not-allowed') {
-          showToast('Микрофон недоступен. Разрешите доступ в браузере.', 'warning');
+          showToast('Доступ к микрофону отклонен. Нажмите на значок настроек/замка в строке адреса браузера и разрешите микрофон.', 'warning');
+        } else if (event.error === 'service-not-allowed') {
+          showToast('Служба распознавания речи недоступна в данной сети или браузере.', 'warning');
+        } else if (event.error === 'audio-capture') {
+          showToast('Микрофон не обнаружен или занят другим приложением.', 'warning');
         } else if (event.error === 'network') {
-          showToast('Сетевая ошибка распознавания речи.', 'warning');
+          showToast('Сетевая ошибка распознавания речи. Проверьте подключение к интернету.', 'warning');
+        } else if (event.error === 'no-speech' || event.error === 'aborted') {
+          // Normal silent termination
         }
-        stopCurrentSession();
+        stopCurrentSession('onerror');
       };
 
       recognition.onend = () => {
-        stopCurrentSession();
+        if (activeRecognition === currentRec) {
+          stopCurrentSession('onend');
+        }
       };
+
+      // Set active immediately to prevent double click race
+      activeRecognition = currentRec;
+      btnEl.classList.add('recording');
+      inputEl.classList.add('voice-active');
+      if (listeningPlaceholder) inputEl.placeholder = listeningPlaceholder;
 
       recognition.start();
     } catch (startErr) {
       console.warn('SpeechRecognition start failed:', startErr);
-      showToast('Не удалось запустить микрофон: ' + (startErr.message || startErr), 'warning');
-      stopCurrentSession();
+      if (startErr.name === 'InvalidStateError') {
+        stopCurrentSession('invalid-state');
+        return;
+      }
+      showToast('Не удалось включить микрофон: ' + (startErr.message || startErr), 'warning');
+      stopCurrentSession('start-failed');
     }
   };
 }
