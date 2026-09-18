@@ -2967,7 +2967,7 @@ function renderHomeView() {
   let runwayTierClass = 'runway-secure';
   let runwayStatus = 'Крепость';
   let runwayDot = 'jade';
-  let runwayDesc = `Автономность: капитала хватит на ${runwayMonthsFormatted} комфортной жизни при текущем темпе трат (${money(monthlyBurn)} ₽/мес)`;
+  let runwayDesc = `Автономность: капитала хватит на ${runwayMonthsFormatted} комфортной жизни при текущем темпе трат (${money(monthlyBurn)}/мес)`;
 
   if (totalCapital <= 0) {
     runwayTierClass = 'runway-danger';
@@ -6038,12 +6038,25 @@ function updateMastheadDynamicData() {
   if (avatarEl) avatarEl.innerHTML = getAvatarHtml(profile.avatar, userInitial, 36);
 
   const balEl = document.getElementById('masthead-balance-figure');
-  if (balEl && !privacyMode) {
-    const cur = profile.currency || 'RUB';
-    const sym = (cur === 'USD' || cur === 'EUR') ? '' : ` ${currencySymbols[cur] || '₽'}`;
-    const curPrefix = cur === 'USD' ? '$' : cur === 'EUR' ? '€' : '';
-    const balConv = convertFromRub(balance);
-    balEl.textContent = `${curPrefix}${money(balConv)}${sym}`;
+  if (balEl) {
+    balEl.textContent = money(balance);
+  }
+
+  const privBtn = document.getElementById('btn-toggle-privacy');
+  if (privBtn) {
+    privBtn.classList.toggle('active', !!privacyMode);
+    privBtn.innerHTML = privacyMode ? icon('eyeOff', 14) : icon('eye', 14);
+    privBtn.title = privacyMode ? 'Показать баланс' : 'Скрыть баланс';
+  }
+
+  const mastPill = document.getElementById('masthead-balance-pill');
+  if (mastPill) {
+    mastPill.title = privacyMode ? 'Показать баланс (горячая клавиша P)' : 'Скрыть баланс (горячая клавиша P)';
+  }
+
+  const deltaEl = document.querySelector('.masthead .balance-delta');
+  if (deltaEl) {
+    deltaEl.style.display = privacyMode ? 'none' : '';
   }
 }
 
@@ -7756,69 +7769,169 @@ function bindInteractiveEvents() {
   }
 
 
-  // Bulk Selection: Select All
-  const btnBulkSelectAll = document.getElementById('btn-bulk-select-all');
-  if (btnBulkSelectAll) {
-    btnBulkSelectAll.onclick = () => {
-      (data.transactions || []).forEach(t => selectedTxIds.add(t.id));
-      renderApp();
-    };
-  }
-
-  // Bulk Selection: Deselect All
-  const btnBulkDeselect = document.getElementById('btn-bulk-deselect');
-  if (btnBulkDeselect) {
-    btnBulkDeselect.onclick = () => {
-      selectedTxIds.clear();
-      renderApp();
-    };
-  }
-
-  // Bulk Delete Transactions Handler
-  const btnBulkDelete = document.getElementById('btn-bulk-delete');
-  if (btnBulkDelete) {
-    btnBulkDelete.onclick = async () => {
-      const count = selectedTxIds.size;
-      if (count === 0) return;
-      const selectedTxs = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
-      const totalAmount = selectedTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-      const confirmed = await showConfirmDialog({
-        title: `Удалить ${count} операций?`,
-        message: `Вы действительно хотите безвозвратно удалить ${count} выбранных операций на сумму ${money(totalAmount)} ₽? Это действие нельзя будет отменить.`,
-        confirmText: `Удалить ${count} записей`,
-        cancelText: 'Отмена',
-        danger: true,
-        icon: 'trash'
-      });
-
-      if (confirmed) {
-        try {
-          const ids = Array.from(selectedTxIds);
-          await Promise.all(ids.map(id => api('transactions/' + id, { method: 'DELETE' })));
-          selectedTxIds.clear();
-          await refreshAllData();
-          renderApp();
-          showToast(`Успешно удалено ${count} операций`, 'success');
-        } catch (err) {
-          showToast('Ошибка массового удаления: ' + err.message, 'error');
-        }
+  // Seamless Bulk Selection & Dock Handlers (Zero Page Reload, Zero Flash)
+  function updateBulkDockState() {
+    let dock = document.getElementById('tx-bulk-dock');
+    if (tab !== 'transactions' || selectedTxIds.size === 0) {
+      if (dock) {
+        dock.style.opacity = '0';
+        dock.style.transform = 'translateX(-50%) translateY(20px)';
+        setTimeout(() => {
+          if (selectedTxIds.size === 0 && dock && dock.parentNode) dock.remove();
+        }, 220);
       }
-    };
+      return;
+    }
+
+    const filtered = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
+    const bulkSum = filtered.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+
+    if (!dock) {
+      const dWrap = document.createElement('div');
+      dWrap.innerHTML = renderBulkDock();
+      dock = dWrap.firstElementChild;
+      const appContainer = document.querySelector('.app-container') || document.body;
+      appContainer.appendChild(dock);
+      bindBulkDockEvents(dock);
+      requestAnimationFrame(() => {
+        dock.style.opacity = '1';
+        dock.style.transform = 'translateX(-50%) translateY(0)';
+      });
+    } else {
+      dock.style.opacity = '1';
+      dock.style.transform = 'translateX(-50%) translateY(0)';
+      const badgeStrong = dock.querySelector('.tx-bulk-badge strong');
+      if (badgeStrong) badgeStrong.textContent = String(selectedTxIds.size);
+      const sumEl = dock.querySelector('.tx-bulk-sum');
+      if (sumEl) {
+        sumEl.className = `tx-bulk-sum ${bulkSum >= 0 ? 'inc' : 'exp'}`;
+        sumEl.textContent = `Сумма: ${bulkSum >= 0 ? '+' : '−'}${money(Math.abs(bulkSum))}`;
+      }
+      const delBtnSpan = dock.querySelector('#btn-bulk-delete span');
+      if (delBtnSpan) delBtnSpan.textContent = `Удалить (${selectedTxIds.size})`;
+    }
   }
 
-  // Checkbox Click Handler for Transaction Cards
+  function toggleTxSelection(id, forceState = null) {
+    if (!id) return;
+    const shouldSelect = forceState !== null ? forceState : !selectedTxIds.has(id);
+    if (shouldSelect) {
+      selectedTxIds.add(id);
+    } else {
+      selectedTxIds.delete(id);
+    }
+
+    const card = document.querySelector(`.tx-card[data-id="${id}"]`);
+    if (card) {
+      card.classList.toggle('selected', shouldSelect);
+      const wrap = card.querySelector('.tx-checkbox-wrap');
+      if (wrap) {
+        wrap.classList.toggle('checked', shouldSelect);
+        wrap.title = shouldSelect ? 'Снять выбор' : 'Выбрать операцию';
+      }
+      const customCb = card.querySelector('.tx-custom-checkbox');
+      if (customCb) {
+        customCb.classList.toggle('checked', shouldSelect);
+        customCb.innerHTML = shouldSelect ? icon('check', 11) : '';
+      }
+    }
+
+    updateBulkDockState();
+  }
+
+  function bindBulkDockEvents(dock) {
+    if (!dock) return;
+    const btnSelectAll = dock.querySelector('#btn-bulk-select-all');
+    if (btnSelectAll) {
+      btnSelectAll.onclick = () => {
+        (data.transactions || []).forEach(t => selectedTxIds.add(t.id));
+        document.querySelectorAll('.tx-card').forEach(c => {
+          const cid = c.getAttribute('data-id');
+          if (cid) {
+            c.classList.add('selected');
+            const wrap = c.querySelector('.tx-checkbox-wrap');
+            if (wrap) wrap.classList.add('checked');
+            const customCb = c.querySelector('.tx-custom-checkbox');
+            if (customCb) {
+              customCb.classList.add('checked');
+              customCb.innerHTML = icon('check', 11);
+            }
+          }
+        });
+        updateBulkDockState();
+      };
+    }
+
+    const btnDeselect = dock.querySelector('#btn-bulk-deselect');
+    if (btnDeselect) {
+      btnDeselect.onclick = () => {
+        selectedTxIds.clear();
+        document.querySelectorAll('.tx-card').forEach(c => {
+          c.classList.remove('selected');
+          const wrap = c.querySelector('.tx-checkbox-wrap');
+          if (wrap) wrap.classList.remove('checked');
+          const customCb = c.querySelector('.tx-custom-checkbox');
+          if (customCb) {
+            customCb.classList.remove('checked');
+            customCb.innerHTML = '';
+          }
+        });
+        updateBulkDockState();
+      };
+    }
+
+    const btnDelete = dock.querySelector('#btn-bulk-delete');
+    if (btnDelete) {
+      btnDelete.onclick = async () => {
+        const count = selectedTxIds.size;
+        if (count === 0) return;
+        const selectedTxs = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
+        const totalAmount = selectedTxs.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+        const confirmed = await showConfirmDialog({
+          title: `Удалить ${count} операций?`,
+          message: `Вы действительно хотите безвозвратно удалить ${count} выбранных операций на сумму ${money(totalAmount)}? Это действие нельзя будет отменить.`,
+          confirmText: `Удалить ${count} записей`,
+          cancelText: 'Отмена',
+          danger: true,
+          icon: 'trash'
+        });
+
+        if (confirmed) {
+          try {
+            const ids = Array.from(selectedTxIds);
+            ids.forEach(id => {
+              const c = document.querySelector(`.tx-card[data-id="${id}"]`);
+              if (c) {
+                c.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+                c.style.opacity = '0';
+                c.style.transform = 'scale(0.92)';
+              }
+            });
+            await Promise.all(ids.map(id => api('transactions/' + id, { method: 'DELETE' })));
+            selectedTxIds.clear();
+            updateBulkDockState();
+            await refreshAllData();
+            renderApp();
+            showToast(`Успешно удалено ${count} операций`, 'success');
+          } catch (err) {
+            showToast('Ошибка массового удаления: ' + err.message, 'error');
+          }
+        }
+      };
+    }
+  }
+
+  // Bind existing dock if present
+  const existingDockEl = document.getElementById('tx-bulk-dock');
+  if (existingDockEl) bindBulkDockEvents(existingDockEl);
+
+  // Checkbox Click Handler for Transaction Cards (Tactile micro-interaction, zero reload)
   $$('.tx-checkbox-wrap').forEach(wrap => {
     wrap.onclick = e => {
       e.stopPropagation();
       const id = wrap.getAttribute('data-id');
-      if (!id) return;
-      if (selectedTxIds.has(id)) {
-        selectedTxIds.delete(id);
-      } else {
-        selectedTxIds.add(id);
-      }
-      renderApp();
+      toggleTxSelection(id);
     };
   });
 
@@ -7828,12 +7941,7 @@ function bindInteractiveEvents() {
       if (e.target.closest('.tx-delete-btn') || e.target.closest('.tx-edit-btn') || e.target.closest('.tx-duplicate-btn') || e.target.closest('.tx-checkbox-wrap')) return;
       const id = card.getAttribute('data-id');
       if (tab === 'transactions' && selectedTxIds.size > 0) {
-        if (selectedTxIds.has(id)) {
-          selectedTxIds.delete(id);
-        } else {
-          selectedTxIds.add(id);
-        }
-        renderApp();
+        toggleTxSelection(id);
         return;
       }
       const tx = data.transactions.find(t => String(t.id) === String(id));
