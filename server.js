@@ -12,6 +12,19 @@ import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load Russian Merchants & IP Knowledge Base
+let RUSSIAN_MERCHANTS_KB = null;
+try {
+  const kbFile = path.join(__dirname, "data", "russian_merchants_kb.json");
+  if (fs.existsSync(kbFile)) {
+    RUSSIAN_MERCHANTS_KB = JSON.parse(fs.readFileSync(kbFile, "utf8"));
+    console.log(`[FinKaif KB] Loaded Russian Merchant Knowledge Base v${RUSSIAN_MERCHANTS_KB.version} (${RUSSIAN_MERCHANTS_KB.merchants_catalog?.length || 0} merchants, ${RUSSIAN_MERCHANTS_KB.okved_dictionary?.length || 0} OKVED activities)`);
+  }
+} catch (kbErr) {
+  console.warn("[FinKaif KB] Warning loading russian_merchants_kb.json:", kbErr.message);
+}
+
 const app = express();
 app.set("trust proxy", 1);
 
@@ -867,14 +880,59 @@ const SERVER_INCOME_CATEGORIES = [
 ];
 const SERVER_DEFAULT_CATEGORIES = [...SERVER_EXPENSE_CATEGORIES, ...SERVER_INCOME_CATEGORIES, 'Прочее'];
 
+function isCategoryVerifiedInSystem(cat, availableCats = SERVER_DEFAULT_CATEGORIES) {
+  if (!cat || typeof cat !== 'string') return false;
+  const clean = cat.replace(/^[\p{Emoji}\u200d\s]+/u, '').trim().toLowerCase();
+  if (!clean || clean === 'прочее' || clean === 'другое') return false;
+  if (!Array.isArray(availableCats) || availableCats.length === 0) return false;
+
+  const matchesClean = (name) => {
+    if (!name || typeof name !== 'string') return false;
+    const n = name.replace(/^[\p{Emoji}\u200d\s]+/u, '').trim().toLowerCase();
+    return availableCats.some(c => {
+      if (!c || typeof c !== 'string') return false;
+      const ac = c.replace(/^[\p{Emoji}\u200d\s]+/u, '').trim().toLowerCase();
+      return ac === n;
+    });
+  };
+
+  if (matchesClean(clean)) return true;
+
+  if (RUSSIAN_MERCHANTS_KB && RUSSIAN_MERCHANTS_KB.synonym_mappings) {
+    const mapped = RUSSIAN_MERCHANTS_KB.synonym_mappings[clean];
+    if (mapped && matchesClean(mapped)) return true;
+  }
+
+  return false;
+}
+
 function normalizeCategoryToAvailable(cat, availableCats = SERVER_DEFAULT_CATEGORIES) {
   if (!cat) return 'Прочее';
   const clean = String(cat).replace(/^[\p{Emoji}\u200d\s]+/u, '').trim();
   const low = clean.toLowerCase();
 
+  // 1. Direct exact match (case-insensitive)
   const exact = availableCats.find(c => c.toLowerCase() === low);
   if (exact) return exact;
 
+  // 2. Knowledge base synonym mapping
+  if (RUSSIAN_MERCHANTS_KB && RUSSIAN_MERCHANTS_KB.synonym_mappings) {
+    const kbTarget = RUSSIAN_MERCHANTS_KB.synonym_mappings[low];
+    if (kbTarget) {
+      const found = availableCats.find(c => c.toLowerCase() === kbTarget.toLowerCase());
+      if (found) return found;
+      if (kbTarget === 'Авто' || kbTarget === 'Такси') {
+        const tr = availableCats.find(c => c.toLowerCase() === 'транспорт');
+        if (tr) return tr;
+      }
+      if (kbTarget === 'Кафе') {
+        const rest = availableCats.find(c => c.toLowerCase() === 'рестораны');
+        if (rest) return rest;
+      }
+    }
+  }
+
+  // 3. Fallback regex synonym map
   const synonymMap = [
     { re: /фастфуд|столов|пицц|суши|ресторан|бургер|шаурм|шаверм|донер|кебаб|гриль|шашлык|бар\b|паб\b/i, target: 'Рестораны' },
     { re: /кафе(?!др)|кофе|кофейн|пекарн|выпечк|булочн|кондитерск|круассан/i, target: 'Кафе' },
@@ -932,41 +990,8 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = SERVER_DEFA
   const orig = rawDesc.trim();
   const low = orig.toLowerCase().replace(/ё/g, 'е');
 
-  // 1. Metro Transit vs Metro C&C
-  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|станци[а-я]*\s+метро|турникет|валидатор|тройк|подорожник|метро)/i.test(low)) {
-    return {
-      category: normalizeCategoryToAvailable('Транспорт', availableCats),
-      clean_description: 'Московский метрополитен (проезд)',
-      confidence: 0.99,
-      needs_confirmation: false,
-      reason: 'metro_transit'
-    };
-  }
-
-  // 2. Metro Cash & Carry (Groceries)
-  if (/(?:metro cash|metro c&c|метро кэш)/i.test(low)) {
-    return {
-      category: normalizeCategoryToAvailable('Продукты', availableCats),
-      clean_description: 'Metro Cash & Carry',
-      confidence: 0.98,
-      needs_confirmation: false,
-      reason: 'metro_cash_carry'
-    };
-  }
-
-  // 3. Fishing, Tackle & Outdoor Hobbies
-  if (/(?:рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв|клев|кайда|kaida|spinningline|fmagazin|волжанка|серебряный ручей|воблер|блесн|удочк|спиннинг)/i.test(low)) {
-    return {
-      category: normalizeCategoryToAvailable('Хобби', availableCats),
-      clean_description: orig.replace(/^(?:оплата|покупка|списание)\s+/i, '').trim(),
-      confidence: 0.98,
-      needs_confirmation: false,
-      reason: 'fishing_hobby'
-    };
-  }
-
-  // 4. Check Individual Entrepreneur (ИП / IP / Индивидуальный предприниматель)
-  const isIp = /^(?:индивидуальный\s+предприниматель|ип|ip)\b/i.test(orig) || /(?:^|\s)(?:ип|ip)\s+[А-Яа-яЁёA-Za-z]/iu.test(orig);
+  // Check Individual Entrepreneur (ИП / IP / Индивидуальный предприниматель)
+  const isIp = /^(?:индивидуальный\s+предприниматель|ип|ip)(?:\s+|$)/i.test(orig) || /(?:^|\s)(?:ип|ip)\s+[А-Яа-яЁёA-Za-z]/iu.test(orig);
   let ipPersonName = '';
   let ipSubtitle = '';
 
@@ -999,7 +1024,75 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = SERVER_DEFA
     }
   }
 
-  // Deep Russian merchant knowledge base rules
+  // Consistent result formatter with strict category existence validation
+  const formatResult = (rawCat, cleanTitle, highConfidence, defaultReason) => {
+    const verified = isCategoryVerifiedInSystem(rawCat, availableCats);
+    const normCat = normalizeCategoryToAvailable(rawCat, availableCats);
+    let finalDesc = cleanTitle;
+    if (ipSubtitle && ipPersonName) {
+      finalDesc = `${ipSubtitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+    } else if (ipPersonName && !finalDesc.includes('ИП')) {
+      finalDesc = `${finalDesc} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+    }
+
+    if (!verified) {
+      return {
+        category: normCat,
+        clean_description: finalDesc,
+        confidence: 0.50,
+        needs_confirmation: true,
+        suggested_category: normCat,
+        reason: 'category_not_in_system'
+      };
+    }
+
+    return {
+      category: normCat,
+      clean_description: finalDesc,
+      confidence: highConfidence,
+      needs_confirmation: false,
+      reason: defaultReason
+    };
+  };
+
+  // 1. Metro Transit vs Metro C&C
+  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|станци[а-я]*\s+метро|турникет|валидатор|тройк|подорожник|метро)/i.test(low)) {
+    return formatResult('Транспорт', 'Московский метрополитен (проезд)', 0.99, 'metro_transit');
+  }
+
+  // 2. Metro Cash & Carry (Groceries)
+  if (/(?:metro cash|metro c&c|метро кэш)/i.test(low)) {
+    return formatResult('Продукты', 'Metro Cash & Carry', 0.98, 'metro_cash_carry');
+  }
+
+  // 3. Fishing, Tackle & Outdoor Hobbies
+  if (/(?:рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв|клев|кайда|kaida|spinningline|fmagazin|волжанка|серебряный ручей|воблер|блесн|удочк|спиннинг)/i.test(low)) {
+    return formatResult('Хобби', orig.replace(/^(?:оплата|покупка|списание)\s+/i, '').trim(), 0.98, 'fishing_hobby');
+  }
+
+  // 4. Query Russian Merchant & Brand Knowledge Base catalog
+  if (RUSSIAN_MERCHANTS_KB && Array.isArray(RUSSIAN_MERCHANTS_KB.merchants_catalog)) {
+    for (const m of RUSSIAN_MERCHANTS_KB.merchants_catalog) {
+      const aliasMatch = m.aliases && m.aliases.some(a => low.includes(a.toLowerCase()));
+      if (aliasMatch) {
+        const title = m.default_title || m.name;
+        return formatResult(m.category, title, 0.97, 'kb_catalog_matched');
+      }
+    }
+  }
+
+  // 5. Query OKVED activities dictionary
+  if (RUSSIAN_MERCHANTS_KB && Array.isArray(RUSSIAN_MERCHANTS_KB.okved_dictionary)) {
+    for (const ok of RUSSIAN_MERCHANTS_KB.okved_dictionary) {
+      const kwMatch = ok.keywords && ok.keywords.some(k => low.includes(k.toLowerCase()));
+      if (kwMatch) {
+        const title = ipSubtitle || ok.keywords[0] || orig;
+        return formatResult(ok.category, title, 0.95, 'kb_okved_matched');
+      }
+    }
+  }
+
+  // 6. Deep Russian merchant knowledge base rules
   const knowledgeRules = [
     // A. Bakeries, Cafes & Coffee
     {
@@ -1089,23 +1182,13 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = SERVER_DEFA
 
   for (const r of knowledgeRules) {
     if (r.re.test(low)) {
-      const normalizedCat = normalizeCategoryToAvailable(r.cat, availableCats);
-      let cleanTitle = orig;
-      if (ipSubtitle) {
-        cleanTitle = `${ipSubtitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
-      } else if (ipPersonName) {
-        cleanTitle = `${r.defaultTitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
-      }
-      return {
-        category: normalizedCat,
-        clean_description: cleanTitle,
-        confidence: r.confidence,
-        needs_confirmation: false,
-        reason: 'rule_matched'
-      };
+      const title = ipSubtitle || r.defaultTitle || orig;
+      return formatResult(r.cat, title, r.confidence, 'rule_matched');
     }
   }
 
+  // 7. Generic Individual Entrepreneur (ИП without clear category hints)
+  // CANNOT be reliably auto-determined! ALWAYS highlight for confirmation!
   if (isIp) {
     const surnameParts = (ipPersonName || orig.replace(/^(?:индивидуальный\s+предприниматель|ип|ip)\s+/i, '')).trim().split(/[\s.]+/);
     const personSurname = surnameParts[0] || 'Контрагент';
@@ -1117,16 +1200,29 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = SERVER_DEFA
     else if (amount > 3000 && amount <= 15000) candidateCat = 'Здоровье';
     else if (amount > 50000) candidateCat = 'Переводы';
 
+    const normCat = normalizeCategoryToAvailable(candidateCat, availableCats);
     return {
-      category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      category: normCat,
       clean_description: cleanTitle,
       confidence: 0.50,
       needs_confirmation: true,
-      suggested_category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      suggested_category: normCat,
       reason: 'ip_generic_unconfirmed'
     };
   }
 
+  // 8. Fallbacks
+  if (/зарплат[а-я]*|аванс|оклад|расчет|преми[яи]|гонорар/i.test(low)) {
+    return formatResult('Зарплата', orig, 0.95, 'keyword_salary');
+  }
+  if (/дивиденд[а-я]*|купон[а-я]*|брокер|вклад|процент по вкладу/i.test(low)) {
+    return formatResult('Инвестиции', orig, 0.95, 'keyword_invest');
+  }
+  if (/перевод от|пополнение счета|сбп/i.test(low)) {
+    return formatResult('Переводы', orig, 0.90, 'keyword_transfers');
+  }
+
+  // 9. Unknown
   return {
     category: 'Прочее',
     clean_description: orig,
@@ -1300,6 +1396,55 @@ app.post("/api/ai/parse-statement", auth, async (req, res) => {
   }
 });
 
+async function callGeminiBatchCategorizer(apiKey, systemPrompt, userMessage) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds for deep batch reasoning
+  try {
+    const body = {
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 4096,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
+    };
+    for (const model of GEMINI_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`Gemini batch model ${model} status ${response.status}:`, errText.slice(0, 100));
+          continue;
+        }
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+        if (!candidate) continue;
+        const parts = candidate.content?.parts || [];
+        const validParts = parts.filter(p => !p.thought);
+        const fullText = (validParts.length > 0 ? validParts : parts).map(p => p.text || "").join("").trim();
+        if (fullText) return fullText;
+      } catch (err) {
+        if (controller.signal.aborted) {
+          console.warn("Gemini batch request timed out (10s limit)");
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Gemini batch categorizer notice:", e.message);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  return null;
+}
+
 app.post("/api/ai/categorize-batch", auth, aiLimiter, async (req, res) => {
   try {
     const { transactions, user_categories } = req.body || {};
@@ -1378,7 +1523,7 @@ ${JSON.stringify(availableCats)}
 
       for (const key of GEMINI_API_KEYS) {
         try {
-          const raw = await callGeminiFast(key, neuralPrompt, userText);
+          const raw = await callGeminiBatchCategorizer(key, neuralPrompt, userText);
           if (raw) {
             const cleanJson = raw.replace(/^```(?:json)?/im, '').replace(/```$/im, '').trim();
             const aiResults = JSON.parse(cleanJson);
@@ -1386,11 +1531,20 @@ ${JSON.stringify(availableCats)}
               for (const aiItem of aiResults) {
                 const target = processed.find(p => p.index === aiItem.index);
                 if (target && aiItem.category) {
+                  const verified = isCategoryVerifiedInSystem(aiItem.category, availableCats);
                   target.category = normalizeCategoryToAvailable(aiItem.category, availableCats);
                   if (aiItem.clean_description) target.clean_description = String(aiItem.clean_description).trim();
-                  target.confidence = Math.max(0.1, Math.min(1.0, Number(aiItem.confidence) || 0.7));
-                  target.needs_confirmation = aiItem.needs_confirmation !== undefined ? Boolean(aiItem.needs_confirmation) : target.confidence < 0.85;
-                  target.reason = 'gemini_ai';
+                  
+                  if (verified) {
+                    target.confidence = Math.max(0.1, Math.min(1.0, Number(aiItem.confidence) || 0.7));
+                    target.needs_confirmation = aiItem.needs_confirmation !== undefined ? Boolean(aiItem.needs_confirmation) : target.confidence < 0.85;
+                    target.reason = target.needs_confirmation ? (target.reason || 'gemini_ai_unconfirmed') : 'gemini_ai';
+                  } else {
+                    target.confidence = 0.45;
+                    target.needs_confirmation = true;
+                    target.reason = 'category_not_in_system';
+                  }
+                  target.suggested_category = target.category;
                 }
               }
               break;
