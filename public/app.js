@@ -2484,8 +2484,8 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
     }
 
     const absAmt = Math.abs(numAmt);
-    const finalDesc = rawDesc || rawCat || 'Операция по карте';
-    const finalCat = (rawCat && rawCat.length > 2 && rawCat !== 'Другое' && rawCat !== 'Прочее') ? rawCat : autoCategorizeDescription(finalDesc);
+    const finalDesc = rawDesc || '';
+    const finalCat = (rawCat && rawCat.length > 2 && rawCat !== 'Другое' && rawCat !== 'Прочее') ? rawCat : autoCategorizeDescription(finalDesc || rawCat || 'Операция');
 
     results.push({
       occurred_on: date,
@@ -2548,8 +2548,8 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
           tx_kind: isTransfer ? 'transfer' : (isIncome ? 'income' : 'expense'),
           is_self_transfer: item.is_self_transfer === true,
           category: item.category || (isTransfer ? 'Переводы' : autoCategorizeDescription(item.description)),
-          description: item.description || 'Банковская операция',
-          selected: !isTransfer // transfers are unselected by default — user decides
+          description: item.description || '',
+          selected: true // all operations selected by default
         };
       }).filter(x => x.amount > 0);
 
@@ -2583,6 +2583,179 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
     period,
     transactions: items
   };
+}
+
+function isTxDescriptionNeeded(tx) {
+  if (!tx || !tx.selected) return false;
+  if (!tx.description || typeof tx.description !== 'string') return true;
+  const d = tx.description.trim().toLowerCase();
+  if (d.length < 3) return true;
+  if (tx.category && d === tx.category.trim().toLowerCase()) return true;
+  const genericPlaceholders = [
+    'банковская операция',
+    'банковский платеж',
+    'банковский платёж',
+    'операция из выписки',
+    'операция по карте',
+    'платеж',
+    'платёж',
+    'платежи',
+    'перевод',
+    'переводы',
+    'перевод физлицу',
+    'перевод клиенту',
+    'перевод частному лицу',
+    'перевод по сбп',
+    'сбп',
+    'перевод между счетами',
+    'перевод между своими счетами',
+    'свой счёт',
+    'свой счет',
+    'списание',
+    'списания',
+    'пополнение',
+    'пополнения',
+    'прочие расходы',
+    'прочее',
+    'оплата',
+    'оплаты',
+    'покупка',
+    'покупки',
+    'другое',
+    'не указано',
+    'без описания'
+  ];
+  return genericPlaceholders.includes(d);
+}
+
+function openRequiredDescModal(txsNeedingDesc, onComplete) {
+  const existing = document.getElementById('import-desc-required-modal');
+  if (existing) existing.remove();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'import-desc-required-modal';
+  backdrop.className = 'desc-modal-backdrop';
+
+  // Store temporary description values for each item
+  const values = txsNeedingDesc.map(t => (!isTxDescriptionNeeded(t) ? (t.description || '').trim() : ''));
+
+  function getFilledCount() {
+    return values.filter(v => typeof v === 'string' && v.trim().length >= 3).length;
+  }
+
+  backdrop.innerHTML = `
+    <div class="desc-modal-card">
+      <div class="desc-modal-header">
+        <div class="desc-modal-title-box">
+          <div class="desc-modal-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Обязательный шаг импорта
+          </div>
+          <h2 class="desc-modal-title">Уточнение описания операций</h2>
+          <p class="desc-modal-sub">Укажите понятное назначение для ${txsNeedingDesc.length} операций. Переход к следующему шагу возможен только после заполнения всех полей.</p>
+        </div>
+        <button type="button" class="btn-icon" id="btn-close-desc-modal" title="Вернуться назад">
+          ${icon('close', 16)}
+        </button>
+      </div>
+
+      <div class="desc-modal-body" id="desc-modal-items-list">
+        ${txsNeedingDesc.map((tx, idx) => {
+          const isInc = tx.type === 'income';
+          const hasOrigNote = tx.description && tx.description.trim().length > 0;
+          return `
+            <div class="desc-modal-item" data-didx="${idx}">
+              <div class="desc-item-header">
+                <div class="desc-item-left">
+                  <span class="desc-item-date num">${tx.occurred_on}</span>
+                  <span class="import-cat-badge">${esc(tx.category)}</span>
+                </div>
+                <div class="desc-item-amount num ${isInc ? 'inc' : 'exp'}">
+                  ${isInc ? '+' : '−'}${money(tx.amount)}
+                </div>
+              </div>
+              ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: ${esc(tx.description)}</div>` : ''}
+              <input type="text" class="form-input desc-require-input" data-didx="${idx}" placeholder="Например: Подарок другу, Возврат долга, Обед в ресторане..." value="${esc(values[idx])}" required autocomplete="off">
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div class="desc-modal-footer">
+        <div class="desc-modal-counter">
+          <span class="status-dot ${getFilledCount() === txsNeedingDesc.length ? 'jade' : 'amber'}"></span>
+          <span>Заполнено: <strong id="desc-filled-count">${getFilledCount()}</strong> из ${txsNeedingDesc.length}</span>
+        </div>
+        <div class="desc-modal-footer-actions">
+          <button type="button" class="btn-secondary" id="btn-cancel-desc-modal">Назад</button>
+          <button type="button" class="btn-primary" id="btn-submit-required-descs" ${getFilledCount() === txsNeedingDesc.length ? '' : 'disabled'}>
+            ${icon('check', 14)}
+            <span>Сохранить и завершить импорт</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+
+  const btnSubmit = backdrop.querySelector('#btn-submit-required-descs');
+  const counterEl = backdrop.querySelector('#desc-filled-count');
+  const dotEl = backdrop.querySelector('.desc-modal-counter .status-dot');
+  const inputs = backdrop.querySelectorAll('.desc-require-input');
+
+  function updateValidation() {
+    const filled = getFilledCount();
+    if (counterEl) counterEl.innerText = String(filled);
+    const isReady = filled === txsNeedingDesc.length;
+    if (dotEl) {
+      dotEl.className = `status-dot ${isReady ? 'jade' : 'amber'}`;
+    }
+    if (btnSubmit) {
+      btnSubmit.disabled = !isReady;
+    }
+  }
+
+  inputs.forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = parseInt(e.target.getAttribute('data-didx'), 10);
+      values[idx] = e.target.value.trim();
+      const parentCard = e.target.closest('.desc-modal-item');
+      if (parentCard) {
+        parentCard.classList.toggle('filled', values[idx].length >= 3);
+      }
+      updateValidation();
+    });
+  });
+
+  const closeBtn = backdrop.querySelector('#btn-close-desc-modal');
+  if (closeBtn) closeBtn.onclick = () => backdrop.remove();
+
+  const cancelBtn = backdrop.querySelector('#btn-cancel-desc-modal');
+  if (cancelBtn) cancelBtn.onclick = () => backdrop.remove();
+
+  if (btnSubmit) {
+    btnSubmit.onclick = () => {
+      if (getFilledCount() < txsNeedingDesc.length) {
+        showToast('Пожалуйста, заполните описание для всех операций', 'warning');
+        return;
+      }
+      // Apply new descriptions to transactions
+      txsNeedingDesc.forEach((tx, idx) => {
+        tx.description = values[idx];
+      });
+      backdrop.remove();
+      if (typeof window.renderBankPreviewRows === 'function') {
+        window.renderBankPreviewRows();
+      }
+      if (typeof onComplete === 'function') onComplete();
+    };
+  }
+
+  setTimeout(() => {
+    const first = backdrop.querySelector('.desc-require-input');
+    if (first) first.focus();
+  }, 120);
 }
 
 function openBankImportModal() {
@@ -3867,10 +4040,10 @@ function renderAnalyticsView() {
     ? `${expPath} L ${cfCoords[cfCoords.length - 1].x},${baselineY} L ${cfCoords[0].x},${baselineY} Z`
     : '';
 
-  // Filtered operations for drilldown
+  // Filtered operations for drilldown: Top 7 largest expenses of the period
   const drilldownTxs = activeAnalyticsCat
-    ? periodTxs.filter(t => t.category === activeAnalyticsCat)
-    : periodTxs.filter(t => t.type === 'expense').slice(0, 6);
+    ? [...periodTxs].filter(t => t.category === activeAnalyticsCat).sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0)).slice(0, 7)
+    : [...periodTxs].filter(t => t.type === 'expense').sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0)).slice(0, 7);
 
   return `
     <div class="view-header">
@@ -9114,12 +9287,24 @@ function bindBankImportModalEvents() {
       }
 
       renderBankPreviewRows();
+
+      // Automatically open modal immediately after file import if any operations need descriptions
+      const needDesc = bankImportParsed.filter(isTxDescriptionNeeded);
+      if (needDesc.length > 0) {
+        setTimeout(() => {
+          openRequiredDescModal(needDesc, () => {
+            renderBankPreviewRows();
+            showToast('Описания успешно сохранены!', 'success');
+          });
+        }, 200);
+      }
     } finally {
       if (scanOverlay) scanOverlay.style.display = 'none';
     }
   }
 
   function renderBankPreviewRows() {
+    window.renderBankPreviewRows = renderBankPreviewRows;
     const tbody = document.getElementById('import-table-tbody');
     if (!tbody) return;
 
@@ -9150,16 +9335,21 @@ function bindBankImportModalEvents() {
       // Amount prefix
       const amtPrefix = isTransfer ? '⇄' : (isInc ? '+' : '−');
 
-      // Row style for transfers
-      const rowStyle = isTransfer ? 'opacity: 0.65;' : '';
-
       // Transfer badge
       const transferHint = isTransfer
         ? `<span style="display:inline-block;margin-left:4px;font-size:10px;color:var(--text-muted);background:var(--bg-tertiary);border-radius:4px;padding:1px 5px;">${tx.is_self_transfer ? 'свой счёт' : 'физлицо'}</span>`
         : '';
 
+      const needsDesc = isTxDescriptionNeeded(tx);
+      const needDescBadge = needsDesc
+        ? `<div style="display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; color:var(--accent-amber); background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.28); border-radius:4px; padding:1px 6px; margin-top:4px;">
+            <span class="status-dot amber" style="width:5px; height:5px;"></span>
+            Требуется описание
+           </div>`
+        : '';
+
       return `
-        <tr class="${tx.selected ? '' : 'unselected'}" style="${rowStyle}">
+        <tr class="${tx.selected ? '' : 'unselected'}">
           <td>
             <input type="checkbox" class="bank-tx-cb" data-idx="${idx}" ${tx.selected ? 'checked' : ''}>
           </td>
@@ -9172,7 +9362,7 @@ function bindBankImportModalEvents() {
               <input type="text" class="import-desc-input" data-idx="${idx}" value="${esc(tx.description)}" placeholder="Уточните (от кого / на что)..." title="Отредактируйте для точного анализа ментором">
               ${transferHint}
             </div>
-            ${(isTransfer || !tx.description || tx.description.length < 5) ? `<div style="font-size: 10.5px; color: var(--accent-jade); margin-top: 3px;">Уточните для ментора</div>` : ''}
+            ${needDescBadge}
           </td>
           <td class="num" style="text-align: right; font-weight: 700; color: ${amtColor};">
             ${amtPrefix}${money(tx.amount)}
@@ -9245,52 +9435,65 @@ function bindBankImportModalEvents() {
         return;
       }
 
-      btnSubmitImport.disabled = true;
-      const submitBtnLbl = document.getElementById('btn-import-submit-label');
-      if (submitBtnLbl) submitBtnLbl.innerText = 'Импортирование...';
-
-      try {
-        const txList = selected.map(tx => ({
-          type: tx.type,
-          amount: tx.amount,
-          category: tx.category,
-          description: tx.description,
-          occurred_on: tx.occurred_on
-        }));
-
-        let bulkOk = false;
-        try {
-          const res = await api('transactions/bulk', {
-            method: 'POST',
-            body: JSON.stringify({ transactions: txList })
-          });
-          if (res && res.ok) bulkOk = true;
-        } catch (_) {}
-
-        if (!bulkOk) {
-          for (const tx of txList) {
-            await api('transactions', {
-              method: 'POST',
-              body: JSON.stringify(tx)
-            });
-          }
-        }
-
-        closeBankImportModal();
-        bankImportParsed = [];
-        window._currentBankFileContent = null;
-
-        await refreshAllData();
-        tab = 'transactions';
-        renderApp();
-
-        showToast('Успешно импортировано ' + selected.length + ' операций', 'success');
-      } catch (err) {
-        showToast('Ошибка при импорте: ' + err.message, 'error');
-      } finally {
-        if (btnSubmitImport) btnSubmitImport.disabled = false;
+      // Check if any selected operations need a description
+      const needDesc = selected.filter(isTxDescriptionNeeded);
+      if (needDesc.length > 0) {
+        openRequiredDescModal(needDesc, () => {
+          proceedWithImport(selected);
+        });
+        return;
       }
+
+      proceedWithImport(selected);
     };
+  }
+
+  async function proceedWithImport(selected) {
+    if (btnSubmitImport) btnSubmitImport.disabled = true;
+    const submitBtnLbl = document.getElementById('btn-import-submit-label');
+    if (submitBtnLbl) submitBtnLbl.innerText = 'Импортирование...';
+
+    try {
+      const txList = selected.map(tx => ({
+        type: tx.type,
+        amount: tx.amount,
+        category: tx.category,
+        description: tx.description,
+        occurred_on: tx.occurred_on
+      }));
+
+      let bulkOk = false;
+      try {
+        const res = await api('transactions/bulk', {
+          method: 'POST',
+          body: JSON.stringify({ transactions: txList })
+        });
+        if (res && res.ok) bulkOk = true;
+      } catch (_) {}
+
+      if (!bulkOk) {
+        for (const tx of txList) {
+          await api('transactions', {
+            method: 'POST',
+            body: JSON.stringify(tx)
+          });
+        }
+      }
+
+      closeBankImportModal();
+      bankImportParsed = [];
+      window._currentBankFileContent = null;
+
+      await refreshAllData();
+      tab = 'transactions';
+      renderApp();
+
+      showToast('Успешно импортировано ' + selected.length + ' операций', 'success');
+    } catch (err) {
+      showToast('Ошибка при импорте: ' + err.message, 'error');
+    } finally {
+      if (btnSubmitImport) btnSubmitImport.disabled = false;
+    }
   }
 }
 
