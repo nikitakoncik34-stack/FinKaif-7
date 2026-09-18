@@ -2424,71 +2424,351 @@ window.FINKAIF_AI_IMPORT_CONFIG = {
 let bankImportParsed = [];
 let bankImportSelectedPreset = 'auto';
 
-function autoCategorizeDescription(desc) {
-  if (!desc) return 'Прочее';
-  const low = String(desc).toLowerCase();
+function normalizeCategoryToAvailable(cat, availableCats = getAllCategories()) {
+  if (!cat) return 'Прочее';
+  const clean = String(cat).replace(/^[\p{Emoji}\u200d\s]+/u, '').trim();
+  const low = clean.toLowerCase();
 
-  // 1. Fishing, Tackle & Outdoor Hobbies (Evaluated FIRST so "рыболовный магазин/снасти" doesn't hit restaurants/shops)
-  if (/рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв[а-я]*|spinningline|fmagazin|kaida|кайда|воблер[а-я]*|блесн[а-я]*|удочк[а-я]*|спиннинг[а-я]*|охота и рыбалка|серебряный ручей|silver stream|мир охоты|охотактив|леонардо|хобби геймс|hobby games|мосигра|моделизм|рукоделие|активный отдых/i.test(low)) {
-    return 'Хобби';
+  const exact = availableCats.find(c => c.toLowerCase() === low);
+  if (exact) return exact;
+
+  const synonymMap = [
+    { re: /фастфуд|столов|пицц|суши|ресторан|бургер|шаурм|шаверм|донер|кебаб|гриль|шашлык|бар\b|паб\b/i, target: 'Рестораны' },
+    { re: /кафе(?!др)|кофе|кофейн|пекарн|выпечк|булочн|кондитерск|круассан/i, target: 'Кафе' },
+    { re: /супермаркет|продукты|гастроном|универсам|бакалея|мясн|рыбн|овощ|фрукт/i, target: 'Продукты' },
+    { re: /такси|uber/i, target: 'Такси' },
+    { re: /метро|автобус|троллейбус|трамвай|поезд|электричк|каршеринг|ржд|цппк|проезд|парковк/i, target: 'Транспорт' },
+    { re: /автосервис|сто\b|шиномонтаж|автомойка|детейлинг|автозапчаст|автодок|exist|экзист|бензин|азс|газпром|лукойл/i, target: 'Авто' },
+    { re: /рыбал|рыболов|снаст|воблер|блесн|удочк|спиннинг|охот|туризм|моделизм|настолк|рукоделие|хобби/i, target: 'Хобби' },
+    { re: /аптек|фарм|клиник|стоматолог|зубн|врач|доктор|медцентр|анализ|салон красоты|парикмахер|барбер|маникюр|педикюр|косметолог|здоровье/i, target: 'Здоровье' },
+    { re: /фитнес|спортзал|тренажер|бассейн|спорт/i, target: 'Спорт' },
+    { re: /одежд|обувь|маркетплейс|вайлдберриз|wildberries|wb\b|ozon|озон|шопинг|покупк|электроник|днс|dns|мвидео|цветы|флористик|подарк/i, target: 'Покупки' },
+    { re: /жкх|квартплат|еирц|ук\b|тсж|коммунал|аренда жил|стройматериал|сантехник|электрик|мебель|обои/i, target: 'Жилье' },
+    { re: /подписк|интернет|связь|мтс|билайн|мегафон|теле2|t2|кинопоиск|spotify|яндекс плюс/i, target: 'Подписки' },
+    { re: /кино|театр|концерт|парк|развлечен|квест/i, target: 'Развлечения' },
+    { re: /авиа|отел|путешеств/i, target: 'Путешествия' },
+    { re: /зарплат|аванс|оклад|получк/i, target: 'Зарплата' },
+    { re: /фриланс|гонорар/i, target: 'Фриланс' },
+    { re: /дивиденд|процент.*вклад|инвестиц/i, target: 'Инвестиции' },
+    { re: /кэшбэк|cashback/i, target: 'Кэшбэк' },
+    { re: /перевод|сбп/i, target: 'Переводы' }
+  ];
+
+  for (const s of synonymMap) {
+    if (s.re.test(low)) {
+      const found = availableCats.find(c => c.toLowerCase() === s.target.toLowerCase());
+      if (found) return found;
+      if (s.target === 'Авто' || s.target === 'Такси') {
+        const tr = availableCats.find(c => c.toLowerCase() === 'транспорт');
+        if (tr) return tr;
+      }
+      if (s.target === 'Кафе') {
+        const rest = availableCats.find(c => c.toLowerCase() === 'рестораны');
+        if (rest) return rest;
+      }
+    }
   }
 
-  // 2. Metro & Public Transit (Evaluated BEFORE groceries so "метро / мосметро" doesn't hit supermarket Metro Cash & Carry)
-  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|московский метрополитен|петербургский метрополитен|станци[а-я]*\s+метро|оплата проезда|тройк[а-я]*|подорожник|мцд|мцк|валидатор|автобус|трамвай|троллейбус|цппк|ржд|rzd|электричк[а-я]*|метро)/i.test(low)) {
-    return 'Транспорт';
-  }
-
-  // 3. Coffee, Bakeries & Hot Drinks
-  if (/кофе|кофейн[а-я]*|пекарн[а-я]*|шоколадниц[а-я]*|кофемания|coffeemania|surf coffee|дринкит|drinkit|stars coffee|старбакс|one price|булочн[а-я]*|буханка|вольчек|цех 85|skuratov|даблби|раф\b|латте|капуч[а-я]*|эспрессо|круассан|пончик|донат/i.test(low)) {
-    return 'Кафе';
-  }
-
-  // 4. Restaurants, Fast Food, Dining Out & Food Delivery
-  if (/додо|макдоналдс|mcdonalds|вкусно и точка|бургер кинг|burger king|kfc|ростикс|теремок|доставка еды|яндекс еда|деливери|купер еда|ресторан|бар\b|паб\b|суши|пицц[а-я]*|чайхон[а-я]*|чайхан[а-я]*|якитори[а-я]*|тануки|токио сити|бахрома|сыроварня|frank|хинкальн[а-я]*|шаурм[а-я]*|донер|бургер\b/i.test(low)) {
-    return 'Рестораны';
-  }
-
-  // 5. Groceries & Supermarkets
-  if (/пятерочк[а-я]*|пятёрочк[а-я]*|перекресток|перекрёсток|магнит|дикси|лента|ашан|окей|о'кей|вкусвилл|чижик|спар\b|spar\b|eurospar|верный|красное и белое|красное & белое|к&б|кб\b|бристоль|ярче|азбука вкуса|самокат|яндекс лавка|купер|сбермаркет|глобус\b|бахетле|мираторг|ермолино|мясницкий|metro cash|metro c&c|метро кэш|супермаркет|продукты|гастроном|универсам/i.test(low)) {
-    return 'Продукты';
-  }
-
-  // 6. Transport, Taxis, Carshare, Fuel & Roads
-  if (/такси|яндекс go|яндекс такси|яндекс\.такси|uber|ситимобил|каршеринг|делимобиль|ситидрайв|белкакар|лукойл|газпромнефть|роснефть|татнефть|тебойл|азс|бензин|дизель|аэрофлот|победа|s7|парковк[а-я]*|платные дороги|автодор|зсд|шиномонтаж|автомойка|автозапчасти|exist|autodoc/i.test(low)) {
-    return 'Транспорт';
-  }
-
-  // 7. Health, Clinics, Pharmacies & Fitness
-  if (/аптек[а-я]*|горздрав|ригла|планета здоровья|вита\b|апрель|еаптека|клиника|инвитро|гемотест|медси|хеликс|стоматолог|зубной|доктор|здоровье|фитнес|world class|ddx|тренажер|анализы/i.test(low)) {
-    return 'Здоровье';
-  }
-
-  // 8. Shopping, Marketplaces & Apparel
-  if (/вайлдберриз|wildberries|озон|ozon|яндекс маркет|мегамаркет|авито|lamoda|ламода|aliexpress|золотое яблоко|летуаль|рив гош|befree|lime|лайм|zarina|gloria jeans|спортмастер|dns|днс|м\.видео|мвидео|эльдорадо|ситилинк|re:store|restore|одежда|обувь|электроника/i.test(low)) {
-    return 'Покупки';
-  }
-
-  // 9. Subscriptions & Digital Services
-  if (/подписк|яндекс плюс|кинопоиск|иви|окко|premier|start|vk combo|вк музыка|spotify|apple|telegram|ютуб|youtube|chatgpt|vpn|облако|icloud|steam|psn|playstation/i.test(low)) {
-    return 'Подписки';
-  }
-
-  // 10. Housing & Utilities (ЖКХ)
-  if (/жкх|квартплат[а-я]*|еирц|мосэнергосбыт|мособлеирц|ростелеком|дом\.ru|домру|мтс|билайн|мегафон|т-мобайл|tele2|t2|интернет|аренда жилья|петрович|леруа|лемана про|домофон|тсж|ук\b/i.test(low)) {
-    return 'Жилье';
-  }
-
-  // 11. Entertainment & Leisure
-  if (/кинотеатр|театр|концерт|парк|аттракцион|аквапарк|боулинг|бильярд|билет|квест|развлечения/i.test(low)) {
-    return 'Развлечения';
-  }
-
-  // 12. Income & Investment Categories
-  if (/зарплат[а-я]*|аванс|оклад|расчет|преми[яи]|гонорар|зачисление зарплаты|вознаграждение/i.test(low)) return 'Зарплата';
-  if (/дивиденд[а-я]*|купон[а-я]*|брокер|вклад|процент по вкладу|выплата процентов/i.test(low)) return 'Инвестиции';
-  if (/перевод от|пополнение счета|сбп/i.test(low)) return 'Поступления';
+  const partial = availableCats.find(c => c.toLowerCase().includes(low) || low.includes(c.toLowerCase()));
+  if (partial) return partial;
 
   return 'Прочее';
+}
+
+function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCategories()) {
+  if (!rawDesc || typeof rawDesc !== 'string') {
+    return {
+      category: 'Прочее',
+      clean_description: 'Не указано',
+      confidence: 0,
+      needs_confirmation: true,
+      reason: 'empty'
+    };
+  }
+
+  const orig = rawDesc.trim();
+  const low = orig.toLowerCase().replace(/ё/g, 'е');
+
+  // 1. Metro Transit vs Metro C&C
+  if (!/(?:кэш|cash|c&c|гипер)/i.test(low) && /(?:метрополитен|мосметро|станци[а-я]*\s+метро|турникет|валидатор|тройк|подорожник|метро)/i.test(low)) {
+    return {
+      category: normalizeCategoryToAvailable('Транспорт', availableCats),
+      clean_description: 'Московский метрополитен (проезд)',
+      confidence: 0.99,
+      needs_confirmation: false,
+      reason: 'metro_transit'
+    };
+  }
+
+  // 2. Metro Cash & Carry (Groceries)
+  if (/(?:metro cash|metro c&c|метро кэш)/i.test(low)) {
+    return {
+      category: normalizeCategoryToAvailable('Продукты', availableCats),
+      clean_description: 'Metro Cash & Carry',
+      confidence: 0.98,
+      needs_confirmation: false,
+      reason: 'metro_cash_carry'
+    };
+  }
+
+  // 3. Fishing, Tackle & Outdoor Hobbies
+  if (/(?:рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв|клев|кайда|kaida|spinningline|fmagazin|волжанка|серебряный ручей|воблер|блесн|удочк|спиннинг)/i.test(low)) {
+    return {
+      category: normalizeCategoryToAvailable('Хобби', availableCats),
+      clean_description: orig.replace(/^(?:оплата|покупка|списание)\s+/i, '').trim(),
+      confidence: 0.98,
+      needs_confirmation: false,
+      reason: 'fishing_hobby'
+    };
+  }
+
+  // 4. Check Individual Entrepreneur (ИП / IP / Индивидуальный предприниматель)
+  const isIp = /^(?:индивидуальный\s+предприниматель|ип|ip)\b/i.test(orig) || /(?:^|\s)(?:ип|ip)\s+[А-Яа-яЁёA-Za-z]/iu.test(orig);
+  let ipPersonName = '';
+  let ipSubtitle = '';
+
+  if (isIp) {
+    const afterIp = orig.replace(/^(?:индивидуальный\s+предприниматель|ип|ip)\s+/i, '').trim();
+    const sepMatch = afterIp.match(/^([А-Яа-яЁёA-Za-z\s.]+?)(?:\s*[\/\-–—|(]\s*(.+?)[)\]]?$|\s+["«](.+?)["»]$)/u);
+    if (sepMatch) {
+      ipPersonName = (sepMatch[1] || '').trim();
+      ipSubtitle = (sepMatch[2] || sepMatch[3] || '').trim();
+    } else {
+      const words = afterIp.split(/\s+/);
+      if (words.length <= 3 && words.every(w => /^[А-Яа-яЁёA-Za-z.]+$/u.test(w) && !/салон|кафе|стоматолог|шиномонтаж|магазин|пекарн|аптек/i.test(w))) {
+        ipPersonName = afterIp;
+        ipSubtitle = '';
+      } else {
+        const nameParts = [];
+        const restParts = [];
+        let inName = true;
+        for (const w of words) {
+          if (inName && (/^[А-Яа-яЁёA-Za-z]\.?$/u.test(w) || nameParts.length < 1)) {
+            nameParts.push(w);
+          } else {
+            inName = false;
+            restParts.push(w);
+          }
+        }
+        ipPersonName = nameParts.join(' ');
+        ipSubtitle = restParts.join(' ');
+      }
+    }
+  }
+
+  // Deep Russian merchant knowledge base rules
+  const knowledgeRules = [
+    // A. Bakeries, Cafes & Coffee
+    {
+      re: /(?:кафе(?!др)|кофе|кофейн[а-я]*|пекарн[а-я]*|булочн[а-я]*|буханка|хлебниц[а-я]*|цех\s*85|вольчек|дринкит|drinkit|surf coffee|серф кофе|coffee like|кофе лайк|cofix|кофикс|one price|ван прайс|stars coffee|starbucks|шоколадниц[а-я]*|кофемания|coffeemania|синнабон|cinnabon|кулинари[яи]|кондитерск[а-я]*|круассан|чизкейк|пончик)/i,
+      cat: 'Кафе',
+      confidence: 0.96,
+      defaultTitle: 'Кофейня / Кафе'
+    },
+    // B. Restaurants, Dining, Fast Food, Shawarma & Pizzeria
+    {
+      re: /(?:додо|dodo pizza|вкусно и точка|mcdonalds|макдоналдс|бургер кинг|burger king|kfc|ростикс|rostics|теремок|крошка картошка|subway|сабвей|шаурм[а-я]*|шаверм[а-я]*|донер|кебаб|шашлычн[а-я]*|гриль|хинкальн[а-я]*|чайхан[а-я]*|чайхон[а-я]*|столов[а-я]*|трапезн[а-я]*|блинн[а-я]*|пицц[а-я]*|суши|sushi|ролл[а-я]*|суши wok|суши sell|ёбидоёби|тануки|якитори[а-я]*|мята lounge|hookah|бар\b|паб\b|ресторан)/i,
+      cat: 'Рестораны',
+      confidence: 0.95,
+      defaultTitle: 'Ресторан / Фастфуд'
+    },
+    // C. Pick-up Points (ПВЗ), Marketplaces & Delivery
+    {
+      re: /(?:wildberries|вайлдберриз|вайлдбериз|\bwb\b|\bвб\b|ozon\b|озон\b|яндекс маркет|мегамаркет|авито\s*доставка|пвз|пункт выдачи|сдэк|cdek|boxberry|боксберри)/i,
+      cat: 'Покупки',
+      confidence: 0.97,
+      defaultTitle: 'Маркетплейс / ПВЗ'
+    },
+    // D. Auto Services, Tires, Car Wash, Parts & Gas
+    {
+      re: /(?:автосервис|шиномонтаж|автомойк[а-я]*|детейлинг|\bсто\b|автозапчаст[а-я]*|автодок|autodoc|exist|экзист|emex|емекс|автомаг|шины|диски|эвакуатор|техосмотр|лукойл|газпромнефть|роснефть|татнефть|тебойл|бензин|\bазс\b)/i,
+      cat: 'Транспорт',
+      confidence: 0.95,
+      defaultTitle: 'Автосервис / АЗС'
+    },
+    // E. Beauty Salons, Barbershops, Hairdressers, Nails & Cosmetics
+    {
+      re: /(?:салон красоты|парикмахерск[а-я]*|барбер[а-я]*|барбершоп|topgun|borodach|chop-chop|маникюр|педикюр|ногт[ейи]*|бьюти|ресниц[а-я]*|бров[ейи]*|косметолог[а-я]*|эпиляци[яи]|массаж|золотое яблоко|летуаль|рив гош)/i,
+      cat: 'Здоровье',
+      confidence: 0.95,
+      defaultTitle: 'Салон красоты / Барбершоп'
+    },
+    // F. Medical, Dentistry, Clinics, Pharmacies, Labs
+    {
+      re: /(?:стоматолог[а-я]*|зубн[а-я]*|клиник[а-я]*|медцентр|медицинск[а-я]*|доктор|инвитро|гемотест|\bcmd\b|хеликс|ситилаб|аптек[а-я]*|фарма|ригла|горздрав|планета здоровья|апрель|еаптека|оптика|линзы)/i,
+      cat: 'Здоровье',
+      confidence: 0.96,
+      defaultTitle: 'Медицина / Стоматология'
+    },
+    // G. Fitness, Gym, Sports
+    {
+      re: /(?:фитнес|спортзал|тренажер[а-я]*|бассейн|\bddx\b|world class|спортмастер|турник)/i,
+      cat: 'Спорт',
+      confidence: 0.95,
+      defaultTitle: 'Фитнес / Спорт'
+    },
+    // H. Supermarkets, Groceries, Meat, Fish, Dairy, Tobacco & Alcohol
+    {
+      re: /(?:пятерочк[а-я]*|пятёрочк[а-я]*|магнит\b|перекресток|перекрёсток|вкусвилл|чижик|дикси|лента\b|ашан|окей|спар\b|spar|красное\s*(&|и)\s*белое|\bк&б\b|\bкб\b|бристоль|ярче|азбука вкуса|самокат|яндекс лавка|купер|мясн[а-я]*|сыроварн[а-я]*|рыбн[а-я]*|овощ[ейи]*|фрукт[а-я]*|гастроном|универсам|продукты|минимаркет|табачн[а-я]*|пивоварн[а-я]*|разливн[а-я]*)/i,
+      cat: 'Продукты',
+      confidence: 0.95,
+      defaultTitle: 'Супермаркет / Продукты'
+    },
+    // I. Home, Construction, Hardware, Furniture & Repairs
+    {
+      re: /(?:стройматериал[а-я]*|сантехник[а-я]*|электрик[а-я]*|крепеж|метиз[а-я]*|мебель|обои|краск[а-я]*|леруа|лемана про|петрович|максидом|\bоби\b|\bobi\b|ремонт квартир|хозтовар[а-я]*|1000 мелочей)/i,
+      cat: 'Жилье',
+      confidence: 0.94,
+      defaultTitle: 'Стройматериалы / Ремонт'
+    },
+    // J. Flowers & Gifts
+    {
+      re: /(?:цвет[ыов]+|букет[а-я]*|флористик[а-я]*|цветочный ряд|мосцветторг|подарк[а-я]*|сувенир[а-я]*|воздушные шары)/i,
+      cat: 'Покупки',
+      confidence: 0.94,
+      defaultTitle: 'Цветы и подарки'
+    },
+    // K. Pets & Veterinary
+    {
+      re: /(?:зоомагазин|зоотовар[а-я]*|ветклиник[а-я]*|ветеринар|ветаптек[а-я]*|корм для животных|груминг|четыре лапы|бетховен)/i,
+      cat: 'Покупки',
+      confidence: 0.94,
+      defaultTitle: 'Зоотовары / Ветклиника'
+    },
+    // L. Tech & Phone Repair
+    {
+      re: /(?:ремонт телефонов|сервисный центр|днс|\bdns\b|м\.видео|мвидео|эльдорадо|ситилинк|re:store|чехлы для телефонов)/i,
+      cat: 'Покупки',
+      confidence: 0.94,
+      defaultTitle: 'Электроника / Сервис'
+    }
+  ];
+
+  for (const r of knowledgeRules) {
+    if (r.re.test(low)) {
+      const normalizedCat = normalizeCategoryToAvailable(r.cat, availableCats);
+      let cleanTitle = orig;
+      if (ipSubtitle) {
+        cleanTitle = `${ipSubtitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+      } else if (ipPersonName) {
+        cleanTitle = `${r.defaultTitle} (ИП ${ipPersonName.split(' ')[0] || ''})`.trim();
+      }
+      return {
+        category: normalizedCat,
+        clean_description: cleanTitle,
+        confidence: r.confidence,
+        needs_confirmation: false,
+        reason: 'rule_matched'
+      };
+    }
+  }
+
+  if (isIp) {
+    const surnameParts = (ipPersonName || orig.replace(/^(?:индивидуальный\s+предприниматель|ип|ip)\s+/i, '')).trim().split(/[\s.]+/);
+    const personSurname = surnameParts[0] || 'Контрагент';
+    const cleanTitle = `ИП ${personSurname}`;
+    
+    let candidateCat = 'Покупки';
+    if (amount > 0 && amount <= 500) candidateCat = 'Кафе';
+    else if (amount > 500 && amount <= 3000) candidateCat = 'Покупки';
+    else if (amount > 3000 && amount <= 15000) candidateCat = 'Здоровье';
+    else if (amount > 50000) candidateCat = 'Переводы';
+
+    return {
+      category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      clean_description: cleanTitle,
+      confidence: 0.50,
+      needs_confirmation: true,
+      suggested_category: normalizeCategoryToAvailable(candidateCat, availableCats),
+      reason: 'ip_generic_unconfirmed'
+    };
+  }
+
+  // Fallback check for common keywords
+  if (/зарплат[а-я]*|аванс|оклад|расчет|преми[яи]|гонорар/i.test(low)) {
+    return { category: normalizeCategoryToAvailable('Зарплата', availableCats), clean_description: orig, confidence: 0.95, needs_confirmation: false };
+  }
+  if (/дивиденд[а-я]*|купон[а-я]*|брокер|вклад|процент по вкладу/i.test(low)) {
+    return { category: normalizeCategoryToAvailable('Инвестиции', availableCats), clean_description: orig, confidence: 0.95, needs_confirmation: false };
+  }
+  if (/перевод от|пополнение счета|сбп/i.test(low)) {
+    return { category: normalizeCategoryToAvailable('Переводы', availableCats), clean_description: orig, confidence: 0.90, needs_confirmation: false };
+  }
+
+  return {
+    category: 'Прочее',
+    clean_description: orig,
+    confidence: 0.30,
+    needs_confirmation: true,
+    suggested_category: 'Покупки',
+    reason: 'unknown'
+  };
+}
+
+function autoCategorizeDescription(desc, amount = 0) {
+  if (!desc) return 'Прочее';
+  const res = analyzeRussianMerchant(desc, amount, getAllCategories());
+  return res.category || 'Прочее';
+}
+
+async function enrichTransactionsWithMerchantIntelligence(transactions) {
+  if (!Array.isArray(transactions) || transactions.length === 0) return;
+  const availableCats = getAllCategories();
+
+  // 1. Local fast deterministic pass (0ms)
+  const needingAI = [];
+  transactions.forEach((tx, idx) => {
+    const rawDesc = String(tx.description || '').trim();
+    const amt = Number(tx.amount) || 0;
+    const analysis = analyzeRussianMerchant(rawDesc, amt, availableCats);
+
+    tx.category = analysis.category;
+    tx.confidence = analysis.confidence;
+    tx.needs_confirmation = analysis.needs_confirmation;
+    tx.suggested_category = analysis.suggested_category || analysis.category;
+    if (analysis.clean_description && (!tx.description || tx.description.length < 3 || tx.description === rawDesc)) {
+      tx.raw_description = rawDesc;
+      tx.description = analysis.clean_description;
+    }
+
+    if (tx.needs_confirmation || tx.confidence < 0.85) {
+      needingAI.push({
+        index: idx,
+        id: idx,
+        description: rawDesc,
+        amount: amt,
+        type: tx.type
+      });
+    }
+  });
+
+  // 2. Query Neural Gemini Batch Classifier for ambiguous rows
+  if (needingAI.length > 0 && localStorage.getItem('finkaif_token')) {
+    try {
+      const res = await api('ai/categorize-batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          transactions: needingAI,
+          user_categories: availableCats
+        })
+      });
+
+      if (res && res.ok && Array.isArray(res.results)) {
+        for (const item of res.results) {
+          const target = transactions[item.index];
+          if (target && item.category) {
+            target.category = normalizeCategoryToAvailable(item.category, availableCats);
+            if (item.clean_description) target.description = item.clean_description;
+            target.confidence = item.confidence !== undefined ? item.confidence : target.confidence;
+            target.needs_confirmation = item.needs_confirmation !== undefined ? item.needs_confirmation : target.confidence < 0.85;
+            target.suggested_category = target.category;
+          }
+        }
+      }
+    } catch (aiErr) {
+      console.warn('Neural batch categorization notice:', aiErr.message);
+    }
+  }
 }
 
 function splitCsvLine(line, delimiter) {
@@ -2756,6 +3036,9 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
             return cat;
           })(),
           description: item.description || '',
+          confidence: item.confidence !== undefined ? item.confidence : undefined,
+          needs_confirmation: item.needs_confirmation !== undefined ? item.needs_confirmation : undefined,
+          suggested_category: item.suggested_category || undefined,
           selected: true // all operations selected by default
         };
       }).filter(x => x.amount > 0);
@@ -2808,6 +3091,14 @@ const GENERIC_CATEGORIES = [
 
 function isTxClarificationNeeded(tx) {
   if (!tx || !tx.selected) return false;
+  if (tx.needs_confirmation === true) return true;
+  if (tx.needs_confirmation === false && (tx.confidence || 0) >= 0.85) {
+    const c = (tx.category || '').trim().toLowerCase();
+    if (c.length > 0 && !GENERIC_CATEGORIES.includes(c)) {
+      return false;
+    }
+  }
+
   // 1. Category check
   if (!tx.category || typeof tx.category !== 'string') return true;
   const c = tx.category.trim().toLowerCase();
@@ -2863,6 +3154,7 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
   }
 
   function isItemValid(tx) {
+    if (tx.needs_confirmation === true) return false;
     const c = (tx.category || '').trim().toLowerCase();
     const isCatOk = c.length > 0 && !GENERIC_CATEGORIES.includes(c);
     const d = (tx.description || '').trim().toLowerCase();
@@ -2937,7 +3229,7 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
                   <div class="desc-item-left">
                     <span class="desc-item-date num">${tx.occurred_on}</span>
                     <span class="clarify-status-pill ${valid ? 'jade' : 'amber'}" id="clarify-pill-${listIdx}">
-                      ${valid ? icon('check', 11) + ' Готово' : icon('clock', 11) + ' Требует уточнения'}
+                      ${valid ? icon('check', 11) + ' ' + (tx.confidence && tx.confidence >= 0.85 ? `Определено (${Math.round(tx.confidence * 100)}%)` : 'Готово') : icon('clock', 11) + ' Требует уточнения'}
                     </span>
                     ${tx.is_duplicate ? `<span class="badge-duplicate" title="Такая операция уже есть в реестре">Повтор</span>` : ''}
                   </div>
@@ -2947,6 +3239,16 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
                 </div>
 
                 ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: <strong>${esc(tx.description)}</strong></div>` : ''}
+
+                ${tx.needs_confirmation && tx.suggested_category ? `
+                  <div class="ai-recommendation-row" style="margin: 8px 0 6px;">
+                    <button type="button" class="ai-recommendation-pill" data-list-idx="${listIdx}" data-cat="${esc(tx.suggested_category)}" title="Нажмите, чтобы подтвердить категорию от нейросети">
+                      ${icon('sparkles', 12)}
+                      <span>Рекомендация AI: <strong>${esc(tx.suggested_category)}</strong></span>
+                      <span class="ai-conf-val">${Math.round((tx.confidence || 0.5) * 100)}%</span>
+                    </button>
+                  </div>
+                ` : ''}
 
                 <!-- Category Selection (Luxury Chip Grid - No native select) -->
                 <div class="clarify-field-group">
@@ -3037,8 +3339,29 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
         const catName = chip.getAttribute('data-cat');
         if (allList[listIdx]) {
           allList[listIdx].category = catName;
+          allList[listIdx].needs_confirmation = false;
+          allList[listIdx].confidence = 0.99;
           updateCardRow(listIdx);
           updateHeaderStatus();
+        }
+      };
+    });
+
+    // AI Recommendation Pill click
+    backdrop.querySelectorAll('.ai-recommendation-pill').forEach(btn => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const listIdx = parseInt(btn.getAttribute('data-list-idx'), 10);
+        const cat = btn.getAttribute('data-cat');
+        if (allList[listIdx] && cat) {
+          allList[listIdx].category = cat;
+          allList[listIdx].needs_confirmation = false;
+          allList[listIdx].confidence = 0.99;
+          updateCardRow(listIdx);
+          updateHeaderStatus();
+          btn.style.opacity = '0.5';
+          btn.style.pointerEvents = 'none';
+          showToast(`Применена категория: ${cat}`, 'info');
         }
       };
     });
@@ -3068,6 +3391,8 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
           const val = inp.value.trim();
           addCustomCategory(val);
           allList[listIdx].category = val;
+          allList[listIdx].needs_confirmation = false;
+          allList[listIdx].confidence = 0.99;
           updateCardRow(listIdx);
           updateHeaderStatus();
           const box = backdrop.querySelector(`#custom-cat-inline-${listIdx}`);
@@ -3165,7 +3490,9 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
     const pill = backdrop.querySelector(`#clarify-pill-${listIdx}`);
     if (pill) {
       pill.className = `clarify-status-pill ${valid ? 'jade' : 'amber'}`;
-      pill.innerHTML = valid ? `${icon('check', 11)} Готово` : `${icon('clock', 11)} Требует уточнения`;
+      pill.innerHTML = valid
+        ? `${icon('check', 11)} ${tx.confidence && tx.confidence >= 0.85 ? `Определено (${Math.round(tx.confidence * 100)}%)` : 'Готово'}`
+        : `${icon('clock', 11)} Требует уточнения`;
     }
 
     const catLbl = backdrop.querySelector(`#clarify-cat-lbl-${listIdx}`);
@@ -9818,6 +10145,9 @@ function bindBankImportModalEvents() {
         showToast('Не удалось распознать операции в данном файле.', 'error');
         return;
       }
+
+      // Enrich transactions with Russian merchant / IP intelligence and Gemini batch classifier
+      await enrichTransactionsWithMerchantIntelligence(bankImportParsed);
 
       // Deduplication against existing transactions and intra-batch duplicates
       const existingLedger = data.transactions || [];
