@@ -1045,7 +1045,7 @@ const formatTxTime = t => {
 };
 
 const defaultCategories = [
-  'Продукты', 'Рестораны', 'Кафе', 'Транспорт', 'Такси',
+  'Продукты', 'Рестораны', 'Кафе', 'Транспорт', 'Такси', 'Хобби',
   'Подписки', 'Здоровье', 'Спорт', 'Покупки', 'Жилье',
   'ЖКХ', 'Путешествия', 'Развлечения', 'Авто', 'Инвестиции'
 ];
@@ -1432,8 +1432,13 @@ function parseQuickTxInput(raw) {
       category = 'Рестораны';
       iconEmoji = 'utensils';
     }
+    // C0. Hobbies, Fishing & Outdoor Gear (Хобби)
+    else if (/рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|блесн[а-я]*|спиннинг[а-я]*|удочк[а-я]*|клёв[а-я]*|хищник|трофей|spinningline|fmagazin|kaida|кайда|охота и рыбалка|серебряный ручей|хобби|леонардо|моделизм|настолк[а-я]*/i.test(lower)) {
+      category = 'Хобби';
+      iconEmoji = 'compass';
+    }
     // C. Groceries & Supermarkets & Staples at home (Продукты)
-    else if (/макарон[а-я]*|спагетти|паст[а-я]*|вермишел[а-я]*|рожк[а-я]*|гречк[а-я]*|греч[а-я]*|рис[а-я]*|пшен[а-я]*|овсянк[а-я]*|геркулес[а-я]*|хлопь[а-я]*|круп[а-я]*|булгур[а-я]*|кускус[а-я]*|киноа|чечевиц[а-я]*|фасол[а-я]*|горох[а-я]*|мук[а-я]*|сахар[а-я]*|сол[иь][а-я]*|сод[а-я]*|крахмал[а-я]*|дрожж[а-я]*|специ[а-я]*|приправ[а-я]*|масл[а-я]*|подсолнечн[а-я]*|оливков[а-я]*|сливочн.*масл[а-я]*|майонез[а-я]*|мазик[а-я]*|кетчуп[а-я]*|соус[а-я]*|томатн.*паст[а-я]*|горчиц[а-я]*|хрен[а-я]*|уксус[а-я]*|консерв[а-я]*|тушенк[а-я]*|шпрот[а-я]*|сайр[а-я]*|тун[ец][а-я]*|паштет[а-я]*|горошек[а-я]*|кукуруз[а-я]*|колбас[а-я]*|сосиск[а-я]*|сардельк[а-я]*|ветчин[а-я]*|сервелат[а-я]*|карбонад[а-я]*|бекон[а-я]*|мяс[а-я]*|фарш[а-я]*|котлет[а-я]*|говядин[а-я]*|свинин[а-я]*|телятин[а-я]*|баранин[а-я]*|индейк[а-я]*|куриц[а-я]*|кур[а-я]*|курин[а-я]*|цыплят[а-я]*|цыпленок|грудк[а-я]*|филе|бедрышк[а-я]*|окороч[а-я]*|крылышк[а-я]*|пельмен[а-я]*|вареник[а-я]*|рыб[а-я]*|лосос[а-я]*|семг[а-я]*|сёмг[а-я]*|форел[а-я]*|селедк[а-я]*|минта[а-я]*|треск[а-я]*|скумбри[а-я]*|креветк[а-я]*|кальмар[а-я]*|крабов.*палочк[а-я]*|молок[а-я]*|молочк[а-я]*|творог[а-я]*|творож[а-я]*|сыр[а-я]*|сырок[а-я]*|сырочк[а-я]*|сметан[а-я]*|кефир[а-я]*|ряженк[а-я]*|йогурт[а-я]*|сливк[а-я]*|сгущенк[а-я]*|сгущёнк[а-я]*|яйц[а-я]*|яичк[а-я]*|яиц|овощ[а-я]*|картох[а-я]*|картошк[а-я]*|картофел[а-я]*|помидор[а-я]*|томат[а-я]*|огур[ец][а-я]*|капуст[а-я]*|морков[а-я]*|морковк[а-я]*|лук[а-я]*|чеснок[а-я]*|зелен[а-я]*|укроп[а-я]*|петрушк[а-я]*|салат[а-я]*|свекл[а-я]*|свёкл[а-я]*|кабач[а-я]*|баклажан[а-я]*|перец|перц[а-я]*|гриб[а-я]*|шампиньон[а-я]*|фрукт[а-я]*|яблок[а-я]*|банан[а-я]*|апельсин[а-я]*|мандарин[а-я]*|лимон[а-я]*|груш[а-я]*|виноград[а-я]*|персик[а-я]*|нектарин[а-я]*|ягод[а-я]*|клубник[а-я]*|малин[а-я]*|черник[а-я]*|голубик[а-я]*|арбуз[а-я]*|дыня|дыни|ананас[а-я]*|авокадо|манго|хлеб[а-я]*|хлебушек|батон[а-я]*|лаваш[а-я]*|булк[а-я]*|булочк[а-я]*|багет[а-я]*|тост[а-я]*|сухар[а-я]*|печень[а-я]*|пряник[а-я]*|вафл[а-я]*|конфет[а-я]*|шоколад[а-я]*|шоколадк[а-я]*|батончик[а-я]*|чипс[а-я]*|снек[а-я]*|снэк[а-я]*|сухарик[а-я]*|семечк[а-я]*|орех[а-я]*|арахис[а-я]*|мармелад[а-я]*|зефир[а-я]*|минералк[а-я]*|газировк[а-я]*|лимонад[а-я]*|сочок|соки|сок\b|магазин[а-я]*|супермаркет[а-я]*|гипермаркет[а-я]*|гастроном[а-я]*|универсам[а-я]*|пятерочк[а-я]*|пятёрочк[а-я]*|пятак[а-я]*|магнит[а-я]*|перекресток[а-я]*|перекрёсток[а-я]*|перек[а-я]*|вкусвилл[а-я]*|лент[а-я]*|ашан[а-я]*|дикси|спар\b|spar\b|глобус[а-я]*|чижик[а-я]*|красное.*белое|кб\b|к&б|бристол[а-я]*|ярче|верный|азбук[а-я].*вкус[а-я]*|окей|самокат.*продукт|лавка.*продукт|сбермаркет|продукт[а-я]*|еда домой|покушать домой|закупился|покупки домой/i.test(lower)) {
+    else if (/макарон[а-я]*|спагетти|паст[а-я]*|вермишел[а-я]*|рожк[а-я]*|гречк[а-я]*|греч[а-я]*|рис[а-я]*|пшен[а-я]*|овсянк[а-я]*|геркулес[а-я]*|хлопь[а-я]*|круп[а-я]*|булгур[а-я]*|кускус[а-я]*|киноа|чечевиц[а-я]*|фасол[а-я]*|горох[а-я]*|мук[а-я]*|сахар[а-я]*|сол[иь][а-я]*|сод[а-я]*|крахмал[а-я]*|дрожж[а-я]*|специ[а-я]*|приправ[а-я]*|масл[а-я]*|подсолнечн[а-я]*|оливков[а-я]*|сливочн.*масл[а-я]*|майонез[а-я]*|мазик[а-я]*|кетчуп[а-я]*|соус[а-я]*|томатн.*паст[а-я]*|горчиц[а-я]*|хрен[а-я]*|уксус[а-я]*|консерв[а-я]*|тушенк[а-я]*|шпрот[а-я]*|сайр[а-я]*|тун[ец][а-я]*|паштет[а-я]*|горошек[а-я]*|кукуруз[а-я]*|колбас[а-я]*|сосиск[а-я]*|сардельк[а-я]*|ветчин[а-я]*|сервелат[а-я]*|карбонад[а-я]*|бекон[а-я]*|мяс[а-я]*|фарш[а-я]*|котлет[а-я]*|говядин[а-я]*|свинин[а-я]*|телятин[а-я]*|баранин[а-я]*|индейк[а-я]*|куриц[а-я]*|кур[а-я]*|курин[а-я]*|цыплят[а-я]*|цыпленок|грудк[а-я]*|филе|бедрышк[а-я]*|окороч[а-я]*|крылышк[а-я]*|пельмен[а-я]*|вареник[а-я]*|рыб\b|рыб[ауые]|рыбк[а-я]*|рыбн[а-я]*|лосос[а-я]*|семг[а-я]*|сёмг[а-я]*|форел[а-я]*|селедк[а-я]*|минта[а-я]*|треск[а-я]*|скумбри[а-я]*|креветк[а-я]*|кальмар[а-я]*|крабов.*палочк[а-я]*|молок[а-я]*|молочк[а-я]*|творог[а-я]*|творож[а-я]*|сыр[а-я]*|сырок[а-я]*|сырочк[а-я]*|сметан[а-я]*|кефир[а-я]*|ряженк[а-я]*|йогурт[а-я]*|сливк[а-я]*|сгущенк[а-я]*|сгущёнк[а-я]*|яйц[а-я]*|яичк[а-я]*|яиц|овощ[а-я]*|картох[а-я]*|картошк[а-я]*|картофел[а-я]*|помидор[а-я]*|томат[а-я]*|огур[ец][а-я]*|капуст[а-я]*|морков[а-я]*|морковк[а-я]*|лук[а-я]*|чеснок[а-я]*|зелен[а-я]*|укроп[а-я]*|петрушк[а-я]*|салат[а-я]*|свекл[а-я]*|свёкл[а-я]*|кабач[а-я]*|баклажан[а-я]*|перец|перц[а-я]*|гриб[а-я]*|шампиньон[а-я]*|фрукт[а-я]*|яблок[а-я]*|банан[а-я]*|апельсин[а-я]*|мандарин[а-я]*|лимон[а-я]*|груш[а-я]*|виноград[а-я]*|персик[а-я]*|нектарин[а-я]*|ягод[а-я]*|клубник[а-я]*|малин[а-я]*|черник[а-я]*|голубик[а-я]*|арбуз[а-я]*|дыня|дыни|ананас[а-я]*|авокадо|манго|хлеб[а-я]*|хлебушек|батон[а-я]*|лаваш[а-я]*|булк[а-я]*|булочк[а-я]*|багет[а-я]*|тост[а-я]*|сухар[а-я]*|печень[а-я]*|пряник[а-я]*|вафл[а-я]*|конфет[а-я]*|шоколад[а-я]*|шоколадк[а-я]*|батончик[а-я]*|чипс[а-я]*|снек[а-я]*|снэк[а-я]*|сухарик[а-я]*|семечк[а-я]*|орех[а-я]*|арахис[а-я]*|мармелад[а-я]*|зефир[а-я]*|минералк[а-я]*|газировк[а-я]*|лимонад[а-я]*|сочок|соки|сок\b|магазин[а-я]*|супермаркет[а-я]*|гипермаркет[а-я]*|гастроном[а-я]*|универсам[а-я]*|пятерочк[а-я]*|пятёрочк[а-я]*|пятак[а-я]*|магнит[а-я]*|перекресток[а-я]*|перекрёсток[а-я]*|перек[а-я]*|вкусвилл[а-я]*|лент[а-я]*|ашан[а-я]*|дикси|спар\b|spar\b|глобус[а-я]*|чижик[а-я]*|красное.*белое|кб\b|к&б|бристол[а-я]*|ярче|верный|азбук[а-я].*вкус[а-я]*|окей|самокат.*продукт|лавка.*продукт|сбермаркет|продукт[а-я]*|еда домой|покушать домой|закупился|покупки домой/i.test(lower)) {
       category = 'Продукты';
       iconEmoji = 'cart';
     }
@@ -1693,7 +1698,8 @@ const categoryIcons = {
   'Образование': 'book',
   'Развлечения': 'sparkles',
   'Подарки': 'gift',
-  'Авто': 'car'
+  'Авто': 'car',
+  'Хобби': 'compass'
 };
 
 const getCategoryIcon = (cat, type, size = 15) => {
@@ -1709,7 +1715,8 @@ const getCategoryIcon = (cat, type, size = 15) => {
       else if (/долг|возврат/i.test(c)) iconName = 'wallet';
       else iconName = 'banknote';
     } else {
-      if (/питом|животн|собак|кошк|корм|вет/i.test(c)) iconName = 'heart';
+      if (/рыбал|снаст|охот|хобби|модел|творчеств/i.test(c)) iconName = 'compass';
+      else if (/питом|животн|собак|кошк|корм|вет/i.test(c)) iconName = 'heart';
       else if (/хозяйств|ферм|сад/i.test(c)) iconName = 'home';
       else if (/такси/i.test(c)) iconName = 'compass';
       else if (/транспорт|авто|машин|бензин|метро/i.test(c)) iconName = 'car';
@@ -2288,19 +2295,66 @@ let bankImportSelectedPreset = 'auto';
 
 function autoCategorizeDescription(desc) {
   if (!desc) return 'Прочее';
-  const low = desc.toLowerCase();
+  const low = String(desc).toLowerCase();
 
-  if (/кофе|пекарн|шоколадниц|кофейн|старбакс|surf coffee|дринкит|stars coffee|one price|раф|латте|капуч|булочн/i.test(low)) return 'Кафе';
-  if (/додо|макдоналдс|вкусно и точка|бургер кинг|kfc|ростикс|теремок|доставка|яндекс еда|деливери|купер|ресторан|бар\b|паб\b|суши|пицц|шоп|лавка|чайхон/i.test(low)) return 'Рестораны';
-  if (/пятерочк|перекресток|магнит|дикси|лента|ашан|окей|вкусвилл|чижик|метро|спар|spar|верный|красное и белое|к&б|бристоль|ярче|азбука вкуса|самокат|супермаркет|продукты|мясо|молоко|хлеб/i.test(low)) return 'Продукты';
-  if (/такси|uber|яндекс go|ситимобил|каршеринг|делимобиль|ситидрайв|лукойл|газпромнефть|роснефть|татнефть|тебойл|азс|бензин|метрополитен|тройка|ржд|аэрофлот|победа|s7|парковка|платные дороги/i.test(low)) return 'Транспорт';
-  if (/аптек|горздрав|ригла|планета здоровья|вита|доктор|клиника|инвитро|гемотест|стоматолог|здоровье|фитнес|world class|ddx|тренажер/i.test(low)) return 'Здоровье';
-  if (/вайлдберриз|wildberries|озон|ozon|яндекс маркет|мегамаркет|авито|lamoda|aliexpress|золотое яблоко|летуаль|рив гош|befree|lime|zarina|одежда|обувь/i.test(low)) return 'Покупки';
-  if (/подписк|яндекс плюс|кинопоиск|иви|окко|vk combo|spotify|apple|telegram|ютуб|youtube|chatgpt|vpn|облако|icloud/i.test(low)) return 'Подписки';
-  if (/жкх|квартплат|мосэнергосбыт|ростелеком|мтс|билайн|мегафон|т-мобайл|интернет|аренда|петрович|леруа|лемана про|домофон/i.test(low)) return 'Жилье';
-  if (/кино|театр|концерт|парк|игры|steam|playstation|xbox|развлечения/i.test(low)) return 'Развлечения';
-  if (/зарплат|аванс|оклад|расчет|преми|гонорар|зачисление зарплаты|вознаграждение/i.test(low)) return 'Зарплата';
-  if (/дивиденд|купон|брокер|вклад|процент по вкладу|выплата процентов/i.test(low)) return 'Инвестиции';
+  // 1. Fishing, Tackle & Outdoor Hobbies (Evaluated FIRST so "рыболовный магазин/снасти" doesn't hit restaurants/shops)
+  if (/рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|клёв[а-я]*|spinningline|fmagazin|kaida|кайда|воблер[а-я]*|блесн[а-я]*|удочк[а-я]*|спиннинг[а-я]*|охота и рыбалка|серебряный ручей|silver stream|мир охоты|охотактив|леонардо|хобби геймс|hobby games|мосигра|моделизм|рукоделие|активный отдых/i.test(low)) {
+    return 'Хобби';
+  }
+
+  // 2. Metro & Public Transit (Evaluated BEFORE groceries so "метро / мосметро" doesn't hit supermarket Metro Cash & Carry)
+  if (/метрополитен|мосметро|московский метрополитен|петербургский метрополитен|станция метро|оплата проезда|тройк[а-я]*|подорожник|мцд|мцк|валидатор|автобус|трамвай|троллейбус|цппк|ржд|rzd|электричк[а-я]*|\bметро\b(?!.*(?:кэш|cash|c&c|гипер))/i.test(low)) {
+    return 'Транспорт';
+  }
+
+  // 3. Coffee, Bakeries & Hot Drinks
+  if (/кофе|кофейн[а-я]*|пекарн[а-я]*|шоколадниц[а-я]*|кофемания|coffeemania|surf coffee|дринкит|drinkit|stars coffee|старбакс|one price|булочн[а-я]*|буханка|вольчек|цех 85|skuratov|даблби|раф\b|латте|капуч[а-я]*|эспрессо|круассан|пончик|донат/i.test(low)) {
+    return 'Кафе';
+  }
+
+  // 4. Restaurants, Fast Food, Dining Out & Food Delivery
+  if (/додо|макдоналдс|mcdonalds|вкусно и точка|бургер кинг|burger king|kfc|ростикс|теремок|доставка еды|яндекс еда|деливери|купер еда|ресторан|бар\b|паб\b|суши|пицц[а-я]*|чайхон[а-я]*|чайхан[а-я]*|якитори[а-я]*|тануки|токио сити|бахрома|сыроварня|frank|хинкальн[а-я]*|шаурм[а-я]*|донер|бургер\b/i.test(low)) {
+    return 'Рестораны';
+  }
+
+  // 5. Groceries & Supermarkets
+  if (/пятерочк[а-я]*|пятёрочк[а-я]*|перекресток|перекрёсток|магнит|дикси|лента|ашан|окей|о'кей|вкусвилл|чижик|спар\b|spar\b|eurospar|верный|красное и белое|красное & белое|к&б|кб\b|бристоль|ярче|азбука вкуса|самокат|яндекс лавка|купер|сбермаркет|глобус\b|бахетле|мираторг|ермолино|мясницкий|metro cash|metro c&c|метро кэш|супермаркет|продукты|гастроном|универсам/i.test(low)) {
+    return 'Продукты';
+  }
+
+  // 6. Transport, Taxis, Carshare, Fuel & Roads
+  if (/такси|яндекс go|яндекс такси|яндекс\.такси|uber|ситимобил|каршеринг|делимобиль|ситидрайв|белкакар|лукойл|газпромнефть|роснефть|татнефть|тебойл|азс|бензин|дизель|аэрофлот|победа|s7|парковк[а-я]*|платные дороги|автодор|зсд|шиномонтаж|автомойка|автозапчасти|exist|autodoc/i.test(low)) {
+    return 'Транспорт';
+  }
+
+  // 7. Health, Clinics, Pharmacies & Fitness
+  if (/аптек[а-я]*|горздрав|ригла|планета здоровья|вита\b|апрель|еаптека|клиника|инвитро|гемотест|медси|хеликс|стоматолог|зубной|доктор|здоровье|фитнес|world class|ddx|тренажер|анализы/i.test(low)) {
+    return 'Здоровье';
+  }
+
+  // 8. Shopping, Marketplaces & Apparel
+  if (/вайлдберриз|wildberries|озон|ozon|яндекс маркет|мегамаркет|авито|lamoda|ламода|aliexpress|золотое яблоко|летуаль|рив гош|befree|lime|лайм|zarina|gloria jeans|спортмастер|dns|днс|м\.видео|мвидео|эльдорадо|ситилинк|re:store|restore|одежда|обувь|электроника/i.test(low)) {
+    return 'Покупки';
+  }
+
+  // 9. Subscriptions & Digital Services
+  if (/подписк|яндекс плюс|кинопоиск|иви|окко|premier|start|vk combo|вк музыка|spotify|apple|telegram|ютуб|youtube|chatgpt|vpn|облако|icloud|steam|psn|playstation/i.test(low)) {
+    return 'Подписки';
+  }
+
+  // 10. Housing & Utilities (ЖКХ)
+  if (/жкх|квартплат[а-я]*|еирц|мосэнергосбыт|мособлеирц|ростелеком|дом\.ru|домру|мтс|билайн|мегафон|т-мобайл|tele2|t2|интернет|аренда жилья|петрович|леруа|лемана про|домофон|тсж|ук\b/i.test(low)) {
+    return 'Жилье';
+  }
+
+  // 11. Entertainment & Leisure
+  if (/кинотеатр|театр|концерт|парк|аттракцион|аквапарк|боулинг|бильярд|билет|квест|развлечения/i.test(low)) {
+    return 'Развлечения';
+  }
+
+  // 12. Income & Investment Categories
+  if (/зарплат[а-я]*|аванс|оклад|расчет|преми[яи]|гонорар|зачисление зарплаты|вознаграждение/i.test(low)) return 'Зарплата';
+  if (/дивиденд[а-я]*|купон[а-я]*|брокер|вклад|процент по вкладу|выплата процентов/i.test(low)) return 'Инвестиции';
   if (/перевод от|пополнение счета|сбп/i.test(low)) return 'Поступления';
 
   return 'Прочее';
@@ -2485,7 +2539,16 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
 
     const absAmt = Math.abs(numAmt);
     const finalDesc = rawDesc || '';
-    const finalCat = (rawCat && rawCat.length > 2 && rawCat !== 'Другое' && rawCat !== 'Прочее') ? rawCat : autoCategorizeDescription(finalDesc || rawCat || 'Операция');
+    let finalCat = autoCategorizeDescription(finalDesc);
+    if (finalCat === 'Прочее' && rawCat && rawCat.length > 2 && rawCat !== 'Другое' && rawCat !== 'Прочее') {
+      finalCat = rawCat;
+    }
+    // High-priority corrections for specific merchant misclassifications by banks
+    if (/рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|spinningline|fmagazin|kaida|кайда|воблер|блесн|удочк|спиннинг/i.test(finalDesc)) {
+      finalCat = 'Хобби';
+    } else if (/метрополитен|мосметро|московский метрополитен|петербургский метрополитен|станция метро|тройк|подорожник|\bметро\b(?!.*(?:кэш|cash|c&c))/i.test(finalDesc)) {
+      finalCat = 'Транспорт';
+    }
 
     results.push({
       occurred_on: date,
@@ -2547,7 +2610,20 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
           type: isIncome ? 'income' : 'expense',
           tx_kind: isTransfer ? 'transfer' : (isIncome ? 'income' : 'expense'),
           is_self_transfer: item.is_self_transfer === true,
-          category: item.category || (isTransfer ? 'Переводы' : autoCategorizeDescription(item.description)),
+          category: (() => {
+            const rawDesc = String(item.description || '').trim();
+            let cat = String(item.category || '').replace(/^[\p{Emoji}\u200d\s]+/u, '').trim();
+            if (cat.includes('Хобби')) cat = 'Хобби';
+            if (cat.includes('Транспорт')) cat = 'Транспорт';
+            if (cat.includes('Продукты') && /метро|мосметро/i.test(rawDesc) && !/кэш|cash|c&c/i.test(rawDesc)) cat = 'Транспорт';
+            if (!cat || cat === 'Прочее' || cat === 'Другое') {
+              cat = isTransfer ? 'Переводы' : autoCategorizeDescription(rawDesc);
+            }
+            if (/рыбал[а-я]*|рыболов[а-я]*|снаст[а-я]*|хищник|трофей|spinningline|fmagazin|kaida|кайда|воблер|блесн|удочк|спиннинг/i.test(rawDesc)) {
+              cat = 'Хобби';
+            }
+            return cat;
+          })(),
           description: item.description || '',
           selected: true // all operations selected by default
         };
@@ -2585,50 +2661,42 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
   };
 }
 
-function isTxDescriptionNeeded(tx) {
+const GENERIC_TX_PLACEHOLDERS = [
+  'банковская операция', 'банковский платеж', 'банковский платёж',
+  'операция из выписки', 'операция по карте', 'платеж', 'платёж', 'платежи',
+  'перевод', 'переводы', 'перевод физлицу', 'перевод клиенту', 'перевод частному лицу',
+  'перевод по сбп', 'сбп', 'перевод между счетами', 'перевод между своими счетами',
+  'свой счёт', 'свой счет', 'списание', 'списания', 'пополнение', 'пополнения',
+  'прочие расходы', 'прочее', 'оплата', 'оплаты', 'покупка', 'покупки',
+  'другое', 'не указано', 'без описания', 'карта', 'card', 'payment', 'retail', 'purchase'
+];
+
+const GENERIC_CATEGORIES = [
+  'прочее', 'другое', 'не определено', 'без категории', 'неизвестно', 'разное', 'прочие расходы', 'прочие доходы'
+];
+
+function isTxClarificationNeeded(tx) {
   if (!tx || !tx.selected) return false;
+  // 1. Category check
+  if (!tx.category || typeof tx.category !== 'string') return true;
+  const c = tx.category.trim().toLowerCase();
+  if (c.length === 0 || GENERIC_CATEGORIES.includes(c)) return true;
+
+  // 2. Description check
   if (!tx.description || typeof tx.description !== 'string') return true;
   const d = tx.description.trim().toLowerCase();
   if (d.length < 3) return true;
-  if (tx.category && d === tx.category.trim().toLowerCase()) return true;
-  const genericPlaceholders = [
-    'банковская операция',
-    'банковский платеж',
-    'банковский платёж',
-    'операция из выписки',
-    'операция по карте',
-    'платеж',
-    'платёж',
-    'платежи',
-    'перевод',
-    'переводы',
-    'перевод физлицу',
-    'перевод клиенту',
-    'перевод частному лицу',
-    'перевод по сбп',
-    'сбп',
-    'перевод между счетами',
-    'перевод между своими счетами',
-    'свой счёт',
-    'свой счет',
-    'списание',
-    'списания',
-    'пополнение',
-    'пополнения',
-    'прочие расходы',
-    'прочее',
-    'оплата',
-    'оплаты',
-    'покупка',
-    'покупки',
-    'другое',
-    'не указано',
-    'без описания'
-  ];
-  return genericPlaceholders.includes(d);
+  if (d === c) return true;
+  if (GENERIC_TX_PLACEHOLDERS.includes(d)) return true;
+
+  return false;
 }
 
-function openRequiredDescModal(txsNeedingDesc, onComplete) {
+function isTxDescriptionNeeded(tx) {
+  return isTxClarificationNeeded(tx);
+}
+
+function openRequiredClarificationModal(txsNeedingClarify, onComplete) {
   const existing = document.getElementById('import-desc-required-modal');
   if (existing) existing.remove();
 
@@ -2636,46 +2704,112 @@ function openRequiredDescModal(txsNeedingDesc, onComplete) {
   backdrop.id = 'import-desc-required-modal';
   backdrop.className = 'desc-modal-backdrop';
 
-  // Store temporary description values for each item
-  const values = txsNeedingDesc.map(t => (!isTxDescriptionNeeded(t) ? (t.description || '').trim() : ''));
+  const QUICK_CATS = ['Продукты', 'Кафе', 'Рестораны', 'Транспорт', 'Хобби', 'Покупки', 'Здоровье', 'Подписки', 'Жилье', 'Зарплата'];
+  const allCats = getAllCategories();
+
+  // Temporary values
+  const descs = txsNeedingClarify.map(t => {
+    if (!t.description || typeof t.description !== 'string') return '';
+    const d = t.description.trim();
+    if (d.length < 3 || GENERIC_TX_PLACEHOLDERS.includes(d.toLowerCase()) || (t.category && d.toLowerCase() === t.category.toLowerCase())) return '';
+    return d;
+  });
+
+  const cats = txsNeedingClarify.map(t => {
+    if (!t.category || typeof t.category !== 'string') return '';
+    const c = t.category.trim();
+    if (GENERIC_CATEGORIES.includes(c.toLowerCase())) return '';
+    return c;
+  });
+
+  function isItemValid(idx) {
+    const c = (cats[idx] || '').trim().toLowerCase();
+    const isCatOk = c.length > 0 && !GENERIC_CATEGORIES.includes(c);
+    const d = (descs[idx] || '').trim().toLowerCase();
+    const isDescOk = d.length >= 3 && d !== c && !GENERIC_TX_PLACEHOLDERS.includes(d);
+    return isCatOk && isDescOk;
+  }
 
   function getFilledCount() {
-    return values.filter(v => typeof v === 'string' && v.trim().length >= 3).length;
+    return txsNeedingClarify.filter((_, idx) => isItemValid(idx)).length;
   }
 
   backdrop.innerHTML = `
-    <div class="desc-modal-card">
+    <div class="desc-modal-card" style="max-width: 680px;">
       <div class="desc-modal-header">
         <div class="desc-modal-title-box">
           <div class="desc-modal-badge">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            Обязательный шаг импорта
+            Обязательный шаг импорта • Классификация
           </div>
-          <h2 class="desc-modal-title">Уточнение описания операций</h2>
-          <p class="desc-modal-sub">Укажите понятное назначение для ${txsNeedingDesc.length} операций. Переход к следующему шагу возможен только после заполнения всех полей.</p>
+          <h2 class="desc-modal-title">Уточнение категорий и описания операций</h2>
+          <p class="desc-modal-sub">Для ${txsNeedingClarify.length} операций необходимо указать категорию и понятное назначение. Все изменения применяются в реальном времени.</p>
         </div>
-        <button type="button" class="btn-icon" id="btn-close-desc-modal" title="Вернуться назад">
+        <button type="button" class="btn-icon" id="btn-close-desc-modal" title="Вернуться к импорту">
           ${icon('close', 16)}
         </button>
       </div>
 
       <div class="desc-modal-body" id="desc-modal-items-list">
-        ${txsNeedingDesc.map((tx, idx) => {
+        ${txsNeedingClarify.map((tx, idx) => {
           const isInc = tx.type === 'income';
           const hasOrigNote = tx.description && tx.description.trim().length > 0;
+          const currentCat = cats[idx] || '';
+          const currentDesc = descs[idx] || '';
+          const valid = isItemValid(idx);
+
           return `
-            <div class="desc-modal-item" data-didx="${idx}">
+            <div class="desc-modal-item ${valid ? 'completed' : ''}" data-didx="${idx}">
               <div class="desc-item-header">
                 <div class="desc-item-left">
                   <span class="desc-item-date num">${tx.occurred_on}</span>
-                  <span class="import-cat-badge">${esc(tx.category)}</span>
+                  <span class="clarify-status-pill ${valid ? 'jade' : 'amber'}" id="clarify-pill-${idx}">
+                    ${valid ? icon('check', 11) + ' Готово' : icon('clock', 11) + ' Требует уточнения'}
+                  </span>
                 </div>
                 <div class="desc-item-amount num ${isInc ? 'inc' : 'exp'}">
                   ${isInc ? '+' : '−'}${money(tx.amount)}
                 </div>
               </div>
-              ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: ${esc(tx.description)}</div>` : ''}
-              <input type="text" class="form-input desc-require-input" data-didx="${idx}" placeholder="Например: Подарок другу, Возврат долга, Обед в ресторане..." value="${esc(values[idx])}" required autocomplete="off">
+
+              ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: <strong>${esc(tx.description)}</strong></div>` : ''}
+
+              <!-- Category Selection -->
+              <div class="clarify-field-group">
+                <div class="clarify-field-label">
+                  <span>Категория операции:</span>
+                  <strong style="color: var(--accent-jade);" id="clarify-cat-lbl-${idx}">${esc(currentCat || 'Не выбрана')}</strong>
+                </div>
+                <div class="clarify-cat-chips" data-didx="${idx}">
+                  ${QUICK_CATS.map(qc => `
+                    <button type="button" class="clarify-cat-chip ${currentCat === qc ? 'selected' : ''}" data-didx="${idx}" data-cat="${esc(qc)}">
+                      ${getCategoryIcon(qc, isInc ? 'income' : 'expense', 12)}
+                      <span>${esc(qc)}</span>
+                    </button>
+                  `).join('')}
+                </div>
+                <select class="form-select clarify-cat-select" data-didx="${idx}" style="font-size: 12px; height: 32px;">
+                  <option value="" ${!currentCat ? 'selected' : ''}>-- Выберите другую категорию из списка --</option>
+                  ${allCats.map(c => `<option value="${esc(c)}" ${currentCat === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+                </select>
+              </div>
+
+              <!-- Description Field -->
+              <div class="clarify-field-group" style="margin-top: 6px;">
+                <div class="clarify-field-label">
+                  <span>Понятное описание / Назначение:</span>
+                  <span style="font-size: 10.5px; color: var(--text-muted);">минимум 3 символа</span>
+                </div>
+                <input type="text" class="form-input desc-require-input" data-didx="${idx}" placeholder="Например: Снасти для рыбалки, Поездка на метро, Обед в ресторане..." value="${esc(currentDesc)}" required autocomplete="off">
+                <div class="desc-quick-tags" data-didx="${idx}" style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;">
+                  <button type="button" class="desc-tag-pill clarify-quick-tag" data-didx="${idx}" data-text="Снасти для рыбалки">${icon("compass", 11)} Снасти для рыбалки</button>
+                  <button type="button" class="desc-tag-pill clarify-quick-tag" data-didx="${idx}" data-text="Поездка на метро">${icon("car", 11)} Поездка на метро</button>
+                  <button type="button" class="desc-tag-pill clarify-quick-tag" data-didx="${idx}" data-text="Продукты домой">${icon("cart", 11)} Продукты домой</button>
+                  <button type="button" class="desc-tag-pill clarify-quick-tag" data-didx="${idx}" data-text="Обед с коллегами">${icon("coffee", 11)} Обед с коллегами</button>
+                  <button type="button" class="desc-tag-pill clarify-quick-tag" data-didx="${idx}" data-text="Подарок">${icon("gift", 11)} Подарок</button>
+                  <button type="button" class="desc-tag-pill clarify-quick-tag" data-didx="${idx}" data-text="Возврат долга">${icon("wallet", 11)} Возврат долга</button>
+                </div>
+              </div>
             </div>
           `;
         }).join('')}
@@ -2683,14 +2817,14 @@ function openRequiredDescModal(txsNeedingDesc, onComplete) {
 
       <div class="desc-modal-footer">
         <div class="desc-modal-counter">
-          <span class="status-dot ${getFilledCount() === txsNeedingDesc.length ? 'jade' : 'amber'}"></span>
-          <span>Заполнено: <strong id="desc-filled-count">${getFilledCount()}</strong> из ${txsNeedingDesc.length}</span>
+          <span class="status-dot ${getFilledCount() === txsNeedingClarify.length ? 'jade' : 'amber'}"></span>
+          <span>Заполнено: <strong id="desc-filled-count">${getFilledCount()}</strong> из ${txsNeedingClarify.length}</span>
         </div>
         <div class="desc-modal-footer-actions">
           <button type="button" class="btn-secondary" id="btn-cancel-desc-modal">Назад</button>
-          <button type="button" class="btn-primary" id="btn-submit-required-descs" ${getFilledCount() === txsNeedingDesc.length ? '' : 'disabled'}>
+          <button type="button" class="btn-primary" id="btn-submit-required-descs" ${getFilledCount() === txsNeedingClarify.length ? '' : 'disabled'}>
             ${icon('check', 14)}
-            <span>Сохранить и завершить импорт</span>
+            <span>Сохранить и перейти к операциям</span>
           </button>
         </div>
       </div>
@@ -2702,53 +2836,123 @@ function openRequiredDescModal(txsNeedingDesc, onComplete) {
   const btnSubmit = backdrop.querySelector('#btn-submit-required-descs');
   const counterEl = backdrop.querySelector('#desc-filled-count');
   const dotEl = backdrop.querySelector('.desc-modal-counter .status-dot');
-  const inputs = backdrop.querySelectorAll('.desc-require-input');
 
-  function updateValidation() {
-    const filled = getFilledCount();
-    if (counterEl) counterEl.innerText = String(filled);
-    const isReady = filled === txsNeedingDesc.length;
-    if (dotEl) {
-      dotEl.className = `status-dot ${isReady ? 'jade' : 'amber'}`;
+  function updateCardUI(idx) {
+    const card = backdrop.querySelector(`.desc-modal-item[data-didx="${idx}"]`);
+    const pill = backdrop.querySelector(`#clarify-pill-${idx}`);
+    const catLbl = backdrop.querySelector(`#clarify-cat-lbl-${idx}`);
+    const valid = isItemValid(idx);
+
+    if (catLbl) catLbl.innerText = cats[idx] || 'Не выбрана';
+
+    if (card) card.classList.toggle('completed', valid);
+    if (pill) {
+      pill.className = `clarify-status-pill ${valid ? 'jade' : 'amber'}`;
+      pill.innerHTML = valid ? `${icon('check', 11)} Готово` : `${icon('clock', 11)} Требует уточнения`;
     }
-    if (btnSubmit) {
-      btnSubmit.disabled = !isReady;
+
+    // Update chips active state
+    if (card) {
+      card.querySelectorAll('.clarify-cat-chip').forEach(ch => {
+        ch.classList.toggle('selected', ch.getAttribute('data-cat') === cats[idx]);
+      });
+      const sel = card.querySelector('.clarify-cat-select');
+      if (sel && sel.value !== cats[idx]) {
+        sel.value = cats[idx] || '';
+      }
     }
   }
 
-  inputs.forEach(inp => {
-    inp.addEventListener('input', e => {
-      const idx = parseInt(e.target.getAttribute('data-didx'), 10);
-      values[idx] = e.target.value.trim();
-      const parentCard = e.target.closest('.desc-modal-item');
-      if (parentCard) {
-        parentCard.classList.toggle('filled', values[idx].length >= 3);
+  function updateGlobalValidation() {
+    const filled = getFilledCount();
+    if (counterEl) counterEl.innerText = String(filled);
+    const isReady = filled === txsNeedingClarify.length;
+    if (dotEl) dotEl.className = `status-dot ${isReady ? 'jade' : 'amber'}`;
+    if (btnSubmit) btnSubmit.disabled = !isReady;
+  }
+
+  // Category chip clicks
+  backdrop.querySelectorAll('.clarify-cat-chip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      e.preventDefault();
+      const idx = parseInt(chip.getAttribute('data-didx'), 10);
+      const chosenCat = chip.getAttribute('data-cat');
+      cats[idx] = chosenCat;
+      updateCardUI(idx);
+      updateGlobalValidation();
+    });
+  });
+
+  // Category select change
+  backdrop.querySelectorAll('.clarify-cat-select').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const idx = parseInt(sel.getAttribute('data-didx'), 10);
+      const val = e.target.value.trim();
+      if (val) {
+        cats[idx] = val;
+        updateCardUI(idx);
+        updateGlobalValidation();
       }
-      updateValidation();
+    });
+  });
+
+  // Description input change
+  backdrop.querySelectorAll('.desc-require-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = parseInt(inp.getAttribute('data-didx'), 10);
+      descs[idx] = e.target.value.trim();
+      updateCardUI(idx);
+      updateGlobalValidation();
+    });
+  });
+
+  // Quick tag clicks
+  backdrop.querySelectorAll('.clarify-quick-tag').forEach(tag => {
+    tag.addEventListener('click', e => {
+      e.preventDefault();
+      const idx = parseInt(tag.getAttribute('data-didx'), 10);
+      const text = tag.getAttribute('data-text');
+      descs[idx] = text;
+      const inp = backdrop.querySelector(`.desc-require-input[data-didx="${idx}"]`);
+      if (inp) inp.value = text;
+      updateCardUI(idx);
+      updateGlobalValidation();
     });
   });
 
   const closeBtn = backdrop.querySelector('#btn-close-desc-modal');
-  if (closeBtn) closeBtn.onclick = () => backdrop.remove();
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      backdrop.remove();
+      showToast('Импорт приостановлен: заполните классификацию для продолжения', 'warning');
+    };
+  }
 
   const cancelBtn = backdrop.querySelector('#btn-cancel-desc-modal');
-  if (cancelBtn) cancelBtn.onclick = () => backdrop.remove();
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      backdrop.remove();
+      showToast('Импорт приостановлен: заполните классификацию для продолжения', 'warning');
+    };
+  }
 
   if (btnSubmit) {
     btnSubmit.onclick = () => {
-      if (getFilledCount() < txsNeedingDesc.length) {
-        showToast('Пожалуйста, заполните описание для всех операций', 'warning');
+      if (getFilledCount() < txsNeedingClarify.length) {
+        showToast('Пожалуйста, укажите категорию и описание для всех операций', 'warning');
         return;
       }
-      // Apply new descriptions to transactions
-      txsNeedingDesc.forEach((tx, idx) => {
-        tx.description = values[idx];
+      // Apply new category & description to transactions
+      txsNeedingClarify.forEach((tx, idx) => {
+        tx.category = cats[idx];
+        tx.description = descs[idx];
       });
       backdrop.remove();
       if (typeof window.renderBankPreviewRows === 'function') {
         window.renderBankPreviewRows();
       }
-      if (typeof onComplete === 'function') onComplete();
+      showToast('Все операции успешно классифицированы!', 'success');
+      if (typeof onComplete === 'function') onComplete(txsNeedingClarify);
     };
   }
 
@@ -2757,6 +2961,8 @@ function openRequiredDescModal(txsNeedingDesc, onComplete) {
     if (first) first.focus();
   }, 120);
 }
+
+const openRequiredDescModal = openRequiredClarificationModal;
 
 function openBankImportModal() {
   const m = document.getElementById('import-bank-modal');
@@ -5477,6 +5683,7 @@ function renderModal() {
           <span class="cat-chip" data-cat="Рестораны" data-type="expense">${icon("utensils", 13)} Рестораны</span>
           <span class="cat-chip" data-cat="Кафе" data-type="expense">${icon("coffee", 13)} Кафе</span>
           <span class="cat-chip" data-cat="Транспорт" data-type="expense">${icon("car", 13)} Транспорт</span>
+          <span class="cat-chip" data-cat="Хобби" data-type="expense">${icon("compass", 13)} Хобби</span>
           <span class="cat-chip" data-cat="Подписки" data-type="expense">${icon("layers", 13)} Подписки</span>
           <span class="cat-chip" data-cat="Здоровье" data-type="expense">${icon("heart", 13)} Здоровье</span>
           <span class="cat-chip" data-cat="Зарплата" data-type="income">${icon("banknote", 13)} Зарплата</span>
@@ -7415,18 +7622,84 @@ function bindInteractiveEvents() {
     const descInput = document.getElementById('form-desc');
 
     if (typeof txOrType === 'object' && txOrType !== null) {
-      // EDIT MODE
+      // EDIT MODE (Financial facts are strictly permanent and locked; only category & description can be modified)
       editingTxId = txOrType.id;
       if (modalTitle) {
-        modalTitle.innerHTML = `Редактирование операции <span class="tx-badge-editing">Изменение</span>`;
+        modalTitle.innerHTML = `Редактирование операции <span class="tx-badge-editing">Категория и описание</span>`;
       }
-      if (typeSelect) typeSelect.value = txOrType.type || 'expense';
-      $('.segmented-type-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-type') === (txOrType.type || 'expense')));
-      if (catInput) catInput.value = txOrType.category || '';
-      if (amtInput) amtInput.value = profile.currency === 'RUB' ? (txOrType.amount || '') : Number(convertFromRub(txOrType.amount).toFixed(2));
-      if (dateInput) dateInput.value = getTxIso(txOrType);
-      if (timeInput) timeInput.value = formatTxTime(txOrType);
-      if (descInput) descInput.value = txOrType.description || '';
+      const modalCard = modal.querySelector('.modal-card');
+      if (modalCard) modalCard.classList.add('tx-modal-edit-locked');
+
+      // Add or show immutable ledger banner
+      let immBanner = document.getElementById('tx-immutable-banner');
+      if (!immBanner) {
+        immBanner = document.createElement('div');
+        immBanner.id = 'tx-immutable-banner';
+        immBanner.className = 'tx-immutable-banner';
+        immBanner.innerHTML = `
+          <div class="tx-immutable-icon">${icon('lock', 15)}</div>
+          <div>
+            <div class="tx-immutable-title">Операция зафиксирована банком</div>
+            <div class="tx-immutable-desc">Сумма, дата и тип защищены от изменений финансовым реестром. Вы можете скорректировать категорию и описание.</div>
+          </div>
+        `;
+        const formEl = document.getElementById('tx-modal-form');
+        if (formEl) formEl.prepend(immBanner);
+      } else {
+        immBanner.style.display = 'flex';
+      }
+
+      // Lock financial facts
+      if (typeSelect) {
+        typeSelect.value = txOrType.type || 'expense';
+        typeSelect.disabled = true;
+      }
+      const segBox = document.getElementById('modal-type-segmented');
+      if (segBox) {
+        segBox.classList.add('input-locked');
+        segBox.style.pointerEvents = 'none';
+        segBox.style.opacity = '0.7';
+        segBox.title = 'Тип операции зафиксирован банком';
+      }
+      $$('.segmented-type-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-type') === (txOrType.type || 'expense')));
+
+      if (amtInput) {
+        amtInput.value = profile.currency === 'RUB' ? (txOrType.amount || '') : Number(convertFromRub(txOrType.amount).toFixed(2));
+        amtInput.readOnly = true;
+        amtInput.classList.add('input-locked');
+        amtInput.title = 'Сумма зафиксирована банковским реестром и защищена от изменений';
+      }
+      const nudges = modal.querySelector('.tx-modal-quick-nudges');
+      if (nudges) nudges.style.display = 'none';
+
+      if (dateInput) {
+        dateInput.value = getTxIso(txOrType);
+        dateInput.readOnly = true;
+        dateInput.disabled = true;
+        dateInput.classList.add('input-locked');
+        dateInput.title = 'Дата зафиксирована банком';
+      }
+      if (timeInput) {
+        timeInput.value = formatTxTime(txOrType);
+        timeInput.readOnly = true;
+        timeInput.disabled = true;
+        timeInput.classList.add('input-locked');
+        timeInput.title = 'Время зафиксировано банком';
+      }
+
+      // Keep Category & Description fully interactive
+      if (catInput) {
+        catInput.value = txOrType.category || '';
+        catInput.readOnly = false;
+        catInput.disabled = false;
+        catInput.classList.remove('input-locked');
+      }
+      if (descInput) {
+        descInput.value = txOrType.description || '';
+        descInput.readOnly = false;
+        descInput.disabled = false;
+        descInput.classList.remove('input-locked');
+      }
       if (submitBtn) submitBtn.innerText = 'Сохранить изменения';
       if (deleteBtnWrap) deleteBtnWrap.style.display = 'block';
 
@@ -7435,20 +7708,65 @@ function bindInteractiveEvents() {
         else c.classList.remove('selected');
       });
     } else {
-      // CREATE MODE
+      // CREATE MODE (All fields are editable for manual entry)
       editingTxId = null;
+      const modalCard = modal.querySelector('.modal-card');
+      if (modalCard) modalCard.classList.remove('tx-modal-edit-locked');
+
+      const immBanner = document.getElementById('tx-immutable-banner');
+      if (immBanner) immBanner.style.display = 'none';
+
       const type = typeof txOrType === 'string' ? txOrType : 'expense';
       if (modalTitle) modalTitle.innerText = 'Новая операция';
-      if (typeSelect) typeSelect.value = type;
-      $('.segmented-type-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-type') === type));
-      if (catInput) catInput.value = type === 'income' ? 'Зарплата' : 'Продукты';
-      if (amtInput) amtInput.value = '';
-      if (dateInput) dateInput.value = toDateIso(getMskDate());
+      if (typeSelect) {
+        typeSelect.value = type;
+        typeSelect.disabled = false;
+      }
+      const segBox = document.getElementById('modal-type-segmented');
+      if (segBox) {
+        segBox.classList.remove('input-locked');
+        segBox.style.pointerEvents = '';
+        segBox.style.opacity = '';
+        segBox.title = '';
+      }
+      $$('.segmented-type-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-type') === type));
+
+      if (catInput) {
+        catInput.value = type === 'income' ? 'Зарплата' : 'Продукты';
+        catInput.readOnly = false;
+        catInput.disabled = false;
+        catInput.classList.remove('input-locked');
+      }
+      if (amtInput) {
+        amtInput.value = '';
+        amtInput.readOnly = false;
+        amtInput.classList.remove('input-locked');
+        amtInput.title = '';
+      }
+      const nudges = modal.querySelector('.tx-modal-quick-nudges');
+      if (nudges) nudges.style.display = 'flex';
+
+      if (dateInput) {
+        dateInput.value = toDateIso(getMskDate());
+        dateInput.readOnly = false;
+        dateInput.disabled = false;
+        dateInput.classList.remove('input-locked');
+        dateInput.title = '';
+      }
       if (timeInput) {
         const d = getMskDate();
         timeInput.value = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        timeInput.readOnly = false;
+        timeInput.disabled = false;
+        timeInput.classList.remove('input-locked');
+        timeInput.title = '';
       }
-      if (descInput) descInput.value = '';
+      if (descInput) {
+        descInput.value = '';
+        descInput.readOnly = false;
+        descInput.disabled = false;
+        descInput.classList.remove('input-locked');
+      }
       if (submitBtn) submitBtn.innerText = 'Сохранить операцию';
       if (deleteBtnWrap) deleteBtnWrap.style.display = 'none';
 
@@ -7561,17 +7879,19 @@ function bindInteractiveEvents() {
   // Category Chips inside Modal
   $$('.cat-chip').forEach(chip => {
     chip.onclick = () => {
-      $('.cat-chip').forEach(c => c.classList.remove('selected'));
+      $$('.cat-chip').forEach(c => c.classList.remove('selected'));
       chip.classList.add('selected');
       const cat = chip.getAttribute('data-cat');
       const catType = chip.getAttribute('data-type');
       const catInput = document.getElementById('form-category');
       const typeSelect = document.getElementById('form-type');
       if (catInput) catInput.value = cat;
-      if (typeSelect) typeSelect.value = catType;
-      $('.segmented-type-btn').forEach(b => {
-        b.classList.toggle('active', b.getAttribute('data-type') === catType);
-      });
+      if (!editingTxId) {
+        if (typeSelect) typeSelect.value = catType;
+        $$('.segmented-type-btn').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-type') === catType);
+        });
+      }
       updateModalBudgetAlert();
     };
   });
@@ -7677,6 +7997,7 @@ function bindInteractiveEvents() {
           const lim = Number(budget.limit_amount);
           const newTotal = spentThisMonth + amount;
           if (newTotal > lim) {
+            const overspend = newTotal - lim;
             const ok = await showConfirmDialog({
               title: 'Превышение лимита бюджета',
               message: `Категория «${category}» имеет установленный лимит ${money(lim)} в месяц.\nУже израсходовано: ${money(spentThisMonth)}.\n\nС сохранением этой записи (${money(amount)}) перерасход составит ${money(overspend)}!\n\nВы точно хотите зафиксировать этот расход сверх лимита?`,
@@ -7691,13 +8012,30 @@ function bindInteractiveEvents() {
       }
 
       try {
-        const submitBtn = txForm.querySelector('button[type="submit"]');
+        const submitBtn = txModalForm.querySelector('button[type="submit"]');
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Сохранение...'; }
         if (editingTxId) {
+          // Strictly preserve financial ledger facts (type, amount, dates) and update only category and description
+          const origTx = (data.transactions || []).find(t => String(t.id) === String(editingTxId));
+          const finalType = origTx ? origTx.type : type;
+          const finalAmount = origTx ? Number(origTx.amount) : amount;
+          const finalOccurredOn = origTx ? getTxIso(origTx) : occurred_on;
+          const finalTime = origTx ? formatTxTime(origTx) : timeVal;
+          const finalCreatedAt = origTx ? (origTx.created_at || origTx.occurred_at) : created_at;
+
           await api('transactions/' + editingTxId, {
             method: 'PUT',
-            body: JSON.stringify({ type, category, amount, occurred_on, time: timeVal, created_at, description })
+            body: JSON.stringify({
+              type: finalType,
+              category,
+              amount: finalAmount,
+              occurred_on: finalOccurredOn,
+              time: finalTime,
+              created_at: finalCreatedAt,
+              description
+            })
           });
+          showToast('Категория и описание обновлены', 'success');
         } else {
           await api('transactions', {
             method: 'POST',
@@ -7706,6 +8044,7 @@ function bindInteractiveEvents() {
           if (type === 'income' && amount >= 15000) {
             paydaySplitData = { amount };
           }
+          showToast('Операция успешно добавлена', 'success');
         }
         const modal = document.getElementById('tx-modal');
         if (modal) modal.style.display = 'none';
@@ -7714,8 +8053,8 @@ function bindInteractiveEvents() {
         renderApp();
       } catch (err) {
         showToast('Ошибка сохранения операции: ' + err.message, 'error');
-        const submitBtn = txForm.querySelector('button[type="submit"]');
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Сохранить'; }
+        const submitBtn = txModalForm.querySelector('button[type="submit"]');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = editingTxId ? 'Сохранить изменения' : 'Сохранить операцию'; }
       }
     };
   }
@@ -9396,13 +9735,13 @@ function bindBankImportModalEvents() {
 
       renderBankPreviewRows();
 
-      // Automatically open modal immediately after file import if any operations need descriptions
-      const needDesc = bankImportParsed.filter(isTxDescriptionNeeded);
-      if (needDesc.length > 0) {
+      // Automatically open modal immediately after file import if any operations need clarification
+      const needClarify = bankImportParsed.filter(isTxClarificationNeeded);
+      if (needClarify.length > 0) {
         setTimeout(() => {
-          openRequiredDescModal(needDesc, () => {
+          openRequiredClarificationModal(needClarify, () => {
             renderBankPreviewRows();
-            showToast('Описания успешно сохранены!', 'success');
+            showToast('Классификация операций успешно сохранена!', 'success');
           });
         }, 200);
       }
@@ -9448,11 +9787,11 @@ function bindBankImportModalEvents() {
         ? `<span style="display:inline-block;margin-left:4px;font-size:10px;color:var(--text-muted);background:var(--bg-tertiary);border-radius:4px;padding:1px 5px;">${tx.is_self_transfer ? 'свой счёт' : 'физлицо'}</span>`
         : '';
 
-      const needsDesc = isTxDescriptionNeeded(tx);
-      const needDescBadge = needsDesc
-        ? `<div style="display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; color:var(--accent-amber); background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.28); border-radius:4px; padding:1px 6px; margin-top:4px;">
+      const needsClarify = isTxClarificationNeeded(tx);
+      const needClarifyBadge = needsClarify
+        ? `<div style="display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; color:var(--accent-amber); background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.28); border-radius:4px; padding:1px 6px; margin-top:4px; cursor:pointer;" onclick="openRequiredClarificationModal([bankImportParsed[${idx}]], renderBankPreviewRows)">
             <span class="status-dot amber" style="width:5px; height:5px;"></span>
-            Требуется описание
+            Требуется уточнение
            </div>`
         : '';
 
@@ -9470,7 +9809,7 @@ function bindBankImportModalEvents() {
               <input type="text" class="import-desc-input" data-idx="${idx}" value="${esc(tx.description)}" placeholder="Уточните (от кого / на что)..." title="Отредактируйте для точного анализа ментором">
               ${transferHint}
             </div>
-            ${needDescBadge}
+            ${needClarifyBadge}
           </td>
           <td class="num" style="text-align: right; font-weight: 700; color: ${amtColor};">
             ${amtPrefix}${money(tx.amount)}
@@ -9543,10 +9882,10 @@ function bindBankImportModalEvents() {
         return;
       }
 
-      // Check if any selected operations need a description
-      const needDesc = selected.filter(isTxDescriptionNeeded);
-      if (needDesc.length > 0) {
-        openRequiredDescModal(needDesc, () => {
+      // Permanent Rule: Any selected unclear operations MUST be clarified before importing
+      const needClarify = selected.filter(isTxClarificationNeeded);
+      if (needClarify.length > 0) {
+        openRequiredClarificationModal(needClarify, () => {
           proceedWithImport(selected);
         });
         return;
