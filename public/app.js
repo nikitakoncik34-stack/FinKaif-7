@@ -2640,7 +2640,7 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
   // 4. Query Russian Merchant & Brand Knowledge Base catalog
   if (RUSSIAN_MERCHANTS_KB && Array.isArray(RUSSIAN_MERCHANTS_KB.merchants_catalog)) {
     for (const m of RUSSIAN_MERCHANTS_KB.merchants_catalog) {
-      const aliasMatch = m.aliases && m.aliases.some(a => low.includes(a.toLowerCase()));
+      const aliasMatch = m.aliases && m.aliases.some(a => merchantTermMatches(low, a));
       if (aliasMatch) {
         const title = m.default_title || m.name;
         return formatResult(m.category, title, 0.97, 'kb_catalog_matched');
@@ -2651,7 +2651,7 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
   // 5. Query OKVED activities dictionary
   if (RUSSIAN_MERCHANTS_KB && Array.isArray(RUSSIAN_MERCHANTS_KB.okved_dictionary)) {
     for (const ok of RUSSIAN_MERCHANTS_KB.okved_dictionary) {
-      const kwMatch = ok.keywords && ok.keywords.some(k => low.includes(k.toLowerCase()));
+      const kwMatch = ok.keywords && ok.keywords.some(k => merchantTermMatches(low, k));
       if (kwMatch) {
         const title = ipSubtitle || ok.keywords[0] || orig;
         return formatResult(ok.category, title, 0.95, 'kb_okved_matched');
@@ -2761,11 +2761,7 @@ function analyzeRussianMerchant(rawDesc, amount = 0, availableCats = getAllCateg
     const personSurname = surnameParts[0] || 'Контрагент';
     const cleanTitle = `ИП ${personSurname}`;
     
-    let candidateCat = 'Покупки';
-    if (amount > 0 && amount <= 500) candidateCat = 'Кафе';
-    else if (amount > 500 && amount <= 3000) candidateCat = 'Покупки';
-    else if (amount > 3000 && amount <= 15000) candidateCat = 'Здоровье';
-    else if (amount > 50000) candidateCat = 'Переводы';
+    const candidateCat = 'Прочее';
 
     const normCat = normalizeCategoryToAvailable(candidateCat, availableCats);
     return {
@@ -2807,68 +2803,46 @@ function autoCategorizeDescription(desc, amount = 0) {
 }
 
 async function enrichTransactionsWithMerchantIntelligence(transactions) {
-  if (!Array.isArray(transactions) || transactions.length === 0) return;
+  if (!Array.isArray(transactions) || !transactions.length) return;
   const availableCats = getAllCategories();
-
-  // 1. Local fast deterministic pass (0ms)
   const needingAI = [];
-  transactions.forEach((tx, idx) => {
-    const rawDesc = String(tx.description || '').trim();
-    const amt = Number(tx.amount) || 0;
-    const analysis = analyzeRussianMerchant(rawDesc, amt, availableCats);
-
+  transactions.forEach((tx, index) => {
+    tx.raw_description = tx.raw_description || tx.description || '';
+    if (tx.type === 'transfer') {
+      tx.category = 'Переводы'; tx.needs_confirmation = false; return;
+    }
+    const verified = isCategoryVerifiedInSystem(tx.category, availableCats);
+    if (verified && tx.needs_confirmation !== true && (tx.confidence === undefined || tx.confidence >= 0.85)) return;
+    const analysis = analyzeRussianMerchant(tx.raw_description, Number(tx.amount) || 0, availableCats);
+    // Merchant rules describe purchases; they must not turn income into an expense category.
+    if (tx.type === 'income' && SYSTEM_EXPENSE_CATEGORIES.includes(analysis.category)) {
+      analysis.category = 'Прочее'; analysis.confidence = 0.3; analysis.needs_confirmation = true;
+    }
     tx.category = analysis.category;
     tx.confidence = analysis.confidence;
     tx.needs_confirmation = analysis.needs_confirmation;
     tx.suggested_category = analysis.suggested_category || analysis.category;
-    if (analysis.clean_description && (!tx.description || tx.description.length < 3 || tx.description === rawDesc)) {
-      tx.raw_description = rawDesc;
-      tx.description = analysis.clean_description;
-    }
-
     if (tx.needs_confirmation || tx.confidence < 0.85) {
-      needingAI.push({
-        index: idx,
-        id: idx,
-        description: rawDesc,
-        amount: amt,
-        type: tx.type
-      });
+      needingAI.push({ index, id: index, description: tx.raw_description, amount: tx.amount, type: tx.type });
     }
   });
-
-  // 2. Query Neural Gemini Batch Classifier for ambiguous rows
-  if (needingAI.length > 0 && localStorage.getItem('finkaif_token')) {
-    try {
-      const res = await api('ai/categorize-batch', {
-        method: 'POST',
-        body: JSON.stringify({
-          transactions: needingAI,
-          user_categories: availableCats
-        })
-      });
-
-      if (res && res.ok && Array.isArray(res.results)) {
-        for (const item of res.results) {
-          const target = transactions[item.index];
-          if (target && item.category) {
-            const verified = isCategoryVerifiedInSystem(item.category, availableCats);
-            target.category = normalizeCategoryToAvailable(item.category, availableCats);
-            if (item.clean_description) target.description = item.clean_description;
-            target.confidence = item.confidence !== undefined ? item.confidence : target.confidence;
-            if (verified && target.confidence >= 0.85) {
-              target.needs_confirmation = false;
-            } else {
-              target.needs_confirmation = true;
-            }
-            target.suggested_category = target.category;
-          }
-        }
-      }
-    } catch (aiErr) {
-      console.warn('Neural batch categorization notice:', aiErr.message);
+  if (!needingAI.length || !localStorage.getItem('finkaif_token')) return;
+  const requested = new Set(needingAI.map(t => t.index));
+  try {
+    const res = await api('ai/categorize-batch', { method: 'POST', body: JSON.stringify({ transactions: needingAI, user_categories: availableCats }) });
+    if (!res?.ok || !Array.isArray(res.results)) return;
+    for (const item of res.results) {
+      if (!Number.isInteger(item.index) || !requested.has(item.index)) continue;
+      const target = transactions[item.index];
+      if (!target || !item.category) continue;
+      target.category = normalizeCategoryToAvailable(item.category, availableCats);
+      const confidence = Number(item.confidence);
+      target.confidence = Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0;
+      target.needs_confirmation = item.needs_confirmation === true || target.confidence < 0.85 || !isCategoryVerifiedInSystem(target.category, availableCats);
+      target.suggested_category = target.category;
+      // Keep the bank's description; the category can be improved independently.
     }
-  }
+  } catch (err) { console.warn('Batch categorization unavailable:', err.message); }
 }
 
 function splitCsvLine(line, delimiter) {
@@ -2895,36 +2869,70 @@ function splitCsvLine(line, delimiter) {
   return result;
 }
 
-function parseBankAmount(str) {
-  if (typeof str === 'number') return str;
-  if (!str) return 0;
-  const clean = String(str).replace(/[\s\u00A0₽$€₸]/g, '').replace(',', '.');
-  const val = parseFloat(clean);
-  return isNaN(val) ? 0 : val;
+function merchantTermMatches(text, term) {
+  const word = String(term || '').toLowerCase();
+  if (!word) return false;
+  if (word.length > 3) return text.includes(word);
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, 'u').test(text);
+}
+
+function parseBankAmount(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return 0;
+  let str = String(value).trim().replace(/[−–—]/g, '-').replace(/[\s\u00a0\u202f]/g, '');
+  str = str.replace(/(?:RUB|RUR|USD|EUR|KZT|руб\.?|[₽$€₸])/gi, '');
+  if (/^\(.+\)$/.test(str)) str = '-' + str.slice(1, -1);
+  if (!/^[+-]?\d[\d.,]*$/.test(str)) throw new Error('Не удалось прочитать сумму: ' + value);
+  const sign = str.startsWith('-') ? -1 : 1;
+  str = str.replace(/^[+-]/, '');
+  const last = Math.max(str.lastIndexOf(','), str.lastIndexOf('.'));
+  let whole = str, fraction = '';
+  if (last >= 0) {
+    const tail = str.slice(last + 1);
+    if (tail.length === 1 || tail.length === 2) {
+      whole = str.slice(0, last); fraction = tail;
+    } else if (tail.length !== 3) {
+      throw new Error('Некорректное число копеек: ' + value);
+    }
+    if (/[.,]/.test(whole) && !/^\d{1,3}([.,])\d{3}(?:\1\d{3})*$/.test(whole)) {
+      throw new Error('Неоднозначный формат суммы: ' + value);
+    }
+  }
+  whole = whole.replace(/[.,]/g, '');
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  if (!Number.isSafeInteger(cents) || cents >= 100000000000000) throw new Error('Сумма вне допустимого диапазона');
+  return sign * cents / 100;
 }
 
 function parseBankDate(raw) {
-  if (!raw) return toDateIso(getMskDate());
-  const s = String(raw).trim().split(/\s+/)[0];
-  const dotM = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
-  if (dotM) {
-    let year = parseInt(dotM[3], 10);
-    if (year < 100) year += 2000;
-    const month = dotM[2].padStart(2, '0');
-    const day = dotM[1].padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const str = String(raw || '').trim().split(/[T\s]/)[0];
+  let year, month, day;
+  let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) [, year, month, day] = m;
+  else {
+    m = str.match(/^(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4})$/);
+    if (m) [, day, month, year] = m;
   }
-  const isoM = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoM) {
-    return `${isoM[1]}-${isoM[2].padStart(2, '0')}-${isoM[3].padStart(2, '0')}`;
+  if (!m) throw new Error('Не удалось прочитать дату: ' + (raw || 'не указана'));
+  year = Number(year); if (year < 100) year += 2000;
+  month = Number(month); day = Number(day);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (year < 1900 || year > 2199 || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error('Некорректная дата операции: ' + raw);
   }
-  const slashM = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (slashM) {
-    let year = parseInt(slashM[3], 10);
-    if (year < 100) year += 2000;
-    return `${year}-${slashM[2].padStart(2, '0')}-${slashM[1].padStart(2, '0')}`;
-  }
-  return toDateIso(getMskDate());
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function normalizeStatementRow(item) {
+  const amount = Math.abs(parseBankAmount(item.amount));
+  const date = parseBankDate(item.date || item.occurred_on);
+  const type = String(item.type || '').toLowerCase();
+  if (!['income', 'expense', 'transfer'].includes(type) || !amount) throw new Error('Не определены сумма или направление операции');
+  if (type === 'transfer' && item.is_self_transfer !== true) throw new Error('Для перевода другому человеку нужно определить доход или расход');
+  const description = String(item.description || '').trim();
+  return { ...item, amount, date, occurred_on: date, type, tx_kind: type,
+    raw_description: String(item.raw_description || item.original_description || description),
+    description, selected: true };
 }
 
 function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
@@ -2933,23 +2941,16 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
 
   // Check JSON format
   if (text.startsWith('[') || (text.startsWith('{') && text.includes('"transactions"'))) {
-    try {
-      const parsed = JSON.parse(text);
-      const list = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
-      return list.map(item => ({
-        occurred_on: parseBankDate(item.date || item.occurred_on),
-        amount: Math.abs(parseBankAmount(item.amount)),
-        type: item.type === 'income' ? 'income' : (parseBankAmount(item.amount) > 0 && item.type !== 'expense' ? 'income' : 'expense'),
-        category: item.category || autoCategorizeDescription(item.description),
-        description: item.description || item.category || 'Операция из выписки',
-        selected: true
-      })).filter(x => x.amount > 0);
-    } catch (_) {}
+    const parsed = JSON.parse(text);
+    const list = Array.isArray(parsed) ? parsed : parsed.transactions;
+    if (!Array.isArray(list)) throw new Error('Нет списка операций в JSON');
+    return list.map(item => normalizeStatementRow({ ...item, category: item.category || 'Прочее' }));
   }
 
   // Check 1C / Client-Bank TXT format (ВТБ, Сбер, Альфа 1С экспорт)
   if (text.includes('1CClientBankExchange') || text.includes('СекцияДокумент')) {
     const docs = text.split(/СекцияДокумент\s*=/i);
+    const ownAccounts = new Set([...docs[0].matchAll(/^РасчСчет\s*=\s*(\d+)/gim)].map(m => m[1]));
     const results = [];
     for (let i = 1; i < docs.length; i++) {
       const doc = docs[i];
@@ -2962,11 +2963,15 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
       const amt = amtM ? parseBankAmount(amtM[1]) : 0;
       if (amt > 0) {
         const desc = (purpM ? purpM[1] : (recipM ? recipM[1] : (payerM ? payerM[1] : 'Банковский платеж'))).trim();
-        const isIncome = doc.includes('Платежное требование') || /зачисление|возврат|поступление|оплата от покупателя/i.test(desc);
+        const payer = doc.match(/^ПлательщикСчет\s*=\s*(\d+)/im)?.[1];
+        const recipient = doc.match(/^ПолучательСчет\s*=\s*(\d+)/im)?.[1];
+        const outgoing = ownAccounts.has(payer), incoming = ownAccounts.has(recipient);
+        if (!outgoing && !incoming) throw new Error('Не определён счёт владельца выписки 1С');
+        const type = outgoing && incoming ? 'transfer' : incoming ? 'income' : 'expense';
         results.push({
-          occurred_on: dateM ? parseBankDate(dateM[1]) : toDateIso(getMskDate()),
+          occurred_on: parseBankDate(dateM?.[1]),
           amount: amt,
-          type: isIncome ? 'income' : 'expense',
+          type, tx_kind: type, is_self_transfer: type === 'transfer',
           category: autoCategorizeDescription(desc),
           description: desc,
           selected: true
@@ -2991,7 +2996,7 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
   let headers = [];
   for (let i = 0; i < Math.min(10, lines.length); i++) {
     const cols = splitCsvLine(lines[i], delimiter).map(c => c.toLowerCase().replace(/['"]/g, '').trim());
-    if (cols.some(c => c.includes('дата') || c.includes('date') || c.includes('сумма') || c.includes('amount'))) {
+    if (cols.some(c => /дата|date/.test(c)) && cols.some(c => /сумма|amount|приход|расход|списани|поступлен|credit|debit/.test(c))) {
       headerIdx = i;
       headers = cols;
       break;
@@ -3010,7 +3015,10 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
   let statusIdx = headers.findIndex(c => c.includes('статус') || c.includes('status'));
 
   if (dateIdx === -1) dateIdx = 0;
-  if (amtIdx === -1) amtIdx = headers.findIndex((_, idx) => idx !== dateIdx);
+  const creditIdx = headers.findIndex(c => /приход|поступлен|зачислен|кредит|credit/.test(c));
+  const debitIdx = headers.findIndex(c => /расход|списан|дебет|debit/.test(c));
+  const typeIdx = headers.findIndex(c => /^(тип|type|вид операции|направление)$/.test(c));
+  if (amtIdx < 0 && creditIdx < 0 && debitIdx < 0) throw new Error('Не найдены колонки суммы или прихода/расхода');
   if (descIdx === -1) descIdx = headers.findIndex((_, idx) => idx !== dateIdx && idx !== amtIdx && idx !== catIdx);
 
   const results = [];
@@ -3026,9 +3034,13 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
       }
     }
 
-    const rawAmt = row[amtIdx] || '0';
-    const numAmt = parseBankAmount(rawAmt);
-    if (!numAmt || Math.abs(numAmt) < 0.01) continue;
+    if (/^(итого|остаток|баланс|total|balance)/i.test(row[dateIdx] || '') || /^(дата|date)/i.test(row[dateIdx] || '')) continue;
+    const credit = creditIdx >= 0 ? Math.abs(parseBankAmount(row[creditIdx])) : 0;
+    const debit = debitIdx >= 0 ? Math.abs(parseBankAmount(row[debitIdx])) : 0;
+    if (credit && debit) throw new Error('В строке одновременно заполнены приход и расход');
+    const rawAmt = row[amtIdx] || '';
+    const numAmt = creditIdx >= 0 || debitIdx >= 0 ? credit - debit : parseBankAmount(rawAmt);
+    if (!numAmt) continue;
 
     const rawDate = row[dateIdx] || '';
     const date = parseBankDate(rawDate);
@@ -3048,6 +3060,10 @@ function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
       type = 'income';
     }
 
+    const explicitType = String(row[typeIdx] || '').toLowerCase();
+    if (creditIdx >= 0 || debitIdx >= 0) type = credit ? 'income' : 'expense';
+    else if (/^(доход|поступление|income|credit)$/.test(explicitType)) type = 'income';
+    else if (/^(расход|списание|expense|debit)$/.test(explicitType)) type = 'expense';
     const absAmt = Math.abs(numAmt);
     const finalDesc = rawDesc || '';
     let finalCat = autoCategorizeDescription(finalDesc);
@@ -3092,6 +3108,35 @@ function calculateStatementPeriod(transactions) {
   };
 }
 
+function statementTransactionKey(tx) {
+  const amountCents = Math.round(Math.abs(Number(tx?.amount)) * 100);
+  return [
+    String(tx?.type || '').trim().toLowerCase(),
+    String(tx?.occurred_on || tx?.date || '').slice(0, 10),
+    Number.isFinite(amountCents) ? amountCents : 'invalid',
+    String(tx?.description || '').trim().toLowerCase()
+  ].join('\u001f');
+}
+
+function statementTransactionCounts(rows) {
+  const counts = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = statementTransactionKey(row);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function didLedgerGainTransactions(beforeRows, afterRows, importedRows) {
+  const before = statementTransactionCounts(beforeRows);
+  const after = statementTransactionCounts(afterRows);
+  const imported = statementTransactionCounts(importedRows);
+  for (const [key, count] of imported) {
+    if ((after.get(key) || 0) < (before.get(key) || 0) + count) return false;
+  }
+  return imported.size > 0;
+}
+
 async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto', pdfBase64 = null) {
   // 1. Try server-side dedicated Gemini AI endpoint
   try {
@@ -3111,14 +3156,14 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
     });
 
     if (aiRes && aiRes.success && Array.isArray(aiRes.transactions) && aiRes.transactions.length > 0) {
-      const txs = aiRes.transactions.map(item => {
+      const txs = aiRes.transactions.map(normalizeStatementRow).map(item => {
         const rawType = String(item.type || '').toLowerCase();
         const isTransfer = rawType === 'transfer';
         const isIncome = rawType === 'income';
         return {
           occurred_on: parseBankDate(item.date || item.occurred_on),
           amount: Math.abs(parseBankAmount(item.amount)),
-          type: isIncome ? 'income' : 'expense',
+          type: isTransfer ? 'transfer' : (isIncome ? 'income' : 'expense'),
           tx_kind: isTransfer ? 'transfer' : (isIncome ? 'income' : 'expense'),
           is_self_transfer: item.is_self_transfer === true,
           category: (() => {
@@ -3136,6 +3181,7 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
             return cat;
           })(),
           description: item.description || '',
+          raw_description: item.raw_description,
           confidence: item.confidence !== undefined ? item.confidence : undefined,
           needs_confirmation: item.needs_confirmation !== undefined ? item.needs_confirmation : undefined,
           suggested_category: item.suggested_category || undefined,
@@ -3155,7 +3201,10 @@ async function parseBankStatement(fileContent, fileName = '', bankPreset = 'auto
     }
   } catch (err) {
     console.warn('Server AI parse notice:', err.message);
+    if (pdfBase64) throw new Error('Не удалось прочитать PDF: ' + err.message);
   }
+
+  if (pdfBase64) throw new Error('AI не смог прочитать PDF. Попробуйте выписку CSV/Excel или PDF за меньший период.');
 
   // 2. Builtin Fallback Smart Engine (for text / CSV / 1C / Excel)
   const items = fileContent ? parseStatementBuiltin(fileContent, fileName, bankPreset) : [];
@@ -3316,12 +3365,13 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
             </div>
           ` : displayedTxs.map((tx) => {
             const isInc = tx.type === 'income';
+            const isTransfer = tx.type === 'transfer' || tx.tx_kind === 'transfer';
             const hasOrigNote = tx.description && tx.description.trim().length > 0;
             const valid = isItemValid(tx);
             const listIdx = allList.indexOf(tx);
             const currentCat = tx.category || '';
             const quickTags = getQuickTagsForCat(currentCat);
-            const chipsToRender = isInc ? SYSTEM_INCOME_CATEGORIES : SYSTEM_EXPENSE_CATEGORIES;
+            const chipsToRender = isTransfer ? ['Переводы'] : (isInc ? SYSTEM_INCOME_CATEGORIES : SYSTEM_EXPENSE_CATEGORIES);
 
             return `
               <div class="desc-modal-item ${valid ? 'completed' : ''}" data-list-idx="${listIdx}">
@@ -3333,12 +3383,12 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
                     </span>
                     ${tx.is_duplicate ? `<span class="badge-duplicate" title="Такая операция уже есть в реестре">Повтор</span>` : ''}
                   </div>
-                  <div class="desc-item-amount num ${isInc ? 'inc' : 'exp'}">
-                    ${isInc ? '+' : '−'}${money(tx.amount)}
+                  <div class="desc-item-amount num ${isTransfer ? '' : (isInc ? 'inc' : 'exp')}">
+                    ${isTransfer ? '⇄' : (isInc ? '+' : '−')}${money(tx.amount)}
                   </div>
                 </div>
 
-                ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: <strong>${esc(tx.description)}</strong></div>` : ''}
+                ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: <strong>${esc(tx.raw_description || tx.description)}</strong></div>` : ''}
 
                 ${tx.needs_confirmation && tx.suggested_category ? `
                   <div class="ai-recommendation-row" style="margin: 8px 0 6px;">
@@ -5609,6 +5659,8 @@ function formatDateLabel(dStr) {
 function renderTxCard(t, opts = {}) {
   const allowSelect = opts.allowSelect !== undefined ? opts.allowSelect : (tab === 'transactions');
   const isInc = t.type === 'income';
+  const isTransfer = t.type === 'transfer';
+  const amountClass = isTransfer ? '' : (isInc ? 'inc' : 'exp');
   const catIcon = getCategoryIcon(t.category);
   const isSelected = allowSelect && selectedTxIds.has(t.id);
 
@@ -5622,7 +5674,7 @@ function renderTxCard(t, opts = {}) {
         </div>
       ` : ''}
       <div class="tx-left">
-        <div class="tx-icon-box ${isInc ? 'inc' : 'exp'}">
+        <div class="tx-icon-box ${amountClass}">
           ${catIcon}
         </div>
         <div class="tx-meta">
@@ -5632,8 +5684,8 @@ function renderTxCard(t, opts = {}) {
       </div>
 
       <div class="tx-right">
-        <div class="tx-amount num ${isInc ? 'inc' : 'exp'}">
-          ${isInc ? '+' : '−'}${money(t.amount)}
+        <div class="tx-amount num ${amountClass}">
+          ${isTransfer ? '⇄' : (isInc ? '+' : '−')}${money(t.amount)}
         </div>
         <div class="tx-actions">
           <button class="tx-edit-btn" data-id="${t.id}" title="Редактировать запись">
@@ -6454,7 +6506,7 @@ function renderProfileModal() {
   const userName = profile.display_name ? profile.display_name : rawUser;
   const userInitial = rawUser.charAt(0).toUpperCase();
 
-  const currentBal = data.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  const currentBal = data.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : t.type === 'expense' ? -Number(t.amount) : 0), 0);
   const rank = getFinancialRank(currentBal, data.goals);
 
   // Swiss minimalist icons system
@@ -6865,7 +6917,7 @@ function renderFinScoreModal() {
 function renderBulkDock() {
   if (tab !== 'transactions' || selectedTxIds.size === 0) return '';
   const filtered = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
-  const bulkSum = filtered.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  const bulkSum = filtered.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : t.type === 'expense' ? -Number(t.amount) : 0), 0);
   return `
     <div class="tx-bulk-dock" id="tx-bulk-dock">
       <div class="tx-bulk-info">
@@ -7913,9 +7965,10 @@ function bindInteractiveEvents() {
           <div class="chart-tooltip-txs">
             ${dayTxs.map(t => {
               const isInc = t.type === 'income';
-              const color = isInc ? 'var(--accent-jade)' : 'var(--accent-coral)';
-              const bg = isInc ? 'rgba(45,212,191,0.12)' : 'rgba(251,113,133,0.12)';
-              const sign = isInc ? '+' : '−';
+              const isTransfer = t.type === 'transfer';
+              const color = isTransfer ? 'var(--text-muted)' : (isInc ? 'var(--accent-jade)' : 'var(--accent-coral)');
+              const bg = isTransfer ? 'var(--bg-tertiary)' : (isInc ? 'rgba(45,212,191,0.12)' : 'rgba(251,113,133,0.12)');
+              const sign = isTransfer ? '⇄' : (isInc ? '+' : '−');
               const tTime = formatTxTime(t);
               return `
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: 11.5px; background: ${bg}; padding: 4px 8px; border-radius: 5px;">
@@ -7982,7 +8035,8 @@ function bindInteractiveEvents() {
             <div class="day-breakdown-txs">
               ${dayTxs.map(t => {
                 const isInc = t.type === 'income';
-                const sign = isInc ? '+' : '−';
+                const isTransfer = t.type === 'transfer';
+                const sign = isTransfer ? '⇄' : (isInc ? '+' : '−');
                 const tTime = formatTxTime(t);
                 return `
                   <div class="day-tx-item">
@@ -7990,7 +8044,7 @@ function bindInteractiveEvents() {
                       <span class="day-tx-time">${tTime}</span>
                       <span class="day-tx-cat">${esc(t.category)}</span>
                     </div>
-                    <span class="day-tx-amount ${isInc ? 'inc' : 'exp'}">${sign}${money(t.amount)}</span>
+                    <span class="day-tx-amount ${isTransfer ? '' : (isInc ? 'inc' : 'exp')}">${sign}${money(t.amount)}</span>
                   </div>
                 `;
               }).join('')}
@@ -8791,7 +8845,7 @@ function bindInteractiveEvents() {
     }
 
     const filtered = (data.transactions || []).filter(t => selectedTxIds.has(t.id));
-    const bulkSum = filtered.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+    const bulkSum = filtered.reduce((sum, t) => sum + (t.type === 'income' ? Number(t.amount) : t.type === 'expense' ? -Number(t.amount) : 0), 0);
 
     if (!dock) {
       const dWrap = document.createElement('div');
@@ -10249,27 +10303,16 @@ function bindBankImportModalEvents() {
       // Enrich transactions with Russian merchant / IP intelligence and Gemini batch classifier
       await enrichTransactionsWithMerchantIntelligence(bankImportParsed);
 
-      // Deduplication against existing transactions and intra-batch duplicates
+      // Deduplicate only against the saved ledger. Identical purchases inside one file remain valid.
       const existingLedger = data.transactions || [];
-      const seenBatchKeys = new Set();
+      const availableLedger = statementTransactionCounts(existingLedger);
 
       bankImportParsed.forEach(tx => {
-        const normDate = tx.occurred_on;
-        const normAmt = Math.round(Math.abs(Number(tx.amount)) * 100);
-        const normDesc = String(tx.description || '').trim().toLowerCase();
-        const batchKey = `${normDate}_${normAmt}_${normDesc}`;
+        const key = statementTransactionKey(tx);
+        const isLedgerDupe = (availableLedger.get(key) || 0) > 0;
+        if (isLedgerDupe) availableLedger.set(key, availableLedger.get(key) - 1);
 
-        const isLedgerDupe = existingLedger.some(ex => {
-          const exAmt = Math.round(Math.abs(Number(ex.amount)) * 100);
-          const exDate = ex.occurred_on;
-          const exDesc = String(ex.description || '').trim().toLowerCase();
-          return exDate === normDate && exAmt === normAmt && (exDesc === normDesc || (normDesc.length > 5 && exDesc.includes(normDesc)));
-        });
-
-        const isBatchDupe = seenBatchKeys.has(batchKey);
-        seenBatchKeys.add(batchKey);
-
-        if (isLedgerDupe || isBatchDupe) {
+        if (isLedgerDupe) {
           tx.is_duplicate = true;
           tx.selected = false; // Do not select duplicates by default to prevent duplicate entry
         } else {
@@ -10307,6 +10350,9 @@ function bindBankImportModalEvents() {
           }, bankImportParsed);
         }, 200);
       }
+    } catch (err) {
+      bankImportParsed = [];
+      showToast('Ошибка чтения выписки: ' + err.message, 'error');
     } finally {
       if (scanOverlay) scanOverlay.style.display = 'none';
     }
@@ -10325,10 +10371,10 @@ function bindBankImportModalEvents() {
       if (tx.selected) {
         selCount++;
         if (tx.type === 'income') incSum += tx.amount;
-        else expSum += tx.amount;
+        else if (tx.type === 'expense') expSum += tx.amount;
       }
 
-      const isTransfer = tx.tx_kind === 'transfer';
+      const isTransfer = tx.type === 'transfer' || tx.tx_kind === 'transfer';
       const isInc = tx.type === 'income' && !isTransfer;
 
       // Color for amount
@@ -10479,50 +10525,73 @@ function bindBankImportModalEvents() {
   }
 
   async function proceedWithImport(selected) {
+    if (btnSubmitImport?.disabled) return;
     if (btnSubmitImport) btnSubmitImport.disabled = true;
     const submitBtnLbl = document.getElementById('btn-import-submit-label');
     if (submitBtnLbl) submitBtnLbl.innerText = 'Импортирование...';
 
-    try {
-      const txList = selected.map(tx => ({
+    let retrySafe = true;
+    const ledgerBefore = Array.isArray(data.transactions) ? data.transactions.slice() : [];
+    const txList = selected.map(tx => ({
         type: tx.type,
         amount: tx.amount,
         category: tx.category,
         description: tx.description,
         occurred_on: tx.occurred_on
-      }));
+    }));
 
-      let bulkOk = false;
-      try {
-        const res = await api('transactions/bulk', {
-          method: 'POST',
-          body: JSON.stringify({ transactions: txList })
-        });
-        if (res && res.ok) bulkOk = true;
-      } catch (_) {}
-
-      if (!bulkOk) {
-        for (const tx of txList) {
-          await api('transactions', {
-            method: 'POST',
-            body: JSON.stringify(tx)
-          });
-        }
-      }
-
+    const finishSuccessfulImport = async (transactions = null, recovered = false) => {
       closeBankImportModal();
       bankImportParsed = [];
       window._currentBankFileContent = null;
+      window._currentBankPdfBase64 = null;
+      window._currentBankFileName = null;
 
-      await refreshAllData();
+      if (Array.isArray(transactions)) data.transactions = transactions;
+      else await refreshAllData();
       tab = 'transactions';
       renderApp();
 
-      showToast('Успешно импортировано ' + selected.length + ' операций', 'success');
+      showToast(
+        recovered ? `Импорт завершён: сохранено ${selected.length} операций` : `Успешно импортировано ${selected.length} операций`,
+        'success'
+      );
+    };
+
+    try {
+
+      const res = await api('transactions/bulk', {
+        method: 'POST', body: JSON.stringify({ transactions: txList })
+      });
+      if (!res?.ok || res.count !== txList.length) throw new Error('Импорт не подтверждён. Обновите список операций перед повторной попыткой.');
+
+      await finishSuccessfulImport();
     } catch (err) {
-      showToast('Ошибка при импорте: ' + err.message, 'error');
+      try {
+        const latestLedger = await api('transactions');
+        if (Array.isArray(latestLedger)) {
+          if (didLedgerGainTransactions(ledgerBefore, latestLedger, txList)) {
+            await finishSuccessfulImport(latestLedger, true);
+            return;
+          }
+          data.transactions = latestLedger;
+          retrySafe = true;
+        } else {
+          retrySafe = false;
+        }
+      } catch (_) {
+        retrySafe = false;
+      }
+
+      if (retrySafe) {
+        showToast('Импорт не выполнен: ' + err.message, 'error');
+      } else {
+        showToast('Не удалось проверить результат импорта. Обновите страницу перед повторной попыткой.', 'error');
+      }
     } finally {
-      if (btnSubmitImport) btnSubmitImport.disabled = false;
+      if (btnSubmitImport) btnSubmitImport.disabled = !retrySafe;
+      if (!retrySafe && submitBtnLbl) submitBtnLbl.innerText = 'Обновите страницу';
+      else if (retrySafe && bankImportParsed.length > 0) renderBankPreviewRows();
     }
   }
 }
@@ -10861,4 +10930,3 @@ window.addEventListener('DOMContentLoaded', boot);
     });
   }).observe(previewEl, { childList: true });
 })();
-
