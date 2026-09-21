@@ -14,6 +14,7 @@ function client(api = async () => ({ success: false }), token = null) {
   // Execute only the production parser/category functions, without app startup, DOM or network.
   vm.runInContext(section(appSource, 'const SYSTEM_EXPENSE_CATEGORIES', 'const SYSTEM_CATEGORIES') +
     'function getAllCategories(){return [...SYSTEM_EXPENSE_CATEGORIES,...SYSTEM_INCOME_CATEGORIES]};' +
+    section(appSource, 'function financialAmountToCents', '// Financial Rank Calculator') +
     section(appSource, 'function normalizeCategoryToAvailable', 'let RUSSIAN_MERCHANTS_KB') +
     section(appSource, 'function isCategoryVerifiedInSystem', 'const GENERIC_TX_PLACEHOLDERS'), ctx);
   return ctx;
@@ -23,10 +24,14 @@ function server(extra = {}) {
   const ctx = vm.createContext({ console: { warn() {} }, Date, AbortSignal,
     RUSSIAN_MERCHANTS_KB: kb, GEMINI_API_KEYS: [], GEMINI_MODELS: [],
     auth() {}, aiLimiter() {}, fail: (res, err) => res.status(500).json({ error: err.message }),
-    app: { post: (path, ...args) => { handlers[path] = args.at(-1); } }, ...extra });
+    app: {
+      post: (path, ...args) => { handlers[path] = args.at(-1); },
+      put: (path, ...args) => { handlers[path] = args.at(-1); }
+    }, ...extra });
   vm.runInContext(section(serverSource, 'function merchantTermMatches', 'async function parseBankStatementWithGemini') +
     section(serverSource, 'app.post("/api/ai/categorize-batch"', 'app.put("/api/transactions/:id"') +
-    section(serverSource, 'app.post("/api/transactions/bulk"', 'function merchantTermMatches'), ctx);
+    section(serverSource, 'app.post("/api/transactions"', 'function merchantTermMatches') +
+    section(serverSource, 'app.put("/api/transactions/:id"', 'app.post("/api/budgets"'), ctx);
   return { ctx, handlers };
 }
 const response = () => ({ code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } });
@@ -57,6 +62,23 @@ test('ledger reconciliation requires the imported multiplicity to be newly prese
   assert.equal(c.didLedgerGainTransactions([row], [row], [row]), false);
   assert.equal(c.didLedgerGainTransactions([row], [row, {...row}], [row]), true);
   assert.equal(c.didLedgerGainTransactions([], [row], [row, {...row}]), false);
+});
+
+test('capital contract: total includes goals while free capital subtracts allocated savings', () => {
+  const c = client();
+  for (let i = 1; i <= 250; i++) {
+    const incomeCents = i * 9973;
+    const expenseCents = i * 3187;
+    const goalCents = i * 1129;
+    const snapshot = c.getCapitalSnapshot([
+      {type:'income', amount:incomeCents / 100},
+      {type:'expense', amount:expenseCents / 100},
+      {type:'transfer', amount:(i * 500) / 100}
+    ], [{saved_amount:goalCents / 100}]);
+    assert.equal(Math.round(snapshot.totalCapital * 100), incomeCents - expenseCents);
+    assert.equal(Math.round(snapshot.savedInGoals * 100), goalCents);
+    assert.equal(Math.round(snapshot.freeCapital * 100), incomeCents - expenseCents - goalCents);
+  }
 });
 
 test('short merchant keywords cannot match part of a surname, in both engines', () => {
@@ -115,7 +137,9 @@ test('own transfer preserved through AI parse and categorization', async () => {
   const c=client(async()=>({success:true,transactions:[{date:'2026-09-19',amount:5000,type:'transfer',is_self_transfer:true,category:'Переводы',description:'Мой счет'}]}));
   const {transactions}=await c.parseBankStatement('', 'test.pdf','auto','fake-pdf');
   await c.enrichTransactionsWithMerchantIntelligence(transactions);
-  assert.equal(transactions[0].type,'transfer'); assert.equal(transactions[0].needs_confirmation,false);
+  assert.equal(transactions[0].type,'transfer');
+  assert.equal(transactions[0].needs_confirmation,true);
+  assert.equal(transactions[0].transfer_confirmed,false);
   assert.throws(()=>c.normalizeStatementRow({date:'2026-09-19',amount:5,type:'transfer',is_self_transfer:false}));
 });
 
@@ -136,10 +160,34 @@ test('bulk: rejects malformed rows before writes; all inserts commit together', 
   const s=server({db:{connect:async()=>connection}});
   const handler=s.handlers['/api/transactions/bulk'];
   const row={type:'transfer',amount:5000,category:'Переводы',occurred_on:'2026-09-19'};
+  const unconfirmed=response();await handler({user:{id:'test'},body:{transactions:[row]}},unconfirmed);
+  assert.equal(unconfirmed.code,400);assert.equal(queries.length,0);
   const bad=response();await handler({user:{id:'test'},body:{transactions:[row,{...row,occurred_on:'31.02.2026'}]}},bad);
   assert.equal(bad.code,400);assert.equal(queries.length,0);
-  const good=response();await handler({user:{id:'test'},body:{transactions:[row]}},good);
+  const good=response();await handler({user:{id:'test'},body:{transactions:[{...row,transfer_confirmed:true}]}},good);
   assert.equal(queries[0],'BEGIN');assert.equal(queries.at(-1),'COMMIT');assert.equal(good.body.rows[0].type,'transfer');assert.ok(released);
+});
+
+test('single transfer API rejects missing approval and accepts explicit approval', async () => {
+  const queries=[];
+  const s=server({db:{query:async(sql,params)=>{queries.push({sql,params});return {rows:[{type:params[1]}]};}}});
+  const handler=s.handlers['/api/transactions'];
+  const base={type:'transfer',amount:1500,category:'Переводы',occurred_on:'2026-09-20'};
+  const rejected=response();await handler({user:{id:'test'},body:base},rejected);
+  assert.equal(rejected.code,400);assert.equal(queries.length,0);
+  const accepted=response();await handler({user:{id:'test'},body:{...base,transfer_confirmed:true}},accepted);
+  assert.equal(accepted.code,200);assert.equal(accepted.body.type,'transfer');assert.equal(queries.length,1);
+});
+
+test('transfer update API also requires explicit approval', async () => {
+  const queries=[];
+  const s=server({db:{query:async(sql,params)=>{queries.push({sql,params});return {rows:[{type:params[0]}]};}}});
+  const handler=s.handlers['/api/transactions/:id'];
+  const base={type:'transfer',amount:1500,category:'Переводы',occurred_on:'2026-09-20'};
+  const rejected=response();await handler({params:{id:'tx-1'},user:{id:'test'},body:base},rejected);
+  assert.equal(rejected.code,400);assert.equal(queries.length,0);
+  const accepted=response();await handler({params:{id:'tx-1'},user:{id:'test'},body:{...base,transfer_confirmed:true}},accepted);
+  assert.equal(accepted.code,200);assert.equal(accepted.body.type,'transfer');assert.equal(queries.length,1);
 });
 
 test('bulk failure rolls back and releases connection', async () => {
