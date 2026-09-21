@@ -1,5 +1,10 @@
 create extension if not exists pgcrypto;
 create table if not exists users(id uuid primary key default gen_random_uuid(),email text unique not null,password_hash text not null,created_at timestamptz not null default now());
+alter table users add column if not exists two_factor_enabled boolean not null default false;
+alter table users add column if not exists two_factor_secret text;
+alter table users add column if not exists two_factor_recovery_hashes text[] not null default '{}';
+alter table users add column if not exists two_factor_last_used_step bigint not null default -1;
+alter table users add column if not exists two_factor_updated_at timestamptz;
 create table if not exists transactions(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,type text not null check(type in ('income','expense','transfer')),category text not null,description text default '',amount numeric(14,2) not null check(amount>0),occurred_on date not null default current_date,created_at timestamptz not null default now());
 create table if not exists budgets(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,category text not null,limit_amount numeric(14,2) not null check(limit_amount>0),created_at timestamptz not null default now(),unique(user_id,category));
 create table if not exists goals(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,name text not null,target_amount numeric(14,2) not null check(target_amount>0),saved_amount numeric(14,2) not null default 0 check(saved_amount>=0),created_at timestamptz not null default now());
