@@ -29,6 +29,8 @@ const filesToDeploy = [
   { path: 'public/app.js', msg: 'feat(ui): update application logic' },
   { path: 'public/index.html', msg: 'chore(release): bump cache-busting version' },
   { path: 'package.json', msg: 'chore: update package.json' },
+  { path: 'db/schema.sql', msg: 'feat(auth): add two-factor authentication schema' },
+  { path: '.env.example', msg: 'docs(auth): document 2FA encryption key' },
   { path: 'server.js', msg: 'fix(server): update backend' },
   { path: 'tests/statements.test.mjs', msg: 'test(import): add statement regression coverage' },
   { path: 'deploy.mjs', msg: 'chore(deploy): include statement tests' }
@@ -94,7 +96,7 @@ async function pushFile(relPath, commitMsg) {
 }
 
 async function main() {
-  console.log('🚀 Deploying v8.75 7 UX refinements to GitHub...');
+  console.log('🚀 Deploying FinKaif authentication and 2FA update to GitHub...');
   for (const item of filesToDeploy) {
     await pushFile(item.path, item.msg);
   }
