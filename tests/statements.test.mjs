@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import crypto from 'node:crypto';
 import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +11,7 @@ const section = (source, from, to) => source.slice(source.indexOf(from), source.
 const categories = section(appSource, 'const SYSTEM_EXPENSE_CATEGORIES', 'function getAllCategories');
 function client(api = async () => ({ success: false }), token = null) {
   const ctx = vm.createContext({ console: { warn() {} }, Date, api,
-    RUSSIAN_MERCHANTS_KB: kb, localStorage: { getItem: () => token }, userCategories: [] });
+    RUSSIAN_MERCHANTS_KB: kb, localStorage: { getItem: () => null }, me: token ? { id: 'test-user' } : null, userCategories: [] });
   // Execute only the production parser/category functions, without app startup, DOM or network.
   vm.runInContext(section(appSource, 'const SYSTEM_EXPENSE_CATEGORIES', 'const SYSTEM_CATEGORIES') +
     'function getAllCategories(){return [...SYSTEM_EXPENSE_CATEGORIES,...SYSTEM_INCOME_CATEGORIES]};' +
@@ -34,7 +35,94 @@ function server(extra = {}) {
     section(serverSource, 'app.put("/api/transactions/:id"', 'app.post("/api/budgets"'), ctx);
   return { ctx, handlers };
 }
+
+function authServer(user) {
+  const handlers = {};
+  const calls = [];
+  const ctx = vm.createContext({
+    console: { warn() {}, error() {} },
+    app: {
+      post: (path, ...args) => { handlers[`POST ${path}`] = args.at(-1); },
+      get: (path, ...args) => { handlers[`GET ${path}`] = args.at(-1); }
+    },
+    authLimiter() {}, auth() {}, cookie: { httpOnly: true }, JWT_SECRET: 'test-jwt-secret',
+    bcrypt: { compare: async () => true, hash: async () => 'hash' },
+    jwt: { sign: payload => `signed:${payload.purpose || 'session'}`, verify: () => ({}) },
+    token: () => 'session-token', consumeTwoFactorCode: async () => true,
+    crypto, Buffer,
+    db: {
+      query: async (sql, args) => {
+        calls.push({ sql, args });
+        if (sql.includes('insert into users')) return { rows: [{ id: 'u1', email: args[0] }], rowCount: 1 };
+        return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
+      }
+    },
+    fail: (res, err) => res.status(500).json({ error: err.message })
+  });
+  vm.runInContext(section(serverSource, 'app.post("/api/auth/register"', '// CURRENCY EXCHANGE RATES'), ctx);
+  return { handlers, calls };
+}
 const response = () => ({ code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } });
+const authResponse = () => ({
+  code: 200,
+  cookies: [],
+  status(code) { this.code = code; return this; },
+  cookie(name, value, options) { this.cookies.push({ name, value, options }); return this; },
+  clearCookie() { return this; },
+  json(body) { this.body = body; return this; }
+});
+
+test('2FA: RFC TOTP vector, encrypted secret and recovery codes', () => {
+  const ctx = vm.createContext({ crypto, Buffer, process: { env: {} }, JWT_SECRET: 'test-jwt-secret' });
+  vm.runInContext(section(serverSource, 'const BASE32_ALPHABET', '// Central Moscow Time'), ctx);
+  const rfcSecret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  assert.equal(ctx.generateTotp(rfcSecret, 59000), '287082');
+  assert.equal(ctx.findValidTotpStep(rfcSecret, '287082', 59000, 0), 1);
+  assert.equal(ctx.findValidTotpStep(rfcSecret, '000000', 59000, 0), null);
+
+  const encrypted = ctx.encryptTwoFactorSecret(rfcSecret);
+  assert.ok(!encrypted.includes(rfcSecret));
+  assert.equal(ctx.decryptTwoFactorSecret(encrypted), rfcSecret);
+
+  const codes = ctx.generateRecoveryCodes(8);
+  assert.equal(codes.length, 8);
+  assert.equal(new Set(codes).size, 8);
+  for (const code of codes) assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.equal(ctx.hashRecoveryCode(codes[0]), ctx.hashRecoveryCode(codes[0].toLowerCase()));
+});
+
+test('auth: 2FA gates session creation and successful login returns cookie only', async () => {
+  const protectedUser = {
+    id: 'u1', email: 'user@example.ru', password_hash: 'hash',
+    two_factor_enabled: true, two_factor_secret: 'encrypted',
+    two_factor_recovery_hashes: [], two_factor_last_used_step: -1
+  };
+  const protectedAuth = authServer(protectedUser);
+  const challengeResponse = authResponse();
+  await protectedAuth.handlers['POST /api/auth/login']({ body: { email: protectedUser.email, password: 'long-password' } }, challengeResponse);
+  assert.equal(challengeResponse.body.requires_2fa, true);
+  assert.equal(challengeResponse.cookies.length, 0);
+  assert.ok(challengeResponse.body.challenge.startsWith('signed:2fa-login'));
+
+  const openAuth = authServer({ ...protectedUser, two_factor_enabled: false, two_factor_secret: null });
+  const loginResponse = authResponse();
+  await openAuth.handlers['POST /api/auth/login']({ body: { email: protectedUser.email, password: 'long-password' } }, loginResponse);
+  assert.equal(loginResponse.cookies[0].name, 'finkaif_token');
+  assert.equal(loginResponse.body.user.email, protectedUser.email);
+  assert.equal(Object.hasOwn(loginResponse.body, 'token'), false);
+});
+
+test('auth: registration enforces a long password and never exposes the session token', async () => {
+  const auth = authServer(null);
+  const weak = authResponse();
+  await auth.handlers['POST /api/auth/register']({ body: { email: 'new@example.ru', password: 'short' } }, weak);
+  assert.equal(weak.code, 400);
+
+  const strong = authResponse();
+  await auth.handlers['POST /api/auth/register']({ body: { email: 'new@example.ru', password: 'long-password' } }, strong);
+  assert.equal(strong.cookies[0].name, 'finkaif_token');
+  assert.equal(Object.hasOwn(strong.body, 'token'), false);
+});
 
 test('money: locales, Unicode minus, parentheses, invalid input, server/client parity', () => {
   const c = client(), s = server().ctx;
