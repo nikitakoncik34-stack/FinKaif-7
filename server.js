@@ -770,6 +770,9 @@ app.post("/api/transactions", auth, async (req, res) => {
     if (!["income", "expense", "transfer"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
       return res.status(400).json({ error: "Проверьте тип, категорию и сумму операции." });
     }
+    if (x.type === "transfer" && x.transfer_confirmed !== true) {
+      return res.status(400).json({ error: "Перевод должен быть утверждён перед сохранением." });
+    }
     const createdAt = x.created_at ? new Date(x.created_at) : new Date();
     const r = await db.query(
       "insert into transactions(user_id,type,category,description,amount,occurred_on,created_at) values($1,$2,$3,$4,$5,$6,$7) returning *",
@@ -791,6 +794,7 @@ app.post("/api/transactions/bulk", auth, async (req, res) => {
       rows = list.map(x => {
         const amount = parseBankAmount(x.amount);
         if (!['income', 'expense', 'transfer'].includes(x.type) || !String(x.category || '').trim() || amount <= 0) throw new Error('Проверьте тип, категорию и сумму каждой операции');
+        if (x.type === 'transfer' && x.transfer_confirmed !== true) throw new Error('Каждый перевод должен быть утверждён перед импортом');
         return { ...x, amount, occurred_on: parseBankDate(x.occurred_on) };
       });
     } catch (err) { return res.status(400).json({ error: err.message }); }
@@ -875,7 +879,9 @@ function normalizeStatementRow(item) {
   const description = String(item.description || '').trim();
   return { ...item, amount, date, occurred_on: date, type, tx_kind: type,
     raw_description: String(item.raw_description || item.original_description || description),
-    description, selected: true };
+    description, selected: true,
+    transfer_confirmed: type === 'transfer' ? false : item.transfer_confirmed === true,
+    needs_confirmation: type === 'transfer' ? true : item.needs_confirmation === true };
 }
 
 const STATEMENT_AI_SYSTEM_PROMPT = `Ты — экспертный финансовый искусственный интеллект FinKaif AI для распознавания и анализа банковских выписок любых банков РФ (Т-Банк, Сбер, Альфа, ВТБ, Райффайзен, 1С, Точка и др.), а также любых таблиц учета расходов/доходов (Excel/XLSX, Google Таблицы, 1С, выгрузки TXT/CSV/TSV/JSON).
@@ -916,6 +922,7 @@ const STATEMENT_AI_SYSTEM_PROMPT = `Ты — экспертный финансо
 
 Для переводов (type="transfer"):
 • Переводы: ТОЛЬКО между своими счетами, is_self_transfer=true. Перевод другому человеку — expense, от другого человека — income.
+• Любой перевод между своими счетами требует ручного утверждения: всегда needs_confirmation=true. Никогда не утверждай перевод автоматически.
 
 ═══════════════════════════════════════
 ПРАВИЛА ДЛЯ ИП (ИНДИВИДУАЛЬНЫХ ПРЕДПРИНИМАТЕЛЕЙ):
@@ -1655,6 +1662,9 @@ app.put("/api/transactions/:id", auth, async (req, res) => {
     const x = req.body;
     if (!["income", "expense", "transfer"].includes(x.type) || !String(x.category || "").trim() || !(Number(x.amount) > 0)) {
       return res.status(400).json({ error: "Проверьте тип, категорию и сумму операции." });
+    }
+    if (x.type === "transfer" && x.transfer_confirmed !== true) {
+      return res.status(400).json({ error: "Перевод должен быть утверждён перед сохранением." });
     }
     const createdAt = x.created_at ? new Date(x.created_at) : null;
     const r = await db.query(
