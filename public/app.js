@@ -60,6 +60,22 @@ const $$ = s => document.querySelectorAll(s);
 let me = null;
 let tab = 'home';
 let mode = 'login';
+let authStep = 'credentials';
+let authChallenge = '';
+let authPendingEmail = '';
+let authError = '';
+let authUseRecovery = false;
+let twoFactorStatus = { enabled: false, updated_at: null, loaded: false };
+let twoFactorModal = {
+  open: false,
+  step: 'password',
+  setupToken: '',
+  secret: '',
+  qrDataUrl: '',
+  otpauthUri: '',
+  recoveryCodes: [],
+  error: ''
+};
 let period = '7d';
 let customRange = { from: '', to: '' };
 let customRangeOpen = false;
@@ -124,10 +140,8 @@ window.renderApp = renderApp;
    API CLIENT
    ========================================================================== */
 const api = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('finkaif_token');
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...(options.headers || {})
   };
 
@@ -143,6 +157,24 @@ const api = async (endpoint, options = {}) => {
   }
   return json;
 };
+
+async function refreshTwoFactorStatus() {
+  if (!me) {
+    twoFactorStatus = { enabled: false, updated_at: null, loaded: false };
+    return twoFactorStatus;
+  }
+  try {
+    const status = await api('auth/2fa/status');
+    twoFactorStatus = {
+      enabled: Boolean(status.enabled),
+      updated_at: status.updated_at || null,
+      loaded: true
+    };
+  } catch {
+    twoFactorStatus = { ...twoFactorStatus, loaded: true };
+  }
+  return twoFactorStatus;
+}
 
 /* ==========================================================================
    HELPERS & FORMATTERS
@@ -1968,6 +2000,7 @@ function icon(name, size = 16) {
     shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
     pulse: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>',
     scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"></path><path d="M7 21h10"></path><path d="M12 3v18"></path><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"></path>',
+    arrowLeft: '<line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>',
     arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
     chevronRight: '<polyline points="9 18 15 12 9 6"></polyline>',
     target: '<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>',
@@ -2848,7 +2881,8 @@ async function enrichTransactionsWithMerchantIntelligence(transactions) {
       needingAI.push({ index, id: index, description: tx.raw_description, amount: tx.amount, type: tx.type });
     }
   });
-  if (!needingAI.length || !localStorage.getItem('finkaif_token')) return;
+  const hasAuthenticatedSession = typeof me !== 'undefined' && Boolean(me);
+  if (!needingAI.length || !hasAuthenticatedSession) return;
   const requested = new Set(needingAI.map(t => t.index));
   try {
     const res = await api('ai/categorize-batch', { method: 'POST', body: JSON.stringify({ transactions: needingAI, user_categories: availableCats }) });
@@ -6664,6 +6698,24 @@ function renderProfileModal() {
           </button>
         </form>
 
+        <section class="profile-security-card" aria-labelledby="profile-security-title">
+          <div class="profile-security-copy">
+            <div class="profile-security-heading">
+              <span class="profile-security-icon">${icon('shield', 18)}</span>
+              <div>
+                <h4 id="profile-security-title">Двухфакторная защита</h4>
+                <p>${twoFactorStatus.enabled ? 'Код из приложения подтверждает каждый новый вход.' : 'Добавьте второй уровень защиты к паролю.'}</p>
+              </div>
+            </div>
+            <span class="profile-security-status ${twoFactorStatus.enabled ? 'enabled' : ''}">
+              <i></i>${twoFactorStatus.enabled ? 'Включена' : 'Не подключена'}
+            </span>
+          </div>
+          <button type="button" class="profile-security-action" id="btn-2fa-manage">
+            ${twoFactorStatus.enabled ? 'Управлять' : 'Подключить 2FA'}
+          </button>
+        </section>
+
         <!-- Logout Action -->
         <div class="profile-logout-footer">
           <button type="button" class="btn-logout" id="btn-profile-logout">
@@ -6675,48 +6727,210 @@ function renderProfileModal() {
   `;
 }
 
+function renderTwoFactorModal() {
+  if (!twoFactorModal.open) return '<div id="two-factor-modal" class="modal-backdrop security-modal-backdrop" style="display:none;"></div>';
+  const isDisable = twoFactorModal.step === 'disable';
+  const isVerify = twoFactorModal.step === 'verify';
+  const isRecovery = twoFactorModal.step === 'recovery';
+  return `
+    <div id="two-factor-modal" class="modal-backdrop security-modal-backdrop" style="display:flex;">
+      <div class="modal-card security-dialog" role="dialog" aria-modal="true" aria-labelledby="two-factor-title">
+        <div class="modal-header security-dialog-header">
+          <div class="security-title-wrap">
+            <span class="security-title-icon">${icon('shield', 19)}</span>
+            <div>
+              <h3 class="modal-title" id="two-factor-title">${isDisable ? 'Отключить 2FA' : isRecovery ? 'Резервные коды' : 'Защитить аккаунт'}</h3>
+              <p>${isDisable ? 'Потребуется пароль и код подтверждения.' : isRecovery ? 'Сохраните их в безопасном месте.' : 'Коды создаются прямо на вашем устройстве.'}</p>
+            </div>
+          </div>
+          ${isRecovery ? '' : `<button type="button" class="btn-icon" id="btn-close-2fa" aria-label="Закрыть">${icon('close', 16)}</button>`}
+        </div>
+
+        ${twoFactorModal.step === 'password' ? `
+          <div class="security-step-copy">
+            <span class="security-step-number">1</span>
+            <div><strong>Подтвердите, что это вы</strong><p>Введите текущий пароль. Затем FinKaif покажет QR-код для приложения аутентификации.</p></div>
+          </div>
+          <form id="two-factor-password-form" class="security-form">
+            <label class="auth-field-label" for="two-factor-password">Текущий пароль</label>
+            <input class="auth-input" id="two-factor-password" type="password" autocomplete="current-password" maxlength="128" required autofocus>
+            ${twoFactorModal.error ? `<div class="auth-inline-error" role="alert">${esc(twoFactorModal.error)}</div>` : ''}
+            <button type="submit" class="auth-primary-btn" id="two-factor-password-submit">Продолжить</button>
+          </form>
+        ` : ''}
+
+        ${isVerify ? `
+          <div class="security-setup-grid">
+            <div class="security-qr-wrap">
+              ${twoFactorModal.qrDataUrl
+                ? `<img src="${esc(twoFactorModal.qrDataUrl)}" alt="QR-код для подключения двухфакторной авторизации" width="220" height="220">`
+                : `<a class="security-open-app" href="${esc(twoFactorModal.otpauthUri)}">Открыть приложение</a>`}
+            </div>
+            <div class="security-setup-instructions">
+              <span class="security-step-number">2</span>
+              <h4>Отсканируйте QR-код</h4>
+              <p>Откройте Google Authenticator, Microsoft Authenticator, 1Password или другое TOTP приложение.</p>
+              <div class="security-secret-row">
+                <span>Ключ вручную</span>
+                <code>${esc(twoFactorModal.secret)}</code>
+                <button type="button" id="btn-copy-2fa-secret" aria-label="Скопировать ключ">${icon('copy', 14)}</button>
+              </div>
+              <form id="two-factor-confirm-form" class="security-form compact">
+                <label class="auth-field-label" for="two-factor-confirm-code">Введите код из приложения</label>
+                <input class="auth-code-input" id="two-factor-confirm-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" required autofocus>
+                ${twoFactorModal.error ? `<div class="auth-inline-error" role="alert">${esc(twoFactorModal.error)}</div>` : ''}
+                <button type="submit" class="auth-primary-btn" id="two-factor-confirm-submit">Включить защиту</button>
+              </form>
+            </div>
+          </div>
+        ` : ''}
+
+        ${isRecovery ? `
+          <div class="security-recovery-intro">
+            <span class="security-success-mark">${icon('check', 22)}</span>
+            <div><strong>2FA включена</strong><p>Каждый код ниже заменяет код из приложения один раз.</p></div>
+          </div>
+          <div class="security-recovery-grid" aria-label="Резервные коды">
+            ${twoFactorModal.recoveryCodes.map(code => `<code>${esc(code)}</code>`).join('')}
+          </div>
+          <div class="security-recovery-actions">
+            <button type="button" class="security-secondary-btn" id="btn-copy-recovery-codes">${icon('copy', 14)} Скопировать</button>
+            <button type="button" class="auth-primary-btn" id="btn-finish-2fa">Я сохранил коды</button>
+          </div>
+        ` : ''}
+
+        ${isDisable ? `
+          <div class="security-warning-copy">
+            ${icon('alertTriangle', 18)}
+            <p>После отключения для входа будет достаточно одного пароля.</p>
+          </div>
+          <form id="two-factor-disable-form" class="security-form">
+            <label class="auth-field-label" for="two-factor-disable-password">Текущий пароль</label>
+            <input class="auth-input" id="two-factor-disable-password" type="password" autocomplete="current-password" maxlength="128" required>
+            <label class="auth-field-label" for="two-factor-disable-code">Код из приложения или резервный код</label>
+            <input class="auth-input security-code-plain" id="two-factor-disable-code" type="text" autocomplete="one-time-code" maxlength="9" required>
+            ${twoFactorModal.error ? `<div class="auth-inline-error" role="alert">${esc(twoFactorModal.error)}</div>` : ''}
+            <button type="submit" class="security-danger-btn" id="two-factor-disable-submit">Отключить 2FA</button>
+          </form>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
 /* ==========================================================================
    AUTH SCREEN
    ========================================================================== */
 function renderAuthScreen() {
+  const isTwoFactor = authStep === 'twoFactor';
+  const isRegister = mode === 'register';
   return `
-    <div class="auth-wrapper">
-      <div class="auth-card">
-        <div style="text-align: center; margin-bottom: 24px;">
-          <div style="width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 12px; background: linear-gradient(135deg, var(--accent-jade) 0%, #0D9488 100%); display: flex; align-items: center; justify-content: center; color: #042F2E;">
-            ${icon('sparkle', 22)}
+    <main class="auth-wrapper">
+      <section class="auth-stage" aria-labelledby="auth-title">
+        <div class="auth-editor-panel" aria-hidden="true">
+          <div class="auth-editor-bar">
+            <span class="auth-window-dots"><i></i><i></i><i></i></span>
+            <span class="auth-file-name">access.fk</span>
+            <span class="auth-editor-state">FINANCE / PRIVATE</span>
           </div>
-          <h2 style="font-size: 22px; font-weight: 800; color: #FFFFFF;">FinKaif OS</h2>
-          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">Управление личными финансами с комфортом</p>
-        </div>
-
-        <div class="auth-tabs">
-          <button class="auth-tab ${mode === 'login' ? 'active' : ''}" id="tab-auth-login">Вход</button>
-          <button class="auth-tab ${mode === 'register' ? 'active' : ''}" id="tab-auth-reg">Регистрация</button>
-        </div>
-
-        <form id="auth-form">
-          <div class="form-group">
-            <label class="form-label">Email</label>
-            <input class="form-input" id="auth-email" type="email" placeholder="investor@finkaif.ru" required>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Пароль</label>
-            <div class="password-input-wrap">
-              <input class="form-input" id="auth-password" type="password" placeholder="Минимум 6 символов" minlength="6" required>
-              <button type="button" class="btn-toggle-pw" id="btn-toggle-password" title="Показать/скрыть пароль" aria-label="Показать или скрыть пароль">
-                ${icon('eye', 14)}
-              </button>
+          <div class="auth-editor-content">
+            <div class="auth-brand-mark">FK</div>
+            <div class="auth-brand-copy">
+              <p class="auth-brand-kicker">FinKaif OS</p>
+              <h1>Ваш капитал.<br><span>Ваши правила.</span></h1>
+              <p>Личный финансовый контур, где операции, цели и аналитика принадлежат только вам.</p>
+            </div>
+            <div class="auth-code-lines">
+              <span><b>01</b><code>session</code><em>protected</em></span>
+              <span><b>02</b><code>financial_data</code><em>private</em></span>
+              <span><b>03</b><code>two_factor</code><em>ready</em></span>
             </div>
           </div>
+          <div class="auth-editor-footer">
+            <span class="status-dot jade"></span>
+            <span>Защищённый доступ</span>
+            <span>FinKaif / 2026</span>
+          </div>
+        </div>
 
-          <button type="submit" class="btn-submit" id="auth-submit-btn">
-            ${mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
-          </button>
-        </form>
-      </div>
-    </div>
+        <div class="auth-form-panel">
+          <div class="auth-mobile-brand"><span>FK</span> FinKaif OS</div>
+          ${isTwoFactor ? `
+            <div class="auth-two-factor-head">
+              <div class="auth-security-icon">${icon('shield', 24)}</div>
+              <p class="auth-section-label">Второй фактор</p>
+              <h2 id="auth-title">Подтвердите вход</h2>
+              <p>Введите ${authUseRecovery ? 'один из резервных кодов' : 'код из приложения аутентификации'} для <strong>${esc(authPendingEmail)}</strong>.</p>
+            </div>
+            <form id="auth-2fa-form" class="auth-main-form">
+              <label class="auth-field-label" for="auth-2fa-code">${authUseRecovery ? 'Резервный код' : 'Код подтверждения'}</label>
+              <input
+                class="auth-code-input ${authUseRecovery ? 'recovery' : ''}"
+                id="auth-2fa-code"
+                type="${authUseRecovery ? 'text' : 'text'}"
+                inputmode="${authUseRecovery ? 'text' : 'numeric'}"
+                autocomplete="one-time-code"
+                maxlength="${authUseRecovery ? '9' : '6'}"
+                placeholder="${authUseRecovery ? 'XXXX-XXXX' : '000000'}"
+                aria-describedby="auth-2fa-hint"
+                required
+                autofocus>
+              <p class="auth-field-hint" id="auth-2fa-hint">${authUseRecovery ? 'Каждый резервный код используется только один раз.' : 'Код обновляется каждые 30 секунд.'}</p>
+              ${authError ? `<div class="auth-inline-error" role="alert">${esc(authError)}</div>` : ''}
+              <button type="submit" class="auth-primary-btn" id="auth-2fa-submit">Подтвердить и войти</button>
+              <button type="button" class="auth-text-btn" id="auth-toggle-recovery">${authUseRecovery ? 'Использовать код из приложения' : 'Использовать резервный код'}</button>
+              <button type="button" class="auth-back-btn" id="auth-back-login">${icon('arrowLeft', 14)} Вернуться ко входу</button>
+            </form>
+          ` : `
+            <div class="auth-form-heading">
+              <p class="auth-section-label">${isRegister ? 'Новый аккаунт' : 'С возвращением'}</p>
+              <h2 id="auth-title">${isRegister ? 'Создайте личный контур' : 'Войдите в FinKaif'}</h2>
+              <p>${isRegister ? 'Начните собирать капитал в единой системе.' : 'Продолжите с того места, где остановились.'}</p>
+            </div>
+
+            <div class="auth-tabs" role="tablist" aria-label="Способ доступа">
+              <button type="button" role="tab" aria-selected="${mode === 'login'}" class="auth-tab ${mode === 'login' ? 'active' : ''}" id="tab-auth-login">Вход</button>
+              <button type="button" role="tab" aria-selected="${mode === 'register'}" class="auth-tab ${mode === 'register' ? 'active' : ''}" id="tab-auth-reg">Регистрация</button>
+            </div>
+
+            <form id="auth-form" class="auth-main-form">
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="auth-email">Email</label>
+                <input class="auth-input" id="auth-email" type="email" autocomplete="email" placeholder="name@example.ru" value="${esc(authPendingEmail)}" required>
+              </div>
+
+              <div class="auth-field-group">
+                <label class="auth-field-label" for="auth-password">Пароль</label>
+                <div class="password-input-wrap">
+                  <input class="auth-input" id="auth-password" type="password" autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="${isRegister ? 'От 10 символов' : 'Введите пароль'}" minlength="${isRegister ? '10' : '1'}" maxlength="128" required>
+                  <button type="button" class="btn-toggle-pw" id="btn-toggle-password" title="Показать пароль" aria-label="Показать или скрыть пароль">
+                    ${icon('eye', 16)}
+                  </button>
+                </div>
+              </div>
+
+              ${isRegister ? `
+                <div class="auth-field-group">
+                  <label class="auth-field-label" for="auth-password-confirm">Повторите пароль</label>
+                  <input class="auth-input" id="auth-password-confirm" type="password" autocomplete="new-password" placeholder="Повторите пароль" minlength="10" maxlength="128" required>
+                  <p class="auth-field-hint">Используйте длинную фразу, которую трудно угадать.</p>
+                </div>
+              ` : ''}
+
+              ${authError ? `<div class="auth-inline-error" role="alert">${esc(authError)}</div>` : ''}
+              <button type="submit" class="auth-primary-btn" id="auth-submit-btn">
+                ${isRegister ? 'Создать аккаунт' : 'Войти в систему'}
+              </button>
+            </form>
+
+            <div class="auth-trust-note">
+              ${icon('shield', 15)}
+              <span>Пароль хешируется, а сессия хранится в защищённой cookie.</span>
+            </div>
+          `}
+        </div>
+      </section>
+    </main>
   `;
 }
 
@@ -7160,6 +7374,8 @@ function renderApp() {
     // Update dynamic modals if present
     const pModal = document.getElementById('profile-modal');
     if (pModal) pModal.outerHTML = renderProfileModal();
+    const securityModal = document.getElementById('two-factor-modal');
+    if (securityModal) securityModal.outerHTML = renderTwoFactorModal();
     const payModal = document.getElementById('payday-modal');
     if (payModal) payModal.outerHTML = renderPaydayModal();
     const fsModal = document.getElementById('finscore-modal');
@@ -7184,6 +7400,7 @@ function renderApp() {
       ${renderBulkDock()}
       ${renderModal()}
       ${renderProfileModal()}
+      ${renderTwoFactorModal()}
       ${renderPaydayModal()}
       ${renderSubscriptionModal()}
       ${renderImportBankModal()}
@@ -7197,13 +7414,49 @@ function renderApp() {
 /* ==========================================================================
    INTERACTIVE EVENTS & EVENT BINDINGS
    ========================================================================== */
+async function completeAuthenticatedEntry(user) {
+  me = user;
+  authStep = 'credentials';
+  authChallenge = '';
+  authUseRecovery = false;
+  authError = '';
+
+  try {
+    const prof = await api('profile');
+    if (prof) {
+      profile.display_name = prof.display_name || '';
+      profile.avatar = prof.avatar || 'default';
+      if (prof.currency) profile.currency = prof.currency;
+      try {
+        localStorage.setItem('finkaif_name', profile.display_name);
+        localStorage.setItem('finkaif_avatar', profile.avatar);
+        localStorage.setItem('finkaif_currency', profile.currency);
+      } catch (_) {}
+    }
+  } catch { }
+
+  await Promise.all([refreshAllData(), refreshTwoFactorStatus()]);
+  renderApp();
+}
+
 function bindAuthEvents() {
   const form = document.getElementById('auth-form');
+  const twoFactorForm = document.getElementById('auth-2fa-form');
   const tabLogin = document.getElementById('tab-auth-login');
   const tabReg = document.getElementById('tab-auth-reg');
 
-  if (tabLogin) tabLogin.onclick = () => { mode = 'login'; renderApp(); };
-  if (tabReg) tabReg.onclick = () => { mode = 'register'; renderApp(); };
+  if (tabLogin) tabLogin.onclick = () => {
+    mode = 'login';
+    authStep = 'credentials';
+    authError = '';
+    renderApp();
+  };
+  if (tabReg) tabReg.onclick = () => {
+    mode = 'register';
+    authStep = 'credentials';
+    authError = '';
+    renderApp();
+  };
 
   const btnTogglePw = document.getElementById('btn-toggle-password');
   if (btnTogglePw) {
@@ -7212,7 +7465,44 @@ function bindAuthEvents() {
       if (pwInput) {
         const isPw = pwInput.type === 'password';
         pwInput.type = isPw ? 'text' : 'password';
-        btnTogglePw.innerHTML = isPw ? icon('eyeOff', 14) : icon('eye', 14);
+        btnTogglePw.innerHTML = isPw ? icon('eyeOff', 16) : icon('eye', 16);
+      }
+    };
+  }
+
+  const toggleRecovery = document.getElementById('auth-toggle-recovery');
+  if (toggleRecovery) toggleRecovery.onclick = () => {
+    authUseRecovery = !authUseRecovery;
+    authError = '';
+    renderApp();
+  };
+
+  const backToLogin = document.getElementById('auth-back-login');
+  if (backToLogin) backToLogin.onclick = () => {
+    authStep = 'credentials';
+    authChallenge = '';
+    authUseRecovery = false;
+    authError = '';
+    renderApp();
+  };
+
+  if (twoFactorForm) {
+    twoFactorForm.onsubmit = async e => {
+      e.preventDefault();
+      const codeInput = document.getElementById('auth-2fa-code');
+      const submitBtn = document.getElementById('auth-2fa-submit');
+      const code = String(codeInput?.value || '').trim();
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Проверяем…';
+        const res = await api('auth/2fa/verify', {
+          method: 'POST',
+          body: JSON.stringify({ challenge: authChallenge, code })
+        });
+        await completeAuthenticatedEntry(res.user);
+      } catch (err) {
+        authError = err.message;
+        renderApp();
       }
     };
   }
@@ -7222,46 +7512,174 @@ function bindAuthEvents() {
       e.preventDefault();
       const email = $('#auth-email').value.trim();
       const password = $('#auth-password').value;
+      const passwordConfirm = document.getElementById('auth-password-confirm')?.value || '';
       const submitBtn = $('#auth-submit-btn');
+      authPendingEmail = email;
+
+      if (mode === 'register' && password !== passwordConfirm) {
+        authError = 'Пароли не совпадают.';
+        renderApp();
+        return;
+      }
 
       try {
+        authError = '';
         submitBtn.disabled = true;
-        submitBtn.innerText = 'Секунду...';
+        submitBtn.innerText = mode === 'login' ? 'Проверяем…' : 'Создаём аккаунт…';
         const res = await api('auth/' + mode, {
           method: 'POST',
           body: JSON.stringify({ email, password })
         });
-        if (res.token) localStorage.setItem('finkaif_token', res.token);
-        me = res.user;
-
-        // Fetch authoritative profile settings from cloud database
-        try {
-          const prof = await api('profile');
-          if (prof) {
-            profile.display_name = prof.display_name || '';
-            profile.avatar = prof.avatar || 'default';
-            if (prof.currency) profile.currency = prof.currency;
-            try {
-              localStorage.setItem('finkaif_name', profile.display_name);
-              localStorage.setItem('finkaif_avatar', profile.avatar);
-              localStorage.setItem('finkaif_currency', profile.currency);
-            } catch (_) {}
-          }
-        } catch { }
-
-        await refreshAllData();
-        renderApp();
+        if (res.requires_2fa) {
+          authChallenge = res.challenge;
+          authPendingEmail = res.user?.email || email;
+          authStep = 'twoFactor';
+          authUseRecovery = false;
+          renderApp();
+          return;
+        }
+        await completeAuthenticatedEntry(res.user);
+        if (mode === 'register') {
+          showToast('Аккаунт создан. Подключите 2FA в профиле для усиленной защиты.', 'success');
+        }
       } catch (err) {
-        showToast(err.message, 'error');
-        submitBtn.disabled = false;
-        submitBtn.innerText = mode === 'login' ? 'Войти' : 'Зарегистрироваться';
+        authError = err.message;
+        renderApp();
       }
     };
   }
 }
 
+async function copySecurityText(value, successMessage) {
+  try {
+    await navigator.clipboard.writeText(String(value || ''));
+    showToast(successMessage, 'success');
+  } catch {
+    showToast('Не удалось скопировать. Выделите текст вручную.', 'warning');
+  }
+}
+
+function bindTwoFactorEvents() {
+  const manageBtn = document.getElementById('btn-2fa-manage');
+  if (manageBtn) manageBtn.onclick = () => {
+    twoFactorModal = {
+      open: true,
+      step: twoFactorStatus.enabled ? 'disable' : 'password',
+      setupToken: '',
+      secret: '',
+      qrDataUrl: '',
+      otpauthUri: '',
+      recoveryCodes: [],
+      error: ''
+    };
+    renderApp();
+  };
+
+  const closeModal = () => {
+    twoFactorModal = { ...twoFactorModal, open: false, error: '' };
+    renderApp();
+  };
+  const closeBtn = document.getElementById('btn-close-2fa');
+  if (closeBtn) closeBtn.onclick = closeModal;
+  const backdrop = document.getElementById('two-factor-modal');
+  if (backdrop) backdrop.onclick = event => {
+    if (event.target === backdrop && twoFactorModal.step !== 'recovery') closeModal();
+  };
+
+  const passwordForm = document.getElementById('two-factor-password-form');
+  if (passwordForm) passwordForm.onsubmit = async event => {
+    event.preventDefault();
+    const submit = document.getElementById('two-factor-password-submit');
+    const password = document.getElementById('two-factor-password')?.value || '';
+    try {
+      twoFactorModal.error = '';
+      submit.disabled = true;
+      submit.textContent = 'Создаём ключ…';
+      const result = await api('auth/2fa/setup', {
+        method: 'POST',
+        body: JSON.stringify({ password })
+      });
+      twoFactorModal = {
+        ...twoFactorModal,
+        step: 'verify',
+        setupToken: result.setup_token,
+        secret: result.secret,
+        qrDataUrl: result.qr_data_url || '',
+        otpauthUri: result.otpauth_uri || '',
+        error: ''
+      };
+      renderApp();
+    } catch (err) {
+      twoFactorModal.error = err.message;
+      renderApp();
+    }
+  };
+
+  const confirmForm = document.getElementById('two-factor-confirm-form');
+  if (confirmForm) confirmForm.onsubmit = async event => {
+    event.preventDefault();
+    const submit = document.getElementById('two-factor-confirm-submit');
+    const code = document.getElementById('two-factor-confirm-code')?.value || '';
+    try {
+      twoFactorModal.error = '';
+      submit.disabled = true;
+      submit.textContent = 'Проверяем…';
+      const result = await api('auth/2fa/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ setup_token: twoFactorModal.setupToken, code })
+      });
+      twoFactorStatus = { enabled: true, updated_at: new Date().toISOString(), loaded: true };
+      twoFactorModal = {
+        ...twoFactorModal,
+        step: 'recovery',
+        recoveryCodes: Array.isArray(result.recovery_codes) ? result.recovery_codes : [],
+        error: ''
+      };
+      renderApp();
+    } catch (err) {
+      twoFactorModal.error = err.message;
+      renderApp();
+    }
+  };
+
+  const disableForm = document.getElementById('two-factor-disable-form');
+  if (disableForm) disableForm.onsubmit = async event => {
+    event.preventDefault();
+    const submit = document.getElementById('two-factor-disable-submit');
+    const password = document.getElementById('two-factor-disable-password')?.value || '';
+    const code = document.getElementById('two-factor-disable-code')?.value || '';
+    try {
+      submit.disabled = true;
+      submit.textContent = 'Отключаем…';
+      await api('auth/2fa/disable', {
+        method: 'POST',
+        body: JSON.stringify({ password, code })
+      });
+      twoFactorStatus = { enabled: false, updated_at: null, loaded: true };
+      twoFactorModal = { ...twoFactorModal, open: false, error: '' };
+      showToast('Двухфакторная защита отключена', 'success');
+      renderApp();
+    } catch (err) {
+      twoFactorModal.error = err.message;
+      renderApp();
+    }
+  };
+
+  const copySecretBtn = document.getElementById('btn-copy-2fa-secret');
+  if (copySecretBtn) copySecretBtn.onclick = () => copySecurityText(twoFactorModal.secret, 'Ключ скопирован');
+  const copyRecoveryBtn = document.getElementById('btn-copy-recovery-codes');
+  if (copyRecoveryBtn) copyRecoveryBtn.onclick = () => copySecurityText(twoFactorModal.recoveryCodes.join('\n'), 'Резервные коды скопированы');
+  const finishBtn = document.getElementById('btn-finish-2fa');
+  if (finishBtn) finishBtn.onclick = () => {
+    twoFactorModal = { ...twoFactorModal, open: false, recoveryCodes: [], error: '' };
+    showToast('Двухфакторная защита включена', 'success');
+    renderApp();
+  };
+}
+
 function bindInteractiveEvents() {
   initSpotlightCards();
+  bindTwoFactorEvents();
 
   // Kinetic Number Tickers on Home View
   if (tab === 'home' && !privacyMode) {
@@ -7357,9 +7775,11 @@ function bindInteractiveEvents() {
   // Profile Modal Toggle
   const userProfileBtn = document.getElementById('user-profile-btn');
   if (userProfileBtn) {
-    userProfileBtn.onclick = () => {
+    userProfileBtn.onclick = async () => {
       profileModalOpen = true;
       renderApp();
+      await refreshTwoFactorStatus();
+      if (profileModalOpen) renderApp();
     };
   }
 
@@ -7565,6 +7985,12 @@ function bindInteractiveEvents() {
           localStorage.removeItem('finkaif_currency');
         } catch (_) {}
         me = null;
+        mode = 'login';
+        authStep = 'credentials';
+        authChallenge = '';
+        authPendingEmail = '';
+        authError = '';
+        twoFactorStatus = { enabled: false, updated_at: null, loaded: false };
         profile = {
           display_name: '',
           avatar: 'default',
@@ -10697,6 +11123,7 @@ function syncHash() {
 async function boot() {
   initAmbientCanvas();
   fetchExchangeRates(); // Fetch live CBR exchange rates on launch
+  try { localStorage.removeItem('finkaif_token'); } catch (_) {}
 
   const initHash = window.location.hash.replace('#', '');
   if (['home', 'analytics', 'transactions', 'budgets', 'goals', 'assistant'].includes(initHash)) {
@@ -10722,7 +11149,7 @@ async function boot() {
       }
     } catch { }
 
-    await refreshAllData();
+    await Promise.all([refreshAllData(), refreshTwoFactorStatus()]);
   } catch {
     me = null;
   }
