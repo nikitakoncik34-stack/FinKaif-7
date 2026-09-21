@@ -143,6 +143,120 @@ const cookie = {
 
 const token = user => jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "14d" });
 
+const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const TOTP_KEY = crypto.createHash("sha256")
+  .update(process.env.TOTP_ENCRYPTION_KEY || JWT_SECRET)
+  .digest();
+
+function base32Encode(input) {
+  const bytes = Buffer.from(input);
+  let bits = "";
+  let output = "";
+  for (const byte of bytes) bits += byte.toString(2).padStart(8, "0");
+  for (let i = 0; i < bits.length; i += 5) {
+    output += BASE32_ALPHABET[parseInt(bits.slice(i, i + 5).padEnd(5, "0"), 2)];
+  }
+  return output;
+}
+
+function base32Decode(value) {
+  const clean = String(value || "").toUpperCase().replace(/[^A-Z2-7]/g, "");
+  let bits = "";
+  for (const char of clean) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index < 0) throw new Error("Invalid base32 secret");
+    bits += index.toString(2).padStart(5, "0");
+  }
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(bytes);
+}
+
+function generateTotp(secret, timestamp = Date.now(), digits = 6) {
+  const step = Math.floor(Number(timestamp) / 30000);
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(step));
+  const digest = crypto.createHmac("sha1", base32Decode(secret)).update(counter).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary = (digest.readUInt32BE(offset) & 0x7fffffff) % (10 ** digits);
+  return String(binary).padStart(digits, "0");
+}
+
+function findValidTotpStep(secret, rawCode, timestamp = Date.now(), window = 1) {
+  const code = String(rawCode || "").replace(/\D/g, "");
+  if (!/^\d{6}$/.test(code)) return null;
+  const currentStep = Math.floor(Number(timestamp) / 30000);
+  for (let offset = -window; offset <= window; offset += 1) {
+    const candidateStep = currentStep + offset;
+    const candidate = generateTotp(secret, candidateStep * 30000);
+    if (crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(code))) return candidateStep;
+  }
+  return null;
+}
+
+function encryptTwoFactorSecret(secret) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", TOTP_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(String(secret), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+function decryptTwoFactorSecret(payload) {
+  const [version, ivValue, tagValue, encryptedValue] = String(payload || "").split(":");
+  if (version !== "v1" || !ivValue || !tagValue || !encryptedValue) throw new Error("Invalid encrypted secret");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", TOTP_KEY, Buffer.from(ivValue, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedValue, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
+function normalizeRecoveryCode(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function hashRecoveryCode(value) {
+  return crypto.createHmac("sha256", TOTP_KEY).update(normalizeRecoveryCode(value)).digest("hex");
+}
+
+function generateRecoveryCodes(count = 8) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: count }, () => {
+    let raw = "";
+    for (let i = 0; i < 8; i += 1) raw += alphabet[crypto.randomInt(alphabet.length)];
+    return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+  });
+}
+
+async function consumeTwoFactorCode(user, rawCode) {
+  if (!user?.two_factor_enabled || !user.two_factor_secret) return false;
+  const secret = decryptTwoFactorSecret(user.two_factor_secret);
+  const matchedStep = findValidTotpStep(secret, rawCode);
+  if (matchedStep !== null) {
+    const updated = await db.query(
+      `update users set two_factor_last_used_step=$1
+       where id=$2 and two_factor_enabled=true and two_factor_last_used_step < $1
+       returning id`,
+      [matchedStep, user.id]
+    );
+    return updated.rowCount === 1;
+  }
+
+  const normalized = normalizeRecoveryCode(rawCode);
+  if (normalized.length !== 8) return false;
+  const incomingHash = hashRecoveryCode(normalized);
+  const updated = await db.query(
+    `update users
+     set two_factor_recovery_hashes=array_remove(two_factor_recovery_hashes,$1)
+     where id=$2 and $1=any(two_factor_recovery_hashes)
+     returning id`,
+    [incomingHash, user.id]
+  );
+  return updated.rowCount === 1;
+}
+
 // Central Moscow Time (Europe/Moscow, UTC+3) helper
 function getMskDate(d = new Date()) {
   const dateObj = (typeof d === 'string' || typeof d === 'number') ? new Date(d) : (d || new Date());
@@ -620,14 +734,14 @@ app.post("/api/auth/register", authLimiter, async (req, res) => {
   try {
     const email = String(req.body.email || "").toLowerCase().trim();
     const password = String(req.body.password || "");
-    if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 6) {
-      return res.status(400).json({ error: "Введите корректный email и пароль не короче 6 символов." });
+    if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 10 || password.length > 128) {
+      return res.status(400).json({ error: "Введите корректный email и пароль длиной от 10 до 128 символов." });
     }
     const hash = await bcrypt.hash(password, 12);
     const r = await db.query("insert into users(email,password_hash) values($1,$2) returning id,email", [email, hash]);
     const user = r.rows[0];
     const userToken = token(user);
-    res.cookie("finkaif_token", userToken, cookie).json({ user, token: userToken });
+    res.cookie("finkaif_token", userToken, cookie).json({ user });
   } catch (e) {
     if (e.code === "23505") return res.status(409).json({ error: "Этот email уже зарегистрирован." });
     fail(res, e);
@@ -638,13 +752,61 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
   try {
     const email = String(req.body.email || "").toLowerCase().trim();
     const password = String(req.body.password || "");
-    const r = await db.query("select id,email,password_hash from users where email=$1", [email]);
+    if (!email || !password || password.length > 256) {
+      return res.status(401).json({ error: "Неверный email или пароль." });
+    }
+    const r = await db.query(
+      `select id,email,password_hash,two_factor_enabled,two_factor_secret,
+              two_factor_recovery_hashes,two_factor_last_used_step
+       from users where email=$1`,
+      [email]
+    );
     const user = r.rows[0];
     if (!user || !await bcrypt.compare(password, user.password_hash)) {
       return res.status(401).json({ error: "Неверный email или пароль." });
     }
+
+    if (user.two_factor_enabled && user.two_factor_secret) {
+      const challenge = jwt.sign(
+        { id: user.id, email: user.email, purpose: "2fa-login" },
+        JWT_SECRET,
+        { expiresIn: "5m" }
+      );
+      return res.json({ requires_2fa: true, challenge, user: { email: user.email } });
+    }
+
     const userToken = token(user);
-    res.cookie("finkaif_token", userToken, cookie).json({ user: { id: user.id, email: user.email }, token: userToken });
+    res.cookie("finkaif_token", userToken, cookie).json({ user: { id: user.id, email: user.email } });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/auth/2fa/verify", authLimiter, async (req, res) => {
+  try {
+    const challenge = String(req.body.challenge || "");
+    const code = String(req.body.code || "");
+    let claims;
+    try {
+      claims = jwt.verify(challenge, JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: "Срок проверки истёк. Войдите ещё раз." });
+    }
+    if (claims.purpose !== "2fa-login" || !claims.id) {
+      return res.status(401).json({ error: "Недействительная попытка входа." });
+    }
+    const r = await db.query(
+      `select id,email,two_factor_enabled,two_factor_secret,
+              two_factor_recovery_hashes,two_factor_last_used_step
+       from users where id=$1`,
+      [claims.id]
+    );
+    const user = r.rows[0];
+    if (!user || !await consumeTwoFactorCode(user, code)) {
+      return res.status(401).json({ error: "Неверный или уже использованный код." });
+    }
+    const userToken = token(user);
+    res.cookie("finkaif_token", userToken, cookie).json({ user: { id: user.id, email: user.email } });
   } catch (e) {
     fail(res, e);
   }
@@ -652,6 +814,124 @@ app.post("/api/auth/login", authLimiter, async (req, res) => {
 
 app.post("/api/auth/logout", (_req, res) => {
   res.clearCookie("finkaif_token", cookie).json({ ok: true });
+});
+
+app.get("/api/auth/2fa/status", auth, async (req, res) => {
+  try {
+    const r = await db.query("select two_factor_enabled,two_factor_updated_at from users where id=$1", [req.user.id]);
+    const user = r.rows[0];
+    res.json({
+      enabled: Boolean(user?.two_factor_enabled),
+      updated_at: user?.two_factor_updated_at || null
+    });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/auth/2fa/setup", auth, authLimiter, async (req, res) => {
+  try {
+    const password = String(req.body.password || "");
+    const r = await db.query("select id,email,password_hash,two_factor_enabled from users where id=$1", [req.user.id]);
+    const user = r.rows[0];
+    if (!user || !await bcrypt.compare(password, user.password_hash)) {
+      return res.status(401).json({ error: "Неверный текущий пароль." });
+    }
+    if (user.two_factor_enabled) {
+      return res.status(409).json({ error: "Двухфакторная защита уже включена." });
+    }
+
+    const secret = base32Encode(crypto.randomBytes(20));
+    const issuer = "FinKaif";
+    const label = encodeURIComponent(`${issuer}:${user.email}`);
+    const otpauthUri = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+    const setupToken = jwt.sign(
+      { id: user.id, purpose: "2fa-setup", secret: encryptTwoFactorSecret(secret) },
+      JWT_SECRET,
+      { expiresIn: "10m" }
+    );
+    let qrDataUrl = null;
+    try {
+      const QRCode = (await import("qrcode")).default;
+      qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 240,
+        color: { dark: "#080D0B", light: "#F3F4F6" }
+      });
+    } catch (qrError) {
+      console.warn("2FA QR generation unavailable:", qrError.message);
+    }
+    res.json({ setup_token: setupToken, secret, otpauth_uri: otpauthUri, qr_data_url: qrDataUrl });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/auth/2fa/confirm", auth, authLimiter, async (req, res) => {
+  try {
+    const setupToken = String(req.body.setup_token || "");
+    const code = String(req.body.code || "");
+    let claims;
+    try {
+      claims = jwt.verify(setupToken, JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: "Настройка истекла. Начните подключение заново." });
+    }
+    if (claims.purpose !== "2fa-setup" || claims.id !== req.user.id || !claims.secret) {
+      return res.status(401).json({ error: "Недействительная настройка 2FA." });
+    }
+    const secret = decryptTwoFactorSecret(claims.secret);
+    if (findValidTotpStep(secret, code) === null) {
+      return res.status(400).json({ error: "Код не подошёл. Проверьте время на устройстве и попробуйте снова." });
+    }
+
+    const recoveryCodes = generateRecoveryCodes();
+    const recoveryHashes = recoveryCodes.map(hashRecoveryCode);
+    const enabled = await db.query(
+      `update users set two_factor_enabled=true,two_factor_secret=$1,
+        two_factor_recovery_hashes=$2,two_factor_last_used_step=-1,two_factor_updated_at=now()
+       where id=$3 and two_factor_enabled=false
+       returning id`,
+      [encryptTwoFactorSecret(secret), recoveryHashes, req.user.id]
+    );
+    if (enabled.rowCount !== 1) {
+      return res.status(409).json({ error: "Двухфакторная защита уже была подключена." });
+    }
+    res.json({ enabled: true, recovery_codes: recoveryCodes });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/auth/2fa/disable", auth, authLimiter, async (req, res) => {
+  try {
+    const password = String(req.body.password || "");
+    const code = String(req.body.code || "");
+    const r = await db.query(
+      `select id,email,password_hash,two_factor_enabled,two_factor_secret,
+              two_factor_recovery_hashes,two_factor_last_used_step
+       from users where id=$1`,
+      [req.user.id]
+    );
+    const user = r.rows[0];
+    if (!user || !await bcrypt.compare(password, user.password_hash)) {
+      return res.status(401).json({ error: "Неверный текущий пароль." });
+    }
+    if (!user.two_factor_enabled) return res.json({ enabled: false });
+    if (!await consumeTwoFactorCode(user, code)) {
+      return res.status(401).json({ error: "Неверный код подтверждения." });
+    }
+    await db.query(
+      `update users set two_factor_enabled=false,two_factor_secret=null,
+        two_factor_recovery_hashes='{}',two_factor_last_used_step=-1,two_factor_updated_at=now()
+       where id=$1`,
+      [req.user.id]
+    );
+    res.json({ enabled: false });
+  } catch (e) {
+    fail(res, e);
+  }
 });
 
 // ============================================================================
