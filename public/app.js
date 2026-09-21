@@ -925,17 +925,16 @@ const formatAssistantMessage = (raw) => {
 function calculateFinScore() {
   const inc = (data.transactions || []).filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount || 0), 0);
   const exp = (data.transactions || []).filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount || 0), 0);
-  const bal = inc - exp;
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(data.transactions, data.goals);
   const monthlyExp = exp > 0 ? exp : 40000;
-  const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (bal > 0 ? 35 : 0);
-  const totalSaved = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
-  const cushion = Math.max(0, bal) + totalSaved * 0.5;
+  const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (totalCapital > 0 ? 35 : 0);
+  const cushion = Math.max(0, totalCapital);
   const runway = monthlyExp > 0 ? cushion / monthlyExp : 3;
 
   const sCushion = Math.min(25, Math.round(runway * 6));
   const sSavings = Math.min(25, Math.max(0, Math.round(savingsRate)));
   const sBudgets = (data.budgets || []).length > 0 ? 25 : 12;
-  const sCapital = bal >= 0 ? 25 : 5;
+  const sCapital = totalCapital >= 0 ? 25 : 5;
   const score = Math.max(15, Math.min(100, sCushion + sSavings + sBudgets + sCapital));
 
   let label = 'Устойчивый';
@@ -955,8 +954,10 @@ function calculateFinScore() {
     sSavings,
     sBudgets,
     sCapital,
-    totalSaved,
-    bal,
+    totalSaved: savedInGoals,
+    totalCapital,
+    freeCapital,
+    bal: totalCapital,
     monthlyExp
   };
 }
@@ -1817,11 +1818,35 @@ function evaluateBezierY(y0, cp1y, cp2y, y1, t) {
   return (mt * mt * mt * y0) + (3 * mt * mt * t * cp1y) + (3 * mt * t * t * cp2y) + (t * t * t * y1);
 }
 
+function financialAmountToCents(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function getCapitalSnapshot(transactions = [], goals = []) {
+  const totalCapitalCents = (transactions || []).reduce((sum, tx) => {
+    const amountCents = financialAmountToCents(tx?.amount);
+    if (tx?.type === 'income') return sum + amountCents;
+    if (tx?.type === 'expense') return sum - amountCents;
+    return sum;
+  }, 0);
+  const savedInGoalsCents = (goals || []).reduce(
+    (sum, goal) => sum + Math.max(0, financialAmountToCents(goal?.saved_amount)),
+    0
+  );
+
+  return {
+    totalCapital: totalCapitalCents / 100,
+    savedInGoals: savedInGoalsCents / 100,
+    freeCapital: (totalCapitalCents - savedInGoalsCents) / 100
+  };
+}
+
 // Financial Rank Calculator
-function getFinancialRank(balance, goals) {
+function getFinancialRank(totalCapitalValue, goals) {
   const totalSaved = (goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
   const totalTarget = (goals || []).reduce((s, g) => s + Number(g.target_amount || 0), 0);
-  const totalCapital = Math.max(0, balance) + totalSaved;
+  const totalCapital = Math.max(0, Number(totalCapitalValue) || 0);
 
   if (totalCapital >= 300000 || (totalTarget > 0 && totalSaved >= totalTarget && goals.length >= 2)) {
     return { title: 'Финансовый стратег', badge: 'crown', desc: 'Уверенный капитал и системный контроль над будущим' };
@@ -2054,13 +2079,7 @@ function initAmbientCanvas() {
    NAVIGATION / MASTHEAD
    ========================================================================== */
 function renderMasthead() {
-  const inc = data.transactions
-    .filter(t => t.type === 'income')
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const exp = data.transactions
-    .filter(t => t.type === 'expense')
-    .reduce((s, t) => s + Number(t.amount), 0);
-  const balance = inc - exp;
+  const { totalCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
 
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
   const userName = profile.display_name ? profile.display_name : rawUser;
@@ -2166,7 +2185,7 @@ function renderMasthead() {
       </nav>
 
       <div class="masthead-actions">
-        <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать баланс (горячая клавиша P)' : 'Скрыть баланс (горячая клавиша P)'}">
+        <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать общий капитал (горячая клавиша P)' : 'Общий капитал — все средства, включая накопления в целях'}">
           <span class="pulse-dot"></span>
           <span id="masthead-balance-figure">${money(balance)}</span>
           ${showDelta ? `
@@ -2809,7 +2828,10 @@ async function enrichTransactionsWithMerchantIntelligence(transactions) {
   transactions.forEach((tx, index) => {
     tx.raw_description = tx.raw_description || tx.description || '';
     if (tx.type === 'transfer') {
-      tx.category = 'Переводы'; tx.needs_confirmation = false; return;
+      tx.category = 'Переводы';
+      tx.transfer_confirmed = tx.transfer_confirmed === true;
+      tx.needs_confirmation = tx.transfer_confirmed !== true;
+      return;
     }
     const verified = isCategoryVerifiedInSystem(tx.category, availableCats);
     if (verified && tx.needs_confirmation !== true && (tx.confidence === undefined || tx.confidence >= 0.85)) return;
@@ -2932,7 +2954,9 @@ function normalizeStatementRow(item) {
   const description = String(item.description || '').trim();
   return { ...item, amount, date, occurred_on: date, type, tx_kind: type,
     raw_description: String(item.raw_description || item.original_description || description),
-    description, selected: true };
+    description, selected: true,
+    transfer_confirmed: type === 'transfer' ? false : item.transfer_confirmed === true,
+    needs_confirmation: type === 'transfer' ? true : item.needs_confirmation === true };
 }
 
 function parseStatementBuiltin(content, fileName = '', preset = 'auto') {
@@ -3240,6 +3264,7 @@ const GENERIC_CATEGORIES = [
 
 function isTxClarificationNeeded(tx) {
   if (!tx || !tx.selected) return false;
+  if ((tx.type === 'transfer' || tx.tx_kind === 'transfer') && tx.transfer_confirmed !== true) return true;
   if (tx.needs_confirmation === true) return true;
   if (tx.needs_confirmation === false && (tx.confidence || 0) >= 0.85) {
     const c = (tx.category || '').trim().toLowerCase();
@@ -3303,6 +3328,7 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
   }
 
   function isItemValid(tx) {
+    if ((tx.type === 'transfer' || tx.tx_kind === 'transfer') && tx.transfer_confirmed !== true) return false;
     if (tx.needs_confirmation === true) return false;
     const c = (tx.category || '').trim().toLowerCase();
     const isCatOk = c.length > 0 && !GENERIC_CATEGORIES.includes(c);
@@ -3311,10 +3337,13 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
     return isCatOk && isDescOk;
   }
 
+  function markClassificationResolved(tx) {
+    const isTransfer = tx?.type === 'transfer' || tx?.tx_kind === 'transfer';
+    tx.needs_confirmation = isTransfer ? tx.transfer_confirmed !== true : false;
+  }
+
   function renderModalContent() {
-    const attentionList = (txsNeedingClarify && txsNeedingClarify.length > 0)
-      ? txsNeedingClarify
-      : allList.filter(t => isTxClarificationNeeded(t));
+    const attentionList = allList.filter(t => isTxClarificationNeeded(t));
     const displayedTxs = activeTab === 'attention'
       ? attentionList
       : allList;
@@ -3389,6 +3418,19 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
                 </div>
 
                 ${hasOrigNote ? `<div class="desc-item-orig">Исходная выписка: <strong>${esc(tx.raw_description || tx.description)}</strong></div>` : ''}
+
+                ${isTransfer ? `
+                  <div class="transfer-approval-panel ${tx.transfer_confirmed === true ? 'approved' : ''}">
+                    <div class="transfer-approval-copy">
+                      <strong>${tx.transfer_confirmed === true ? 'Перевод утверждён' : 'Требуется утверждение перевода'}</strong>
+                      <span>Проверьте, что это перемещение между вашими счетами. Перевод другому человеку должен быть расходом или доходом.</span>
+                    </div>
+                    <button type="button" class="btn-transfer-approve" data-list-idx="${listIdx}" ${tx.transfer_confirmed === true ? 'disabled' : ''}>
+                      ${icon(tx.transfer_confirmed === true ? 'check' : 'shield', 13)}
+                      <span>${tx.transfer_confirmed === true ? 'Утверждено' : 'Утвердить перевод'}</span>
+                    </button>
+                  </div>
+                ` : ''}
 
                 ${tx.needs_confirmation && tx.suggested_category ? `
                   <div class="ai-recommendation-row" style="margin: 8px 0 6px;">
@@ -3489,7 +3531,7 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
         const catName = chip.getAttribute('data-cat');
         if (allList[listIdx]) {
           allList[listIdx].category = catName;
-          allList[listIdx].needs_confirmation = false;
+          markClassificationResolved(allList[listIdx]);
           allList[listIdx].confidence = 0.99;
           updateCardRow(listIdx);
           updateHeaderStatus();
@@ -3505,7 +3547,7 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
         const cat = btn.getAttribute('data-cat');
         if (allList[listIdx] && cat) {
           allList[listIdx].category = cat;
-          allList[listIdx].needs_confirmation = false;
+          markClassificationResolved(allList[listIdx]);
           allList[listIdx].confidence = 0.99;
           updateCardRow(listIdx);
           updateHeaderStatus();
@@ -3541,7 +3583,7 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
           const val = inp.value.trim();
           addCustomCategory(val);
           allList[listIdx].category = val;
-          allList[listIdx].needs_confirmation = false;
+          markClassificationResolved(allList[listIdx]);
           allList[listIdx].confidence = 0.99;
           updateCardRow(listIdx);
           updateHeaderStatus();
@@ -3559,6 +3601,20 @@ function openRequiredClarificationModal(txsNeedingClarify, onComplete, allStatem
           const addBtn = backdrop.querySelector(`.btn-custom-cat-add[data-list-idx="${listIdx}"]`);
           if (addBtn) addBtn.click();
         }
+      };
+    });
+
+    backdrop.querySelectorAll('.btn-transfer-approve').forEach(btn => {
+      btn.onclick = (e) => {
+        e.preventDefault();
+        const listIdx = parseInt(btn.getAttribute('data-list-idx'), 10);
+        const tx = allList[listIdx];
+        if (!tx || (tx.type !== 'transfer' && tx.tx_kind !== 'transfer')) return;
+        tx.transfer_confirmed = true;
+        tx.needs_confirmation = false;
+        tx.confidence = Math.max(Number(tx.confidence) || 0, 0.99);
+        renderModalContent();
+        showToast('Перевод утверждён', 'success');
       };
     });
 
@@ -3863,9 +3919,8 @@ function renderHomeView() {
   const exp = data.transactions
     .filter(t => t.type === 'expense')
     .reduce((s, t) => s + Number(t.amount), 0);
-  const totalCapital = inc - exp;
-  const savedInGoals = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
-  const freeBalance = totalCapital - savedInGoals;
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(data.transactions, data.goals);
+  const freeBalance = freeCapital;
   const balance = freeBalance; // Primary focus is spendable liquid cash
 
   // Calculate Runway (Financial Safety Cushion)
@@ -4645,10 +4700,8 @@ function renderAnalyticsView() {
   // Daily Burn Rate (Velocity)
   const dailyVelocity = Math.round(pExp / (daysCount || 1));
 
-  // Current balance across all recorded transactions
-  const totalInc = data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const totalExp = data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-  const currentBalance = totalInc - totalExp;
+  // Capital contract: total includes goal savings; free capital excludes them.
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(data.transactions, data.goals);
 
   // Calendar month dates & expenses
   const curMonthStart = toDateIso(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -4666,8 +4719,8 @@ function renderAnalyticsView() {
 
   // Expected remaining expenses till end of month based on daily velocity
   const expectedRemainingExp = Math.round(dailyVelocity * daysRemainingInMonth);
-  // Conservative projected balance at month end: current balance minus expected remaining spend
-  const projectedBalance = currentBalance - expectedRemainingExp;
+  // Conservative projected free capital at month end.
+  const projectedBalance = freeCapital - expectedRemainingExp;
   const projectedMonthExp = curMonthExp + expectedRemainingExp;
 
   // Spending Pace Assessment (Burn Rate Status)
@@ -4694,9 +4747,9 @@ function renderAnalyticsView() {
       burnStatus = 'alert';
       burnText = `Превышает доход (+${incPct - 100}%)`;
     }
-  } else if (currentBalance > 0) {
+  } else if (freeCapital > 0) {
     // Runway-based evaluation when no income recorded in period
-    const runwayDays = Math.round(currentBalance / (dailyVelocity || 1));
+    const runwayDays = Math.round(freeCapital / (dailyVelocity || 1));
     if (runwayDays >= 90) {
       burnStatus = 'safe';
       burnText = `Запас на ${Math.round(runwayDays / 30)} мес.`;
@@ -4713,7 +4766,7 @@ function renderAnalyticsView() {
   }
 
   // Rank
-  const userRank = getFinancialRank(currentBalance, data.goals);
+  const userRank = getFinancialRank(totalCapital, data.goals);
 
   // Categories Breakdown
   const catMap = {};
@@ -5093,7 +5146,8 @@ function renderAnalyticsView() {
           </div>
           <p class="popover-desc">Ожидаемый баланс средств на ваших счетах к концу текущего месяца при сохранении текущей скорости трат (${money(dailyVelocity)}/день).</p>
           <div class="popover-breakdown">
-            <div class="p-row"><span>Текущий баланс:</span> <strong>${money(currentBalance)}</strong></div>
+            <div class="p-row"><span>Свободно сейчас:</span> <strong>${money(freeCapital)}</strong></div>
+            <div class="p-row"><span>В финансовых целях:</span> <strong>${money(savedInGoals)}</strong></div>
             <div class="p-row"><span>Ожидаемые траты (${daysRemainingInMonth} дн.):</span> <strong class="exp">−${money(expectedRemainingExp)}</strong></div>
             <div class="p-row highlight"><span>Ожидаемый остаток:</span> <strong class="${projectedBalance >= 0 ? 'inc' : 'exp'}">${money(projectedBalance)}</strong></div>
             <div class="p-row"><span>Всего расходов за месяц:</span> <strong>~${money(projectedMonthExp)}</strong></div>
@@ -5125,7 +5179,8 @@ function renderAnalyticsView() {
           <p class="popover-desc">Ваш инвестиционный ранг по методологии FinKaif OS. Растет по мере накопления капитала и достижения целей.</p>
           <div class="popover-breakdown">
             <div class="p-row"><span>Текущий ранг:</span> <strong>${userRank.title}</strong></div>
-            <div class="p-row"><span>Свободный капитал:</span> <strong class="inc">${money(currentBalance)}</strong></div>
+            <div class="p-row"><span>Общий капитал:</span> <strong class="inc">${money(totalCapital)}</strong></div>
+            <div class="p-row"><span>Свободный капитал:</span> <strong>${money(freeCapital)}</strong></div>
             <div class="p-row"><span>Уровень капитала:</span> <strong>${userRank.desc}</strong></div>
           </div>
           <div class="popover-hint">
@@ -6506,7 +6561,7 @@ function renderProfileModal() {
   const userName = profile.display_name ? profile.display_name : rawUser;
   const userInitial = rawUser.charAt(0).toUpperCase();
 
-  const currentBal = data.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : t.type === 'expense' ? -Number(t.amount) : 0), 0);
+  const { totalCapital: currentBal } = getCapitalSnapshot(data.transactions, data.goals);
   const rank = getFinancialRank(currentBal, data.goals);
 
   // Swiss minimalist icons system
@@ -6950,9 +7005,7 @@ function getViewHtmlForTab(targetTab) {
 }
 
 function updateMastheadDynamicData() {
-  const inc = data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const exp = data.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-  const balance = inc - exp;
+  const { totalCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
 
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
   const userName = profile.display_name ? profile.display_name : rawUser;
@@ -6978,7 +7031,9 @@ function updateMastheadDynamicData() {
 
   const mastPill = document.getElementById('masthead-balance-pill');
   if (mastPill) {
-    mastPill.title = privacyMode ? 'Показать баланс (горячая клавиша P)' : 'Скрыть баланс (горячая клавиша P)';
+    mastPill.title = privacyMode
+      ? 'Показать общий капитал (горячая клавиша P)'
+      : 'Общий капитал — все средства, включая накопления в целях';
   }
 
   const deltaEl = document.querySelector('.masthead .balance-delta');
@@ -7216,18 +7271,13 @@ function bindInteractiveEvents() {
 
     const heroBalEl = document.getElementById('hero-balance-val');
     if (heroBalEl) {
-      const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
-      const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
-      const savedInGoals = (data.goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
-      const balInRub = incTot - expTot - savedInGoals;
+      const { freeCapital: balInRub } = getCapitalSnapshot(data.transactions, data.goals);
       const balConv = convertFromRub(balInRub);
       animateNumber(heroBalEl, balConv, 650, curPrefix, sym);
     }
     const mastBalEl = document.getElementById('masthead-balance-figure');
     if (mastBalEl) {
-      const incTot = data.transactions.filter(x => x.type === 'income').reduce((s, x) => s + Number(x.amount), 0);
-      const expTot = data.transactions.filter(x => x.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
-      const balInRub = incTot - expTot;
+      const { totalCapital: balInRub } = getCapitalSnapshot(data.transactions, data.goals);
       const balConv = convertFromRub(balInRub);
       animateNumber(mastBalEl, balConv, 650, curPrefix, sym);
     }
@@ -8070,7 +8120,7 @@ function bindInteractiveEvents() {
         heroBalVal.innerText = baseBalText;
       }
       if (heroBalLbl) {
-        heroBalLbl.innerText = 'Чистый свободный остаток';
+        heroBalLbl.innerText = 'Свободно на расходы';
       }
       lastScrubbedDayIdx = -1;
     };
@@ -8754,7 +8804,8 @@ function bindInteractiveEvents() {
               occurred_on: finalOccurredOn,
               time: finalTime,
               created_at: finalCreatedAt,
-              description
+              description,
+              transfer_confirmed: finalType === 'transfer' ? true : undefined
             })
           });
           showToast('Категория и описание обновлены', 'success');
@@ -10537,7 +10588,8 @@ function bindBankImportModalEvents() {
         amount: tx.amount,
         category: tx.category,
         description: tx.description,
-        occurred_on: tx.occurred_on
+        occurred_on: tx.occurred_on,
+        transfer_confirmed: tx.type === 'transfer' ? tx.transfer_confirmed === true : undefined
     }));
 
     const finishSuccessfulImport = async (transactions = null, recovered = false) => {
