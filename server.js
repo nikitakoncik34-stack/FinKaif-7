@@ -71,8 +71,9 @@ async function initDb() {
       try {
         await db.query(`
           ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS display_name text DEFAULT '';
-          ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS avatar text DEFAULT 'default';
+          ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS avatar text DEFAULT '💎';
           ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS currency text DEFAULT 'RUB';
+          UPDATE user_settings SET avatar='💎' WHERE avatar='default' OR avatar='' OR avatar IS NULL;
         `);
       } catch (usErr) {
         console.warn("User settings migration notice:", usErr.message);
@@ -1138,18 +1139,26 @@ app.get("/api/profile", auth, async (req, res) => {
       console.warn("Retrying profile fetch without currency column:", colErr.message);
       r = await db.query("select display_name, avatar from user_settings where user_id=$1", [req.user.id]);
     }
+    const emailStr = String(req.user?.email || "").toLowerCase();
+    const defaultName = emailStr.includes("nikita") ? "Никита" : (req.user?.email ? req.user.email.split("@")[0] : "");
     if (r && r.rows[0]) {
+      const row = r.rows[0];
+      const displayName = (row.display_name && row.display_name.trim()) ? row.display_name.trim() : defaultName;
+      let avatar = (row.avatar && row.avatar.trim()) ? row.avatar.trim() : "💎";
+      if (avatar === "default") avatar = "💎";
       res.json({
-        display_name: r.rows[0].display_name || "",
-        avatar: r.rows[0].avatar || "default",
-        currency: r.rows[0].currency || "RUB"
+        display_name: displayName,
+        avatar: avatar,
+        currency: row.currency || "RUB"
       });
     } else {
-      res.json({ display_name: "", avatar: "default", currency: "RUB" });
+      res.json({ display_name: defaultName, avatar: "💎", currency: "RUB" });
     }
   } catch (e) {
     console.warn("Profile fetch fallback:", e.message);
-    res.json({ display_name: "", avatar: "default", currency: "RUB" });
+    const emailStr = String(req.user?.email || "").toLowerCase();
+    const defaultName = emailStr.includes("nikita") ? "Никита" : "";
+    res.json({ display_name: defaultName, avatar: "💎", currency: "RUB" });
   }
 });
 
@@ -1157,8 +1166,8 @@ app.post("/api/profile", auth, async (req, res) => {
   try {
     const { display_name, avatar, currency } = req.body;
     const name = String(display_name || "").slice(0, 50).trim();
-    // Allow large data URI (base64 image up to 500KB)
-    const av = String(avatar || "default").slice(0, 500000).trim();
+    let av = String(avatar || "💎").slice(0, 500000).trim();
+    if (!av || av === "default") av = "💎";
     const cur = ["RUB", "USD", "EUR", "KZT"].includes(currency) ? currency : "RUB";
 
     let r;
