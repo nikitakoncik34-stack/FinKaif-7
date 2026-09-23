@@ -971,14 +971,11 @@ function calculateFinScore() {
   const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(data.transactions, data.goals);
   const monthlyExp = exp > 0 ? exp : 40000;
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (totalCapital > 0 ? 35 : 0);
-  const cushion = Math.max(0, totalCapital);
-  const runway = monthlyExp > 0 ? cushion / monthlyExp : 3;
 
-  const sCushion = Math.min(25, Math.round(runway * 6));
-  const sSavings = Math.min(25, Math.max(0, Math.round(savingsRate)));
-  const sBudgets = (data.budgets || []).length > 0 ? 25 : 12;
-  const sCapital = totalCapital >= 0 ? 25 : 5;
-  const score = Math.max(15, Math.min(100, sCushion + sSavings + sBudgets + sCapital));
+  const sSavings = Math.min(35, Math.max(0, Math.round((savingsRate / 40) * 35)));
+  const sBudgets = (data.budgets || []).length > 0 ? 35 : 15;
+  const sCapital = totalCapital > 0 ? 30 : (totalCapital === 0 ? 15 : 5);
+  const score = Math.max(15, Math.min(100, sSavings + sBudgets + sCapital));
 
   let label = 'Устойчивый';
   let badgeClass = 'jade';
@@ -991,9 +988,7 @@ function calculateFinScore() {
     score,
     label,
     badgeClass,
-    runway: runway.toFixed(1),
     savingsRate,
-    sCushion,
     sSavings,
     sBudgets,
     sCapital,
@@ -2017,7 +2012,7 @@ function getFinancialRank(totalCapitalValue, goals) {
   if (totalCapital >= 25000 || (goals && goals.length > 0)) {
     return { title: 'Мастер бюджета', badge: 'sparkle', desc: 'Осознанные расходы и дисциплина лимитов' };
   }
-  return { title: 'Первые шаги', badge: 'activity', desc: 'Начало построения финансовой свободы и подушки безопасности' };
+  return { title: 'Первые шаги', badge: 'activity', desc: 'Начало построения финансовой свободы и роста капитала' };
 }
 
 // Friendly Category SVG Icon Key Map (Anti-Slop, 100% Vector)
@@ -4084,64 +4079,6 @@ function renderHomeView() {
   const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(data.transactions, data.goals);
   const freeBalance = freeCapital;
   const balance = freeBalance; // Primary focus is spendable liquid cash
-
-  // Calculate Runway (Financial Safety Cushion)
-  const nowMs = getMskDate().getTime();
-  const thirtyDaysAgo = new Date(nowMs - 30 * 86400000);
-  const last30dExp = (data.transactions || [])
-    .filter(t => t.type === 'expense' && new Date(getTxIso(t)) >= thirtyDaysAgo)
-    .reduce((s, t) => s + Number(t.amount), 0);
-
-  const monthlyBurn = last30dExp > 0 ? last30dExp : (exp > 0 ? exp : 45000);
-  const runwayCapital = Math.max(0, totalCapital);
-  const runwayMonths = monthlyBurn > 0 ? (runwayCapital / monthlyBurn) : 0;
-
-  let runwayMonthsFormatted = '';
-  if (totalCapital <= 0) {
-    runwayMonthsFormatted = '0 мес.';
-  } else if (runwayMonths >= 10) {
-    runwayMonthsFormatted = `${Math.round(runwayMonths)} мес.`;
-  } else if (runwayMonths >= 1) {
-    runwayMonthsFormatted = `${runwayMonths.toFixed(1)} мес.`;
-  } else {
-    const days = Math.max(1, Math.round(runwayMonths * 30));
-    runwayMonthsFormatted = `${days} дн.`;
-  }
-
-  let runwayTierClass = 'runway-secure';
-  let runwayStatus = 'Крепость';
-  let runwayDot = 'jade';
-  let runwayDesc = `Автономность: капитала хватит на ${runwayMonthsFormatted} комфортной жизни при текущем темпе трат (${money(monthlyBurn)}/мес)`;
-
-  if (totalCapital <= 0) {
-    runwayTierClass = 'runway-danger';
-    runwayStatus = 'Дефицит';
-    runwayDot = 'coral';
-    runwayDesc = 'Дефицит капитала: требуется оптимизация расходов';
-  } else if (runwayMonths < 1) {
-    runwayTierClass = 'runway-danger';
-    runwayStatus = 'Критично';
-    runwayDot = 'coral';
-    runwayDesc = `Запас менее 1 месяца (${runwayMonthsFormatted}). Рекомендуется сократить некритичные траты`;
-  } else if (runwayMonths < 3) {
-    runwayTierClass = 'runway-warning';
-    runwayStatus = 'Базовый';
-    runwayDot = 'amber';
-    runwayDesc = `Запас на ${runwayMonthsFormatted}. Рекомендуется сформировать подушку от 3 до 6 месяцев`;
-  } else if (runwayMonths < 6) {
-    runwayTierClass = 'runway-good';
-    runwayStatus = 'Стабильно';
-    runwayDot = 'jade';
-    runwayDesc = `Уверенный запас на ${runwayMonthsFormatted}. До золотого стандарта (6 мес.) осталось немного`;
-  } else {
-    runwayTierClass = 'runway-secure';
-    runwayStatus = 'Крепость';
-    runwayDot = 'jade';
-    runwayDesc = `Превосходная финансовая крепость: запас на ${runwayMonthsFormatted} без дополнительных доходов!`;
-  }
-
-  const runwayPercent = Math.min(100, Math.max(4, (runwayMonths / 6) * 100));
-
   const savingsRate = inc > 0 ? Math.max(0, Math.round(((inc - exp) / inc) * 100)) : 0;
 
   // Build continuous intraday capital timeline (Synchronized with Moscow Time)
@@ -4556,7 +4493,7 @@ function renderHomeView() {
         ${badgeHtml}
       </div>
 
-      <!-- Capital & Goals Sub-Row Strip with Runway Pill -->
+      <!-- Capital & Goals Sub-Row Strip -->
       <div class="hero-capital-substrip">
         <div class="capital-sub-item" title="Средства, замороженные в целях накопления">
           <span class="capital-sub-icon">${icon("target", 13)}</span>
@@ -4568,39 +4505,6 @@ function renderHomeView() {
           <span class="capital-sub-icon">${icon("briefcase", 13)}</span>
           <span class="capital-sub-lbl">Общий капитал:</span>
           <span class="capital-sub-val num ${totalCapital >= 0 ? 'inc' : 'exp'}">${money(totalCapital)}</span>
-        </div>
-        <div class="capital-sub-bullet">•</div>
-        <div class="capital-sub-item runway-pill ${runwayTierClass}" id="hero-runway-pill" title="${esc(runwayDesc)}">
-          <span class="capital-sub-icon"><span class="status-dot ${runwayDot}"></span></span>
-          <span class="capital-sub-lbl">Подушка:</span>
-          <span class="capital-sub-val num ${runwayTierClass}">${runwayMonthsFormatted}</span>
-        </div>
-      </div>
-
-      <!-- Runway Safety Gauge Strip -->
-      <div class="runway-gauge-strip" title="${esc(runwayDesc)}">
-        <div class="runway-gauge-header">
-          <div class="runway-gauge-title">
-            <span class="runway-gauge-icon">${icon("shield", 14)}</span>
-            <span class="runway-gauge-label">Финансовая подушка (Runway):</span>
-            <span class="runway-gauge-months num ${runwayTierClass}">${runwayMonthsFormatted}</span>
-          </div>
-          <div class="runway-gauge-badge ${runwayTierClass}">
-            <span class="runway-badge-dot"></span>
-            <span>${runwayStatus}</span>
-          </div>
-        </div>
-        <div class="runway-track-wrap">
-          <div class="runway-track">
-            <div class="runway-fill ${runwayTierClass}" style="width: ${runwayPercent}%;"></div>
-            <div class="runway-target-pip" style="left: 50%;" title="Минимальная норма: 3 месяца"></div>
-            <div class="runway-target-pip" style="left: 100%;" title="Золотой стандарт: 6 месяцев"></div>
-          </div>
-          <div class="runway-markers">
-            <span class="runway-marker">0 мес</span>
-            <span class="runway-marker center">3 мес (комфорт)</span>
-            <span class="runway-marker right">6+ мес (крепость)</span>
-          </div>
         </div>
       </div>
 
@@ -4916,17 +4820,17 @@ function renderAnalyticsView() {
       burnText = `Превышает доход (+${incPct - 100}%)`;
     }
   } else if (freeCapital > 0) {
-    // Runway-based evaluation when no income recorded in period
-    const runwayDays = Math.round(freeCapital / (dailyVelocity || 1));
-    if (runwayDays >= 90) {
+    // Capital-based evaluation when no income recorded in period
+    const reserveDays = Math.round(freeCapital / (dailyVelocity || 1));
+    if (reserveDays >= 90) {
       burnStatus = 'safe';
-      burnText = `Запас на ${Math.round(runwayDays / 30)} мес.`;
-    } else if (runwayDays >= 30) {
+      burnText = `Запас на ${Math.round(reserveDays / 30)} мес.`;
+    } else if (reserveDays >= 30) {
       burnStatus = 'warn';
-      burnText = `Запас на ${runwayDays} дн.`;
+      burnText = `Запас на ${reserveDays} дн.`;
     } else {
       burnStatus = 'alert';
-      burnText = `Запас всего ${runwayDays} дн.`;
+      burnText = `Запас всего ${reserveDays} дн.`;
     }
   } else {
     burnStatus = 'alert';
@@ -6134,7 +6038,7 @@ function renderGoalsView() {
       <div class="budget-quick-chips" style="margin-bottom: 12px;">
         <span class="budget-quick-lbl">Популярные цели:</span>
         <div class="budget-chips-stream">
-          <button type="button" class="goal-preset-chip" data-name="Подушка безопасности" data-target="300000">${icon("shield", 13)} <span>Подушка (300к)</span></button>
+          <button type="button" class="goal-preset-chip" data-name="Финансовый резерв" data-target="300000">${icon("shield", 13)} <span>Резерв (300к)</span></button>
           <button type="button" class="goal-preset-chip" data-name="Отпуск мечты" data-target="150000">${icon("plane", 13)} <span>Отпуск (150к)</span></button>
           <button type="button" class="goal-preset-chip" data-name="Новый ноутбук" data-target="200000">${icon("laptop", 13)} <span>Ноутбук (200к)</span></button>
           <button type="button" class="goal-preset-chip" data-name="Автомобиль" data-target="1500000">${icon("car", 13)} <span>Авто (1.5м)</span></button>
@@ -6142,7 +6046,7 @@ function renderGoalsView() {
       </div>
 
       <form id="goal-form" class="goal-form-grid">
-        <input class="form-input" id="goal-name" placeholder="Название (напр. Подушка безопасности)" required>
+        <input class="form-input" id="goal-name" placeholder="Название (напр. Резерв, Отпуск)" required>
         <div class="number-stepper-wrap">
           <input class="form-input num" id="goal-target" type="number" min="1" step="any" placeholder="Целевая сумма (₽)" required>
           <div class="input-spin-steppers">
@@ -6251,7 +6155,7 @@ function renderGoalsView() {
       }).join('') : `
         <div style="grid-column: 1 / -1; text-align: center; padding: 40px; background: var(--bg-surface); border-radius: var(--r-lg); border: 1px dashed var(--border-medium);">
           <div style="color: var(--text-muted); margin-bottom: 8px;">Финансовые цели пока не созданы</div>
-          <p style="color: var(--text-secondary); font-size: 13px;">Создайте цель «Подушка безопасности» или «Отпуск», чтобы формировать капитал.</p>
+          <p style="color: var(--text-secondary); font-size: 13px;">Создайте цель «Финансовый резерв» или «Отпуск», чтобы формировать капитал.</p>
         </div>
       `}
     </div>
@@ -6308,7 +6212,7 @@ function renderAssistantView() {
             <span class="finscore-lbl">Индекс FinScore</span>
             <span class="finscore-badge ${finScore.badgeClass}">${finScore.label}</span>
           </div>
-          <div class="finscore-sub">Подушка: ${finScore.runway} мес • Сбережения: ${finScore.savingsRate}%</div>
+          <div class="finscore-sub">Сбережения: ${finScore.savingsRate}% • Капитал: ${money(finScore.totalCapital)}</div>
         </div>
       </div>
     </div>
@@ -6448,7 +6352,7 @@ function renderAssistantView() {
             { theme: 'goal', iconName: 'target', title: 'Создать цель', sub: '«Отпуск 150к», «Авто 500к»', prompt: 'Создай цель на отпуск 150000 рублей' },
             { theme: 'budget', iconName: 'budgets', title: 'Поставить бюджет', sub: '«Кафе 25к», «Продукты 40к»', prompt: 'Поставь бюджет на рестораны 25000' },
             { theme: 'leaks', iconName: 'search', title: 'Детектив утечек', sub: 'Поиск скрытых трат', prompt: 'Где я теряю больше всего денег и как оптимизировать?' },
-            { theme: 'runway', iconName: 'shield', title: 'Запас прочности', sub: 'Стресс-тест подушки безопасности', prompt: 'На сколько месяцев мне хватит подушки безопасности?' },
+            { theme: 'capital', iconName: 'briefcase', title: 'Анализ капитала', sub: 'Свободный баланс и резервы', prompt: 'Проанализируй мой капитал и свободный остаток' },
             { theme: 'growth', iconName: 'trendUp', title: 'Сложный процент', sub: 'Рост капитала за 1, 3, 5 лет', prompt: 'Прогноз капитала через 5 лет со сложным процентом' },
             { theme: 'ritual', iconName: 'scale', title: 'Ритуал 50/30/20', sub: 'Сначала заплати себе', prompt: 'Как распределить доход по правилу 50/30/20?' },
             { theme: 'finscore', iconName: 'pulse', title: 'Аудит FinScore', sub: 'Оценка финансового здоровья', prompt: 'Полная экспресс-диагностика FinScore' }
@@ -6577,8 +6481,8 @@ function renderAssistantView() {
             <button type="button" class="chat-quick-chip" data-prompt="Оцени мой темп трат (Burn Rate)">
               <span>${icon("activity", 12)}</span> <span>Burn Rate</span>
             </button>
-            <button type="button" class="chat-quick-chip" data-prompt="На сколько месяцев мне хватит подушки безопасности?">
-              <span>${icon("shield", 12)}</span> <span>Подушка</span>
+            <button type="button" class="chat-quick-chip" data-prompt="Проанализируй мой капитал и свободный остаток">
+              <span>${icon("briefcase", 12)}</span> <span>Капитал</span>
             </button>
           </div>
 
@@ -7173,7 +7077,7 @@ function renderPaydayModal() {
             <div class="payday-split-content">
               <div class="payday-split-label">20% — Сбережения и цели</div>
               <div class="payday-split-val num">+${new Intl.NumberFormat('ru-RU').format(savings)} ₽</div>
-              <div class="payday-split-hint">Резервная подушка и инвестиции</div>
+              <div class="payday-split-hint">Накопления и инвестиции</div>
             </div>
           </div>
 
@@ -7220,7 +7124,7 @@ function renderPaydayModal() {
 function renderFinScoreModal() {
   const fs = calculateFinScore();
   const tips = [];
-  if (fs.sCushion < 20) tips.push('Пополните цель накоплений, чтобы увеличить подушку безопасности до 3–6 месяцев.');
+  if (fs.sSavings < 20) tips.push('Пополните цели накоплений или увеличьте норму сбережений.');
   if (fs.sBudgets < 20) tips.push('Установите лимиты бюджета на основные категории (Продукты, Кафе) для контроля трат.');
   if (fs.sSavings < 15) tips.push('Направляйте хотя бы 15–20% от каждого дохода в сбережения.');
   if (fs.bal < 0) tips.push('Расходы превысили доходы — сократите необязательные траты до восстановления баланса.');
@@ -7252,7 +7156,7 @@ function renderFinScoreModal() {
             <div class="finscore-hero-status">
               <span class="finscore-badge ${fs.badgeClass}" style="font-size: 13px; padding: 4px 12px;">${fs.label} уровень</span>
               <p class="finscore-desc">
-                ${fs.score >= 80 ? 'Ваши финансы в превосходной форме: высокий запас прочности и отличная дисциплина.' : (fs.score >= 60 ? 'Хорошая устойчивость, но есть точки роста в накоплениях или контроле бюджета.' : 'Требуется внимание: подушка безопасности недостаточна или расходы превышают поступления.')}
+                ${fs.score >= 80 ? 'Ваши финансы в превосходной форме: высокий запас прочности и отличная дисциплина.' : (fs.score >= 60 ? 'Хорошая устойчивость, но есть точки роста в накоплениях или контроле бюджета.' : 'Требуется внимание: расходы превышают поступления или низкий уровень сбережений.')}
               </p>
             </div>
           </div>
@@ -7261,22 +7165,11 @@ function renderFinScoreModal() {
           <div class="finscore-breakdown-list">
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
-                <span class="factor-name">${icon("shield", 13)} Подушка безопасности (Runway)</span>
-                <span class="factor-pts num">${fs.sCushion} / 25 б.</span>
-              </div>
-              <div class="finscore-progress-bar">
-                <div class="finscore-progress-fill" style="width: ${(fs.sCushion / 25) * 100}%; background: #2DD4BF;"></div>
-              </div>
-              <div class="factor-subtext">Текущего капитала хватит на <strong>${fs.runway} мес.</strong> автономной жизни (цель: от 3–6 мес.).</div>
-            </div>
-
-            <div class="finscore-factor-row">
-              <div class="finscore-factor-head">
                 <span class="factor-name">${icon("trendUp", 13)} Норма сбережений (Savings Rate)</span>
-                <span class="factor-pts num">${fs.sSavings} / 25 б.</span>
+                <span class="factor-pts num">${fs.sSavings} / 35 б.</span>
               </div>
               <div class="finscore-progress-bar">
-                <div class="finscore-progress-fill" style="width: ${(fs.sSavings / 25) * 100}%; background: #34D399;"></div>
+                <div class="finscore-progress-fill" style="width: ${(fs.sSavings / 35) * 100}%; background: #34D399;"></div>
               </div>
               <div class="factor-subtext">Вы сохраняете <strong>${fs.savingsRate}%</strong> от совокупного дохода (рекомендуемый ориентир: от 20%).</div>
             </div>
@@ -7284,10 +7177,10 @@ function renderFinScoreModal() {
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
                 <span class="factor-name">${icon("chart", 13)} Контроль лимитов бюджета</span>
-                <span class="factor-pts num">${fs.sBudgets} / 25 б.</span>
+                <span class="factor-pts num">${fs.sBudgets} / 35 б.</span>
               </div>
               <div class="finscore-progress-bar">
-                <div class="finscore-progress-fill" style="width: ${(fs.sBudgets / 25) * 100}%; background: #60A5FA;"></div>
+                <div class="finscore-progress-fill" style="width: ${(fs.sBudgets / 35) * 100}%; background: #60A5FA;"></div>
               </div>
               <div class="factor-subtext">${data.budgets.length > 0 ? `Установлено <strong>${data.budgets.length} лимитов</strong> на расходы.` : 'Лимиты еще не настроены. Добавьте лимиты во вкладке «Бюджет».'}</div>
             </div>
@@ -7295,10 +7188,10 @@ function renderFinScoreModal() {
             <div class="finscore-factor-row">
               <div class="finscore-factor-head">
                 <span class="factor-name">${icon("gem", 13)} Профицит и чистота капитала</span>
-                <span class="factor-pts num">${fs.sCapital} / 25 б.</span>
+                <span class="factor-pts num">${fs.sCapital} / 30 б.</span>
               </div>
               <div class="finscore-progress-bar">
-                <div class="finscore-progress-fill" style="width: ${(fs.sCapital / 25) * 100}%; background: ${fs.bal >= 0 ? '#10B981' : '#F43F5E'};"></div>
+                <div class="finscore-progress-fill" style="width: ${(fs.sCapital / 30) * 100}%; background: ${fs.bal >= 0 ? '#10B981' : '#F43F5E'};"></div>
               </div>
               <div class="factor-subtext">${fs.bal >= 0 ? 'Чистый баланс положителен, нет кассовых разрывов.' : 'Внимание: расходы превысили доходы (дефицит капитала).'}</div>
             </div>
