@@ -68,6 +68,15 @@ async function initDb() {
       } catch (migErr) {
         console.warn("Transfer constraint migration notice:", migErr.message);
       }
+      try {
+        await db.query(`
+          ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS display_name text DEFAULT '';
+          ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS avatar text DEFAULT 'default';
+          ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS currency text DEFAULT 'RUB';
+        `);
+      } catch (usErr) {
+        console.warn("User settings migration notice:", usErr.message);
+      }
       console.log("Database schema initialized successfully.");
     }
   } catch (e) {
@@ -1122,9 +1131,19 @@ app.get("/api/me", auth, (req, res) => {
 
 app.get("/api/profile", auth, async (req, res) => {
   try {
-    const r = await db.query("select display_name, avatar, currency from user_settings where user_id=$1", [req.user.id]);
-    if (r.rows[0]) {
-      res.json(r.rows[0]);
+    let r;
+    try {
+      r = await db.query("select display_name, avatar, currency from user_settings where user_id=$1", [req.user.id]);
+    } catch (colErr) {
+      console.warn("Retrying profile fetch without currency column:", colErr.message);
+      r = await db.query("select display_name, avatar from user_settings where user_id=$1", [req.user.id]);
+    }
+    if (r && r.rows[0]) {
+      res.json({
+        display_name: r.rows[0].display_name || "",
+        avatar: r.rows[0].avatar || "default",
+        currency: r.rows[0].currency || "RUB"
+      });
     } else {
       res.json({ display_name: "", avatar: "default", currency: "RUB" });
     }
@@ -1142,17 +1161,35 @@ app.post("/api/profile", auth, async (req, res) => {
     const av = String(avatar || "default").slice(0, 500000).trim();
     const cur = ["RUB", "USD", "EUR", "KZT"].includes(currency) ? currency : "RUB";
 
-    const r = await db.query(
-      `insert into user_settings(user_id, display_name, avatar, currency, updated_at)
-       values($1, $2, $3, $4, now())
-       on conflict(user_id) do update set
-         display_name=excluded.display_name,
-         avatar=excluded.avatar,
-         currency=excluded.currency,
-         updated_at=now()
-       returning display_name, avatar, currency`,
-      [req.user.id, name, av, cur]
-    );
+    let r;
+    try {
+      r = await db.query(
+        `insert into user_settings(user_id, display_name, avatar, currency, updated_at)
+         values($1, $2, $3, $4, now())
+         on conflict(user_id) do update set
+           display_name=excluded.display_name,
+           avatar=excluded.avatar,
+           currency=excluded.currency,
+           updated_at=now()
+         returning display_name, avatar, currency`,
+        [req.user.id, name, av, cur]
+      );
+    } catch (colErr) {
+      console.warn("Retrying profile save without currency column:", colErr.message);
+      r = await db.query(
+        `insert into user_settings(user_id, display_name, avatar, updated_at)
+         values($1, $2, $3, now())
+         on conflict(user_id) do update set
+           display_name=excluded.display_name,
+           avatar=excluded.avatar,
+           updated_at=now()
+         returning display_name, avatar`,
+        [req.user.id, name, av]
+      );
+      if (r && r.rows[0]) {
+        r.rows[0].currency = cur;
+      }
+    }
     res.json(r.rows[0]);
   } catch (e) {
     fail(res, e);
