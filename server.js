@@ -2576,10 +2576,10 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
   const monthlyNeeds = Math.round(needsExp > 0 ? needsExp : monthlyExp * 0.55);
   const monthlySurplus = Math.max(0, monthlyInc - monthlyExp);
 
-  // Cushion & Runway
-  const cushionGoal = (goals || []).find(g => /подушк|резерв|безопасн/i.test(g.name || ''));
-  const liquidCushion = cushionGoal ? Number(cushionGoal.saved_amount || 0) : Math.max(0, totalCapital);
-  const runwayMonths = monthlyNeeds > 0 ? (liquidCushion / monthlyNeeds).toFixed(1) : "3.0";
+  // Capital & Autonomy
+  const reserveGoal = (goals || []).find(g => /резерв|безопасн|капитал/i.test(g.name || ''));
+  const liquidReserve = reserveGoal ? Number(reserveGoal.saved_amount || 0) : Math.max(0, totalCapital);
+  const autonomyMonths = monthlyNeeds > 0 ? (liquidReserve / monthlyNeeds).toFixed(1) : "3.0";
 
   // Parse numbers from user input (e.g. 100к, 50000, 100.000)
   let askedAmount = null;
@@ -2595,7 +2595,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
   }
 
   // ─── 0. АГЕНТНЫЕ ДЕЙСТВИЯ (DIRECT AGENTIC ACTION ENGINE) ───
-  // Создание цели: "Создай цель на отпуск 150000", "Поставь цель подушка 300к", "Хочу накопить 500к на машину"
+  // Создание цели: "Создай цель на отпуск 150000", "Поставь цель резерв 300к", "Хочу накопить 500к на машину"
   if (/(?:создай|поставь|добавь|хочу накопить|сделай цель)\s+(?:цель|накопление|накопить)?/i.test(q) || (/(?:цель|накопить)\s+(?:на|в)/i.test(q) && askedAmount)) {
     const amt = askedAmount || 100000;
     let goalName = 'Финансовая цель';
@@ -2654,11 +2654,11 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
       `[ACTION_EXEC:create_tx:{"type":"${isIncome ? 'income' : 'expense'}","amount":${amt},"category":"${cat}","description":"${desc}"}]`;
   }
 
-  // Пополнение цели: "Пополни цель отпуск на 10000", "Отложи 5000 в подушку"
-  if (/(?:пополни|отложи|закинь|переведи)\s+(?:в|на)?\s*(?:цель|подушку|копилку)/i.test(q) && askedAmount) {
+  // Пополнение цели: "Пополни цель отпуск на 10000", "Отложи 5000 в резерв"
+  if (/(?:пополни|отложи|закинь|переведи)\s+(?:в|на)?\s*(?:цель|подушку|копилку|резерв)/i.test(q) && askedAmount) {
     const amt = askedAmount;
-    let goalName = (goals && goals[0]) ? goals[0].name : 'Подушка безопасности';
-    const gMatch = question.match(/(?:цель|копилку|подушку)\s*([а-яёa-z0-9\s-]+?)(?:\s*(?:на|сумма)?\s*\d|\s*$)/i);
+    let goalName = (goals && goals[0]) ? goals[0].name : 'Финансовый резерв';
+    const gMatch = question.match(/(?:цель|копилку|подушку|резерв)\s*([а-яёa-z0-9\s-]+?)(?:\s*(?:на|сумма)?\s*\d|\s*$)/i);
     if (gMatch && gMatch[1] && gMatch[1].trim().length > 1) {
       goalName = gMatch[1].trim();
     }
@@ -2668,7 +2668,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
       `[ACTION_EXEC:deposit_goal:{"name":"${goalName}","amount":${amt}}]`;
   }
 
-  // Удаление цели: "Удали цель отпуск", "Сними цель подушка", "Удали все цели"
+  // Удаление цели: "Удали цель отпуск", "Сними цель резерв", "Удали все цели"
   if (/(?:удали|стереть|сними|убери|закрой)\s+(?:цель|накопление|цели)/i.test(q)) {
     let goalName = '';
     const gMatch = question.match(/(?:цель|накопление|цели)\s+([а-яёa-z0-9\s-]+?)(?:\s*$|\s*[.,!])/i);
@@ -2766,33 +2766,33 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
       `[ACTION:analytics:donut:Открыть структуру категорий]`;
   }
 
-  // 3. ЗАПАС ПРОЧНОСТИ / ПОДУШКА БЕЗОПАСНОСТИ / RUNWAY
-  if (/подушк|резерв|хватит|runway|если уволят|чп|запас|безопасн|кризис/i.test(q)) {
+  // 3. АНАЛИЗ КАПИТАЛА & СВОБОДНЫЙ ОСТАТОК
+  if (/резерв|хватит|если уволят|чп|запас|безопасн|кризис|капитал|подушк|runway/i.test(q)) {
     const target3mo = monthlyNeeds * 3;
     const target6mo = monthlyNeeds * 6;
     const target12mo = monthlyNeeds * 12;
 
-    let verdictBadge = "🛡️ Запас прочности надежный";
-    if (Number(runwayMonths) < 2) verdictBadge = "⚠️ Зона повышенного риска (подушка менее 2 месяцев)";
-    else if (Number(runwayMonths) < 4) verdictBadge = "⚡ Базовый уровень безопасности";
+    let verdictBadge = "🛡️ Капитал устойчив и надежен";
+    if (Number(autonomyMonths) < 2) verdictBadge = "⚠️ Зона повышенного риска (автономия менее 2 месяцев)";
+    else if (Number(autonomyMonths) < 4) verdictBadge = "⚡ Базовый уровень финансовой автономии";
     else verdictBadge = "🏆 Превосходный уровень автономии капитала";
 
-    const diffTo6mo = Math.max(0, target6mo - liquidCushion);
+    const diffTo6mo = Math.max(0, target6mo - liquidReserve);
     const monthsToCover = monthlySurplus > 0 ? Math.ceil(diffTo6mo / monthlySurplus) : 6;
 
-    return `🛡️ **Аудит резервного капитала & Запас прочности (Runway):**\n\n` +
+    return `🛡️ **Анализ доступного капитала & Уровень автономии:**\n\n` +
       `• Базовые обязательные расходы на жизнь: **${monthlyNeeds.toLocaleString('ru-RU')} ₽ в месяц**\n` +
-      `• Доступный ликвидный резерв: **${Math.round(liquidCushion).toLocaleString('ru-RU')} ₽**\n` +
-      `• **Текущий запас автономии (Runway):** **${runwayMonths} мес.** без каких-либо доходов\n\n` +
+      `• Доступный ликвидный капитал: **${Math.round(liquidReserve).toLocaleString('ru-RU')} ₽**\n` +
+      `• **Текущий запас автономии:** **${autonomyMonths} мес.** автономной жизни\n\n` +
       `${verdictBadge}\n\n` +
-      `🎯 **Золотые стандарты финансовой безопасности:**\n` +
-      `1. **3 месяца (Минимум):** ${target3mo.toLocaleString('ru-RU')} ₽ — защита от кассовых разрывов и смены работы.\n` +
-      `2. **6 месяцев (Идеал):** ${target6mo.toLocaleString('ru-RU')} ₽ — психологическое спокойствие и свобода выбора.\n` +
-      `3. **12 месяцев (Крепость):** ${target12mo.toLocaleString('ru-RU')} ₽ — полная независимость от любых рыночных кризисов.\n\n` +
+      `🎯 **Ориентиры автономности капитала:**\n` +
+      `1. **3 месяца (Минимум):** ${target3mo.toLocaleString('ru-RU')} ₽ — защита от непредвиденных трат.\n` +
+      `2. **6 месяцев (Идеал):** ${target6mo.toLocaleString('ru-RU')} ₽ — спокойствие и свобода выбора.\n` +
+      `3. **12 месяцев (Крепость):** ${target12mo.toLocaleString('ru-RU')} ₽ — полная независимость от любых рыночных колебаний.\n\n` +
       (diffTo6mo > 0
-        ? `💡 Чтобы довести подушку до идеальных 6 месяцев, не хватает **${diffTo6mo.toLocaleString('ru-RU')} ₽**. При текущей норме сбережений вы сформируете её за **~${monthsToCover} мес.**\n\n`
-        : `✨ Ваша подушка уже полностью перекрывает полугодовой уровень базовых расходов! Время направлять излишки в инвестиционные цели.\n\n`) +
-      `[ACTION:goals:gl-cushion:Пополнить подушку безопасности]\n` +
+        ? `💡 Для достижения 6 месяцев запаса целевой объем капитала составляет **${target6mo.toLocaleString('ru-RU')} ₽** (осталось **${diffTo6mo.toLocaleString('ru-RU')} ₽**). При текущей норме сбережений срок составит **~${monthsToCover} мес.**\n\n`
+        : `✨ Ваш капитал полностью перекрывает полугодовой уровень базовых расходов! Время направлять средства в долгосрочные инвестиции.\n\n`) +
+      `[ACTION:goals:gl-reserve:Пополнить финансовый резерв]\n` +
       `[ACTION:budgets:bg-needs:Проверить обязательные лимиты]`;
   }
 
@@ -2802,7 +2802,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
     const needs = Math.round(baseInc * 0.50);
     const wants = Math.round(baseInc * 0.30);
     const savings = Math.round(baseInc * 0.20);
-    const safetyCushionShare = Math.round(savings * 0.50);
+    const savingsReserveShare = Math.round(savings * 0.50);
     const investShare = Math.round(savings * 0.50);
 
     return `⚖️ **Зарплатный ритуал 50/30/20** (для суммы ${baseInc.toLocaleString('ru-RU')} ₽):\n\n` +
@@ -2812,7 +2812,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
       `2. **30% — Личный кайф и образ жизни:** **${wants.toLocaleString('ru-RU')} ₽**\n` +
       `   • Рестораны, покупки, развлечения, такси, хобби (тратить без чувства вины!).\n\n` +
       `3. **20% — Сначала заплати себе (Будущее):** **${savings.toLocaleString('ru-RU')} ₽**\n` +
-      `   • В резервную подушку: **+${safetyCushionShare.toLocaleString('ru-RU')} ₽**\n` +
+      `   • В накопления и цели: **+${savingsReserveShare.toLocaleString('ru-RU')} ₽**\n` +
       `   • В инвестиции / главную цель: **+${investShare.toLocaleString('ru-RU')} ₽**\n\n` +
       `💡 **Главное правило:** откладывайте 20% в первые 15 минут после поступления денег. То, что осталось — можно тратить в своё удовольствие с чистой совестью!\n\n` +
       `[ACTION:goals:gl-split:Отложить 20% в цель]\n` +
@@ -2854,11 +2854,10 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
 
   // 6. КОМПЛЕКСНЫЙ АУДИТ FINSCORE (0-100)
   if (/finscore|аудит|диагностик|здоровь|оценк|как мои дела|рейтинг|статус/i.test(q)) {
-    const scoreCushion = Math.min(25, Math.round(Number(runwayMonths) * 6));
-    const scoreSavings = Math.min(25, Math.max(0, Math.round(savingsRate)));
-    const scoreBudgets = budgets.length > 0 ? 25 : 12;
-    const scoreCapital = totalCapital >= 0 ? 25 : 5;
-    const totalScore = scoreCushion + scoreSavings + scoreBudgets + scoreCapital;
+    const scoreSavings = Math.min(35, Math.max(0, Math.round((savingsRate / 40) * 35)));
+    const scoreBudgets = budgets.length > 0 ? 35 : 15;
+    const scoreCapital = totalCapital > 0 ? 30 : (totalCapital === 0 ? 15 : 5);
+    const totalScore = Math.max(15, Math.min(100, scoreSavings + scoreBudgets + scoreCapital));
 
     let grade = 'B+ • Устойчивый уровень';
     if (totalScore >= 85) grade = 'A+ • Превосходная финансовая форма';
@@ -2866,13 +2865,12 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
 
     return `🩺 **Полная экспресс-диагностика FinScore (${totalScore}/100):**\n\n` +
       `Рейтинг финансовой устойчивости: **${grade}**\n\n` +
-      `Разбор 4 фундаментальных опор капитала:\n` +
-      `1. **Запас прочности (${scoreCushion}/25 б):** Подушка на **${runwayMonths} мес.** базовых расходов.\n` +
-      `2. **Норма сбережений (${scoreSavings}/25 б):** Сберегается **${savingsRate}%** от поступающего дохода.\n` +
-      `3. **Бюджетная дисциплина (${scoreBudgets}/25 б):** Настроено **${budgets.length}** лимитов категорий.\n` +
-      `4. **Динамика капитала (${scoreCapital}/25 б):** Общий капитал **${totalCapital.toLocaleString('ru-RU')} ₽**.\n\n` +
+      `Разбор 3 ключевых факторов капитала:\n` +
+      `1. **Норма сбережений (${scoreSavings}/35 б):** Сберегается **${savingsRate}%** от поступающего дохода.\n` +
+      `2. **Бюджетная дисциплина (${scoreBudgets}/35 б):** Настроено **${budgets.length}** лимитов категорий.\n` +
+      `3. **Профицит капитала (${scoreCapital}/30 б):** Общий капитал **${totalCapital.toLocaleString('ru-RU')} ₽**.\n\n` +
       `🎯 **Главный рычаг роста прямо сейчас:**\n` +
-      (scoreBudgets < 20 ? `• Зафиксируйте лимиты на категории в разделе «Бюджеты», чтобы добавить +12 баллов к FinScore.\n` : `• Автоматизируйте пополнение инвестиционной цели в день зарплаты, чтобы выйти в элитный клуб 90+ FinScore.\n\n`) +
+      (scoreBudgets < 25 ? `• Зафиксируйте лимиты на категории в разделе «Бюджеты», чтобы добавить до +20 баллов к FinScore.\n` : `• Автоматизируйте пополнение целей в день дохода, чтобы выйти в элитный клуб 90+ FinScore.\n\n`) +
       `[ACTION:budgets:bg-all:Настроить лимиты бюджетов]\n` +
       `[ACTION:goals:gl-all:Проверить цели накоплений]`;
   }
@@ -2905,7 +2903,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
     `• Свободно на расходы: **${freeCapital.toLocaleString('ru-RU')} ₽**\n` +
     `• В целях: **${savedInGoals.toLocaleString('ru-RU')} ₽**\n` +
     `• Норма сбережений (Savings Rate): **${savingsRate}%**\n` +
-    `• Запас автономности (Runway): **${runwayMonths} мес.**\n` +
+    `• Автономия капитала: **${autonomyMonths} мес.**\n` +
     `• Активных целей: **${goals.length}** | Лимитов бюджета: **${budgets.length}**\n\n` +
     `С чем сегодня поработаем?\n` +
     `• Спросите: *«Когда я выйду на FIRE?»* — рассчитаю целевой капитал и срок.\n` +
@@ -2924,7 +2922,7 @@ function buildSystemPrompt(transactions, budgets, goals, adjustment = 0) {
   const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals, adjustment);
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
   const monthlyExp = exp > 0 ? Math.max(exp, 35000) : 45000;
-  const runwayMonths = monthlyExp > 0 ? (Math.max(0, totalCapital) / monthlyExp).toFixed(1) : "0.0";
+  const autonomyMonths = monthlyExp > 0 ? (Math.max(0, totalCapital) / monthlyExp).toFixed(1) : "0.0";
   const fireNumber = Math.round(monthlyExp * 12 * 25);
 
   // --- Per-category breakdown ---
@@ -3032,7 +3030,7 @@ function buildSystemPrompt(transactions, budgets, goals, adjustment = 0) {
 • Свободно на расходы: ${freeCapital.toLocaleString("ru-RU")} ₽
 • В целях: ${savedInGoals.toLocaleString("ru-RU")} ₽
 • Норма сбережений (Savings Rate): ${savingsRate}%
-• Runway (автономия без дохода): ${runwayMonths} мес.
+• Автономия капитала (без дохода): ${autonomyMonths} мес.
 • Целевой капитал FIRE (4% SWR): ${fireNumber.toLocaleString("ru-RU")} ₽
 
 ТЕКУЩИЙ МЕСЯЦ (${monthName(curMonth)}):
@@ -3097,7 +3095,7 @@ ${goalsSummary}
 9. ⚡ АГЕНТНЫЕ КОМАНДЫ ДЕЙСТВИЯ (ПОЛНЫЙ ИНТЕРФЕЙС УПРАВЛЕНИЯ СИСТЕМОЙ FINKAIF):
    Ты умеешь НЕ ПРОСТО говорить, а РЕАЛЬНО УПРАВЛЯТЬ объектами в приложении FinKaif (создавать, пополнять, удалять цели, бюджеты и операции)!
    Когда пользователь просит:
-   • Создать/поставить цель (накопить на что-то, цель на отпуск/машину/подушку) — ОБЯЗАТЕЛЬНО включи в ответ строку:
+   • Создать/поставить цель (накопить на что-то, цель на отпуск/машину/резерв) — ОБЯЗАТЕЛЬНО включи в ответ строку:
      [ACTION_EXEC:create_goal:{"name":"Название цели","target_amount":Сумма,"saved_amount":0}]
    • Удалить цель / снять цель (например, «удали цель Отпуск», «удали цель ...») — ОБЯЗАТЕЛЬНО включи строку:
      [ACTION_EXEC:delete_goal:{"name":"Название цели"}]
