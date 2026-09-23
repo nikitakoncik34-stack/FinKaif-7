@@ -72,6 +72,7 @@ async function initDb() {
     }
   } catch (e) {
     console.error("Database schema init error:", e.message);
+    throw e;
   }
 }
 // ============================================================================
@@ -1032,6 +1033,15 @@ app.post("/api/profile", auth, async (req, res) => {
 
 const tables = { transactions: "transactions", budgets: "budgets", goals: "goals", subscriptions: "subscriptions" };
 
+app.get("/api/capital-state", auth, async (req, res) => {
+  try {
+    const r = await db.query("select free_adjustment from user_capital_state where user_id=$1", [req.user.id]);
+    res.json({ free_adjustment: Number(r.rows[0]?.free_adjustment || 0) });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 app.get("/api/:resource", auth, async (req, res) => {
   try {
     const table = tables[req.params.resource];
@@ -1990,17 +2000,66 @@ app.post("/api/budgets", auth, async (req, res) => {
   }
 });
 
+function goalCents(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 999999999999.99 ? Math.round(n * 100) : null;
+}
+
+function signedMoneyCents(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+async function withCapitalLock(userId, action) {
+  const client = await db.connect();
+  try {
+    await client.query("begin");
+    await client.query("insert into user_capital_state(user_id,free_adjustment) values($1,0) on conflict do nothing", [userId]);
+    const state = await client.query("select free_adjustment from user_capital_state where user_id=$1 for update", [userId]);
+    const result = await action(client, signedMoneyCents(state.rows[0].free_adjustment));
+    await client.query("commit");
+    return result;
+  } catch (e) {
+    await client.query("rollback");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function moveGoalFunds(client, userId, adjustmentCents, deltaCents) {
+  let nextAdjustmentCents = adjustmentCents;
+  if (deltaCents > 0) {
+    const ledger = await client.query(
+      "select coalesce(sum(case when type='income' then amount when type='expense' then -amount else 0 end),0) as net from transactions where user_id=$1",
+      [userId]
+    );
+    const freeCents = goalCents(Math.max(0, Number(ledger.rows[0].net) + adjustmentCents / 100));
+    nextAdjustmentCents -= Math.min(deltaCents, freeCents);
+  } else {
+    nextAdjustmentCents -= deltaCents;
+  }
+  if (nextAdjustmentCents !== adjustmentCents) {
+    await client.query("update user_capital_state set free_adjustment=$1 where user_id=$2", [nextAdjustmentCents / 100, userId]);
+  }
+}
+
 app.post("/api/goals", auth, async (req, res) => {
   try {
     const x = req.body;
-    if (!String(x.name || "").trim() || !(Number(x.target_amount) > 0)) {
+    const savedCents = goalCents(x.saved_amount ?? 0);
+    if (!String(x.name || "").trim() || !(Number(x.target_amount) > 0) || savedCents === null) {
       return res.status(400).json({ error: "Проверьте название и сумму цели." });
     }
-    const r = await db.query(
-      "insert into goals(user_id,name,target_amount,saved_amount) values($1,$2,$3,$4) returning *",
-      [req.user.id, String(x.name).trim(), Number(x.target_amount), Math.max(0, Number(x.saved_amount) || 0)]
-    );
-    res.json(r.rows[0]);
+    const goal = await withCapitalLock(req.user.id, async (client, adjustmentCents) => {
+      const r = await client.query(
+        "insert into goals(user_id,name,target_amount,saved_amount) values($1,$2,$3,$4) returning *",
+        [req.user.id, String(x.name).trim(), Number(x.target_amount), savedCents / 100]
+      );
+      await moveGoalFunds(client, req.user.id, adjustmentCents, savedCents);
+      return r.rows[0];
+    });
+    res.json(goal);
   } catch (e) {
     fail(res, e);
   }
@@ -2009,12 +2068,50 @@ app.post("/api/goals", auth, async (req, res) => {
 app.put("/api/goals/:id", auth, async (req, res) => {
   try {
     const x = req.body;
-    const r = await db.query(
-      "update goals set saved_amount=coalesce($1, saved_amount), target_amount=coalesce($2, target_amount), name=coalesce($3, name) where id=$4 and user_id=$5 returning *",
-      [x.saved_amount !== undefined ? Math.max(0, Number(x.saved_amount)) : null, x.target_amount ? Number(x.target_amount) : null, x.name ? String(x.name).trim() : null, req.params.id, req.user.id]
-    );
-    if (!r.rows[0]) return res.status(404).json({ error: "Цель не найдена." });
-    res.json(r.rows[0]);
+    const newSavedCents = x.saved_amount === undefined ? undefined : goalCents(x.saved_amount);
+    if (newSavedCents === null || (x.target_amount !== undefined && !(Number(x.target_amount) > 0))) {
+      return res.status(400).json({ error: "Проверьте сумму цели." });
+    }
+    const goal = await withCapitalLock(req.user.id, async (client, adjustmentCents) => {
+      const old = await client.query("select * from goals where id=$1 and user_id=$2 for update", [req.params.id, req.user.id]);
+      if (!old.rows[0]) return null;
+      const previousCents = goalCents(old.rows[0].saved_amount);
+      const savedCents = newSavedCents ?? previousCents;
+      const r = await client.query(
+        "update goals set saved_amount=$1,target_amount=coalesce($2,target_amount),name=coalesce($3,name) where id=$4 and user_id=$5 returning *",
+        [savedCents / 100, x.target_amount === undefined ? null : Number(x.target_amount), x.name ? String(x.name).trim() : null, req.params.id, req.user.id]
+      );
+      await moveGoalFunds(client, req.user.id, adjustmentCents, savedCents - previousCents);
+      return r.rows[0];
+    });
+    if (!goal) return res.status(404).json({ error: "Цель не найдена." });
+    res.json(goal);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.post("/api/goals/:id/topup", auth, async (req, res) => {
+  try {
+    const amountCents = goalCents(req.body?.amount);
+    const expectedSavedCents = goalCents(req.body?.expected_saved_amount);
+    if (!amountCents || !Object.hasOwn(req.body || {}, "expected_saved_amount") || expectedSavedCents === null) {
+      return res.status(400).json({ error: "Введите корректную сумму пополнения." });
+    }
+    const goal = await withCapitalLock(req.user.id, async (client, adjustmentCents) => {
+      const old = await client.query("select * from goals where id=$1 and user_id=$2 for update", [req.params.id, req.user.id]);
+      if (!old.rows[0]) return null;
+      if (goalCents(old.rows[0].saved_amount) !== expectedSavedCents) return { conflict: true };
+      const r = await client.query(
+        "update goals set saved_amount=saved_amount+$1 where id=$2 and user_id=$3 returning *",
+        [amountCents / 100, req.params.id, req.user.id]
+      );
+      await moveGoalFunds(client, req.user.id, adjustmentCents, amountCents);
+      return r.rows[0];
+    });
+    if (!goal) return res.status(404).json({ error: "Цель не найдена." });
+    if (goal.conflict) return res.status(409).json({ error: "Сумма цели изменилась. Обновите страницу и повторите пополнение." });
+    res.json(goal);
   } catch (e) {
     fail(res, e);
   }
@@ -2181,6 +2278,23 @@ app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
   }
 });
 
+app.delete("/api/goals/:id", auth, async (req, res) => {
+  try {
+    const deleted = await withCapitalLock(req.user.id, async (client, adjustmentCents) => {
+      const old = await client.query("select saved_amount from goals where id=$1 and user_id=$2 for update", [req.params.id, req.user.id]);
+      if (!old.rows[0]) return false;
+      const savedCents = goalCents(old.rows[0].saved_amount);
+      await client.query("delete from goals where id=$1 and user_id=$2", [req.params.id, req.user.id]);
+      await moveGoalFunds(client, req.user.id, adjustmentCents, -savedCents);
+      return true;
+    });
+    if (!deleted) return res.status(404).json({ error: "Цель не найдена." });
+    res.json({ ok: true });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 app.delete("/api/:resource/:id", auth, async (req, res) => {
   try {
     const table = tables[req.params.resource];
@@ -2242,7 +2356,7 @@ function getPoliteProfanityReply() {
   return POLITE_FINANCIAL_RESPONSES[idx];
 }
 
-function getCapitalSnapshot(transactions = [], goals = []) {
+function getCapitalSnapshot(transactions = [], goals = [], adjustment = 0) {
   const toCents = (value) => {
     const amount = Number(value);
     return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
@@ -2257,17 +2371,16 @@ function getCapitalSnapshot(transactions = [], goals = []) {
     (sum, goal) => sum + Math.max(0, toCents(goal?.saved_amount)),
     0
   );
-  const totalCapitalCents = ledgerCapitalCents >= 0
-    ? Math.max(ledgerCapitalCents, savedInGoalsCents)
-    : savedInGoalsCents + ledgerCapitalCents;
+  const freeCapitalCents = ledgerCapitalCents + toCents(adjustment);
+  const totalCapitalCents = savedInGoalsCents + Math.max(0, freeCapitalCents);
   return {
     totalCapital: totalCapitalCents / 100,
     savedInGoals: savedInGoalsCents / 100,
-    freeCapital: (totalCapitalCents - savedInGoalsCents) / 100
+    freeCapital: freeCapitalCents / 100
   };
 }
 
-function generateBuiltinAdvice(question, transactions = [], budgets = [], goals = []) {
+function generateBuiltinAdvice(question, transactions = [], budgets = [], goals = [], adjustment = 0) {
   if (containsProfanity(question)) {
     return getPoliteProfanityReply();
   }
@@ -2278,7 +2391,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
   const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount || 0), 0);
   const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount || 0), 0);
   const balance = inc - exp;
-  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals);
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals, adjustment);
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (balance > 0 ? 35 : 0);
 
   // Category Breakdown
@@ -2647,13 +2760,13 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
     `[ACTION:analytics:all:Открыть полный финансовый отчёт]`;
 }
 
-function buildSystemPrompt(transactions, budgets, goals) {
+function buildSystemPrompt(transactions, budgets, goals, adjustment = 0) {
   const safeSum = (arr) => arr.reduce((s, x) => s + Math.round(Number(x.amount) * 100), 0) / 100;
 
   const inc = safeSum(transactions.filter(x => x.type === "income"));
   const exp = safeSum(transactions.filter(x => x.type === "expense"));
   const balance = Math.round((inc - exp) * 100) / 100;
-  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals);
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals, adjustment);
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
   const monthlyExp = exp > 0 ? Math.max(exp, 35000) : 45000;
   const runwayMonths = monthlyExp > 0 ? (Math.max(0, totalCapital) / monthlyExp).toFixed(1) : "0.0";
@@ -2944,18 +3057,21 @@ const assistantHandler = async (req, res) => {
     let budgets = [];
     let goals = [];
     let history = [];
+    let capitalAdjustment = 0;
 
     try {
-      const [tr, bu, go, prevMsgs] = await Promise.all([
-        db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc limit 250", [req.user.id]),
+      const [tr, bu, go, prevMsgs, capitalState] = await Promise.all([
+        db.query("select type,category,amount,occurred_on from transactions where user_id=$1 order by occurred_on desc", [req.user.id]),
         db.query("select category,limit_amount from budgets where user_id=$1", [req.user.id]),
         db.query("select name,target_amount,saved_amount from goals where user_id=$1", [req.user.id]),
-        db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 20", [req.user.id])
+        db.query("select role,content from chat_messages where user_id=$1 order by created_at desc limit 20", [req.user.id]),
+        db.query("select free_adjustment from user_capital_state where user_id=$1", [req.user.id])
       ]);
       transactions = tr.rows || [];
       budgets = bu.rows || [];
       goals = go.rows || [];
       history = (prevMsgs.rows || []).reverse();
+      capitalAdjustment = Number(capitalState.rows[0]?.free_adjustment || 0);
     } catch (dbReadErr) {
       console.warn("DB read error in assistant:", dbReadErr.message);
     }
@@ -2972,7 +3088,7 @@ const assistantHandler = async (req, res) => {
     }
 
     let answer = "";
-    const prompt = buildSystemPrompt(transactions, budgets, goals);
+    const prompt = buildSystemPrompt(transactions, budgets, goals, capitalAdjustment);
 
     try {
       if (geminiKey) {
@@ -3007,15 +3123,15 @@ const assistantHandler = async (req, res) => {
         });
         answer = r.choices[0]?.message?.content || "Не удалось получить ответ от нейросети.";
       } else {
-        answer = generateBuiltinAdvice(question, transactions, budgets, goals);
+        answer = generateBuiltinAdvice(question, transactions, budgets, goals, capitalAdjustment);
       }
     } catch (aiErr) {
       console.warn("External AI call error, falling back to smart built-in advice:", aiErr.message);
-      answer = generateBuiltinAdvice(question, transactions, budgets, goals);
+      answer = generateBuiltinAdvice(question, transactions, budgets, goals, capitalAdjustment);
     }
 
     if (!answer) {
-      answer = generateBuiltinAdvice(question, transactions, budgets, goals);
+      answer = generateBuiltinAdvice(question, transactions, budgets, goals, capitalAdjustment);
     }
 
     try {
@@ -3037,4 +3153,6 @@ app.post("/api/chat", auth, aiLimiter, assistantHandler);
 
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-app.listen(port, "0.0.0.0", () => console.log(`Finkaif is running on port ${port}`));
+initDb()
+  .then(() => app.listen(port, "0.0.0.0", () => console.log(`Finkaif is running on port ${port}`)))
+  .catch(async () => { await db.end(); process.exitCode = 1; });
