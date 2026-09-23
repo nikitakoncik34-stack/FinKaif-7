@@ -18,10 +18,11 @@ left join (select user_id,sum(saved_amount) as saved from goals group by user_id
 left join (select user_id,sum(case when type='income' then amount when type='expense' then -amount else 0 end) as net from transactions group by user_id) t on t.user_id=u.id
 on conflict(user_id) do nothing;
 create table if not exists chat_messages(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,role text not null check(role in ('user','assistant')),content text not null,created_at timestamptz not null default now());
-create table if not exists user_settings(user_id uuid primary key references users(id) on delete cascade,display_name text default '',avatar text default 'default',currency text default 'RUB',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table if not exists user_settings(user_id uuid primary key references users(id) on delete cascade,display_name text default '',avatar text default '💎',currency text default 'RUB',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
 alter table user_settings add column if not exists display_name text default '';
-alter table user_settings add column if not exists avatar text default 'default';
+alter table user_settings add column if not exists avatar text default '💎';
 alter table user_settings add column if not exists currency text default 'RUB';
+update user_settings set avatar='💎' where avatar='default' or avatar='' or avatar is null;
 create table if not exists subscriptions(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,name text not null,amount numeric(14,2) not null check(amount>0),category text not null default 'Подписки',day_of_month integer not null default 1,created_at timestamptz not null default now());
 create index if not exists transactions_user_date on transactions(user_id,occurred_on desc);create index if not exists messages_user_date on chat_messages(user_id,created_at);create index if not exists subscriptions_user on subscriptions(user_id);
 
