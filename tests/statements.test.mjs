@@ -154,6 +154,17 @@ test('ledger reconciliation requires the imported multiplicity to be newly prese
 
 test('capital contract: total includes goals while free capital subtracts allocated savings', () => {
   const c = client();
+  const serverCapital = vm.createContext({});
+  vm.runInContext(section(serverSource, 'function getCapitalSnapshot', 'function generateBuiltinAdvice'), serverCapital);
+  const goalOnly = c.getCapitalSnapshot([], [{saved_amount:58888}]);
+  assert.equal(goalOnly.totalCapital, 58888);
+  assert.equal(goalOnly.savedInGoals, 58888);
+  assert.equal(goalOnly.freeCapital, 0);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(serverCapital.getCapitalSnapshot([], [{saved_amount:58888}]))),
+    { totalCapital: 58888, savedInGoals: 58888, freeCapital: 0 }
+  );
+
   for (let i = 1; i <= 250; i++) {
     const incomeCents = i * 9973;
     const expenseCents = i * 3187;
@@ -163,10 +174,18 @@ test('capital contract: total includes goals while free capital subtracts alloca
       {type:'expense', amount:expenseCents / 100},
       {type:'transfer', amount:(i * 500) / 100}
     ], [{saved_amount:goalCents / 100}]);
-    assert.equal(Math.round(snapshot.totalCapital * 100), incomeCents - expenseCents);
+    const ledgerCents = incomeCents - expenseCents;
+    assert.equal(Math.round(snapshot.totalCapital * 100), Math.max(ledgerCents, goalCents));
     assert.equal(Math.round(snapshot.savedInGoals * 100), goalCents);
-    assert.equal(Math.round(snapshot.freeCapital * 100), incomeCents - expenseCents - goalCents);
+    assert.equal(Math.round(snapshot.freeCapital * 100), Math.max(ledgerCents, goalCents) - goalCents);
   }
+
+  const withLiability = c.getCapitalSnapshot(
+    [{type:'expense', amount:1000}],
+    [{saved_amount:58888}]
+  );
+  assert.equal(withLiability.totalCapital, 57888);
+  assert.equal(withLiability.freeCapital, -1000);
 });
 
 test('short merchant keywords cannot match part of a surname, in both engines', () => {
