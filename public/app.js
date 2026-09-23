@@ -125,6 +125,41 @@ try {
 } catch (_) {}
 window.profile = profile;
 
+function applyProfileData(prof) {
+  if (!prof) return;
+  // Cloud Database is SSOT when it contains a non-empty name
+  if (prof.display_name && prof.display_name.trim()) {
+    profile.display_name = prof.display_name.trim();
+    try { localStorage.setItem('finkaif_name', profile.display_name); } catch (_) {}
+  } else if (!profile.display_name) {
+    // If memory profile is empty, try recovering from localStorage
+    try {
+      const saved = localStorage.getItem('finkaif_name');
+      if (saved && saved.trim()) profile.display_name = saved.trim();
+    } catch (_) {}
+  }
+
+  // Cloud Database avatar sync (preserving custom uploaded photos / URLs)
+  if (prof.avatar && prof.avatar !== 'default') {
+    profile.avatar = prof.avatar;
+    try { localStorage.setItem('finkaif_avatar', profile.avatar); } catch (_) {}
+  } else if (profile.avatar && profile.avatar !== 'default') {
+    // If local storage already has a custom image, don't overwrite with 'default'
+    try { localStorage.setItem('finkaif_avatar', profile.avatar); } catch (_) {}
+  } else if (prof.avatar === 'default') {
+    profile.avatar = 'default';
+  }
+
+  if (prof.currency) {
+    profile.currency = prof.currency;
+    try { localStorage.setItem('finkaif_currency', profile.currency); } catch (_) {}
+  }
+
+  if (typeof updateMastheadDynamicData === 'function') {
+    updateMastheadDynamicData();
+  }
+}
+
 let data = {
   transactions: [],
   budgets: [],
@@ -7450,16 +7485,7 @@ async function completeAuthenticatedEntry(user) {
 
   try {
     const prof = await api('profile');
-    if (prof) {
-      profile.display_name = prof.display_name || '';
-      profile.avatar = prof.avatar || 'default';
-      if (prof.currency) profile.currency = prof.currency;
-      try {
-        localStorage.setItem('finkaif_name', profile.display_name);
-        localStorage.setItem('finkaif_avatar', profile.avatar);
-        localStorage.setItem('finkaif_currency', profile.currency);
-      } catch (_) {}
-    }
+    applyProfileData(prof);
   } catch { }
 
   await Promise.all([refreshAllData(), refreshTwoFactorStatus()]);
@@ -7970,17 +7996,15 @@ function bindInteractiveEvents() {
           })
         });
         if (savedProf) {
-          profile.display_name = savedProf.display_name || profile.display_name;
-          profile.avatar = savedProf.avatar || profile.avatar;
-          profile.currency = savedProf.currency || profile.currency;
+          applyProfileData(savedProf);
+        } else {
+          try {
+            localStorage.setItem('finkaif_name', profile.display_name);
+            localStorage.setItem('finkaif_avatar', profile.avatar);
+            localStorage.setItem('finkaif_currency', profile.currency);
+          } catch (_) {}
+          updateMastheadDynamicData();
         }
-
-        try {
-          localStorage.setItem('finkaif_name', profile.display_name);
-          localStorage.setItem('finkaif_avatar', profile.avatar);
-          localStorage.setItem('finkaif_currency', profile.currency);
-        } catch (_) {}
-        updateMastheadDynamicData();
         showToast('Профиль сохранён и синхронизирован со всеми устройствами', 'success');
       } catch (err) {
         showToast('Ошибка сохранения профиля: ' + err.message, 'error');
@@ -11190,15 +11214,7 @@ async function refreshAllData() {
     data.subscriptions = Array.isArray(subs) ? subs : [];
 
     if (prof) {
-      profile.display_name = prof.display_name || '';
-      profile.avatar = prof.avatar || 'default';
-      if (prof.currency) profile.currency = prof.currency;
-      try {
-        localStorage.setItem('finkaif_name', profile.display_name);
-        localStorage.setItem('finkaif_avatar', profile.avatar);
-        localStorage.setItem('finkaif_currency', profile.currency);
-      } catch (_) {}
-      if (typeof updateMastheadDynamicData === 'function') updateMastheadDynamicData();
+      applyProfileData(prof);
     }
   } catch (err) {
     console.warn('Sync notice:', err.message);
@@ -11229,19 +11245,9 @@ async function boot() {
     const userRes = await api('me');
     me = userRes.user;
 
-    // Load authoritative profile settings from cloud database (PostgreSQL SSOT)
     try {
       const prof = await api('profile');
-      if (prof) {
-        profile.display_name = prof.display_name || '';
-        profile.avatar = prof.avatar || 'default';
-        if (prof.currency) profile.currency = prof.currency;
-        try {
-          localStorage.setItem('finkaif_name', profile.display_name);
-          localStorage.setItem('finkaif_avatar', profile.avatar);
-          localStorage.setItem('finkaif_currency', profile.currency);
-        } catch (_) {}
-      }
+      applyProfileData(prof);
     } catch { }
 
     await Promise.all([refreshAllData(), refreshTwoFactorStatus()]);
