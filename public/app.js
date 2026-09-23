@@ -25,13 +25,26 @@ function renderDefaultAvatarSvg(size = 38) {
 function getAvatarHtml(avatarKey, userInitial = 'Н', size = 38) {
   const key = String(avatarKey || '').trim();
 
-  // If user uploaded a custom photo (data URI or URL)
-  if (key.startsWith('data:image/') || key.startsWith('http')) {
+  // 1. If user uploaded a custom photo (data URI or URL)
+  if (key.startsWith('data:image/') || key.startsWith('http://') || key.startsWith('https://')) {
     return `<img src="${esc(key)}" alt="Avatar" class="custom-avatar-img" style="width: ${size}px; height: ${size}px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(45, 212, 191, 0.4); display: block;">`;
   }
 
-  // Default elegant investor avatar
-  return renderDefaultAvatarSvg(size);
+  // 2. Monogram
+  if (key === 'monogram') {
+    const fontSize = Math.round(size * 0.44);
+    return `<span class="monogram-avatar" style="width: ${size}px; height: ${size}px; font-size: ${fontSize}px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${esc(userInitial || 'Н')}</span>`;
+  }
+
+  // 3. Emojis and Symbols (e.g. 💎, ⚡, 👑, 🦁, 🚀, 🔥, 🦅, 🐉, 🧘, 💼, 🎯, 🏆)
+  if (key && key !== 'default' && key.length <= 8) {
+    const fontSize = Math.round(size * 0.52);
+    return `<span class="emoji-avatar" style="font-size: ${fontSize}px; line-height: 1; display: flex; align-items: center; justify-content: center; width: ${size}px; height: ${size}px;">${key}</span>`;
+  }
+
+  // 4. Default signature investor avatar: 💎 (Diamond)
+  const defFontSize = Math.round(size * 0.52);
+  return `<span class="emoji-avatar" style="font-size: ${defFontSize}px; line-height: 1; display: flex; align-items: center; justify-content: center; width: ${size}px; height: ${size}px;">💎</span>`;
 }
 
 function renderAssistantOrb(state = 'idle', size = 34) {
@@ -115,41 +128,90 @@ try {
 
 let profile = {
   display_name: '',
-  avatar: 'default',
+  avatar: '💎',
   currency: 'RUB'
 };
 try {
   profile.display_name = localStorage.getItem('finkaif_name') || '';
-  profile.avatar = localStorage.getItem('finkaif_avatar') || 'default';
+  const localAv = localStorage.getItem('finkaif_avatar');
+  profile.avatar = (localAv && localAv !== 'default') ? localAv : '💎';
   profile.currency = localStorage.getItem('finkaif_currency') || 'RUB';
 } catch (_) {}
 window.profile = profile;
 
+function getFallbackDisplayName() {
+  if (profile.display_name && profile.display_name.trim()) return profile.display_name.trim();
+  try {
+    const saved = localStorage.getItem('finkaif_name');
+    if (saved && saved.trim()) return saved.trim();
+  } catch (_) {}
+  if (me && me.email) {
+    if (me.email.toLowerCase().includes('nikita')) return 'Никита';
+    const handle = me.email.split('@')[0];
+    return handle.charAt(0).toUpperCase() + handle.slice(1);
+  }
+  return 'Никита';
+}
+
 function applyProfileData(prof) {
   if (!prof) return;
-  // Cloud Database is SSOT when it contains a non-empty name
-  if (prof.display_name && prof.display_name.trim()) {
+
+  // 1. Display Name
+  const validCloudName = (prof.display_name && prof.display_name.trim());
+  if (validCloudName) {
     profile.display_name = prof.display_name.trim();
     try { localStorage.setItem('finkaif_name', profile.display_name); } catch (_) {}
-  } else if (!profile.display_name) {
-    // If memory profile is empty, try recovering from localStorage
-    try {
-      const saved = localStorage.getItem('finkaif_name');
-      if (saved && saved.trim()) profile.display_name = saved.trim();
-    } catch (_) {}
+  } else {
+    // If cloud profile is empty, try local storage or smart fallback
+    let localName = '';
+    try { localName = localStorage.getItem('finkaif_name') || ''; } catch (_) {}
+    if (localName && localName.trim()) {
+      profile.display_name = localName.trim();
+    } else {
+      profile.display_name = getFallbackDisplayName();
+    }
+    try { localStorage.setItem('finkaif_name', profile.display_name); } catch (_) {}
+
+    // Auto-save restored name to cloud so DB is in sync
+    if (profile.display_name) {
+      api('profile', {
+        method: 'POST',
+        body: JSON.stringify({
+          display_name: profile.display_name,
+          avatar: profile.avatar || '💎',
+          currency: profile.currency || 'RUB'
+        })
+      }).catch(() => {});
+    }
   }
 
-  // Cloud Database avatar sync (preserving custom uploaded photos / URLs)
-  if (prof.avatar && prof.avatar !== 'default') {
-    profile.avatar = prof.avatar;
+  // 2. Avatar
+  const validCloudAv = (prof.avatar && prof.avatar !== 'default' && prof.avatar.trim());
+  if (validCloudAv) {
+    profile.avatar = prof.avatar.trim();
     try { localStorage.setItem('finkaif_avatar', profile.avatar); } catch (_) {}
-  } else if (profile.avatar && profile.avatar !== 'default') {
-    // If local storage already has a custom image, don't overwrite with 'default'
+  } else {
+    let localAv = '';
+    try { localAv = localStorage.getItem('finkaif_avatar') || ''; } catch (_) {}
+    if (localAv && localAv !== 'default' && localAv.trim()) {
+      profile.avatar = localAv.trim();
+    } else {
+      profile.avatar = '💎';
+    }
     try { localStorage.setItem('finkaif_avatar', profile.avatar); } catch (_) {}
-  } else if (prof.avatar === 'default') {
-    profile.avatar = 'default';
+
+    // Auto-save restored avatar to cloud
+    api('profile', {
+      method: 'POST',
+      body: JSON.stringify({
+        display_name: profile.display_name,
+        avatar: profile.avatar,
+        currency: profile.currency || 'RUB'
+      })
+    }).catch(() => {});
   }
 
+  // 3. Currency
   if (prof.currency) {
     profile.currency = prof.currency;
     try { localStorage.setItem('finkaif_currency', profile.currency); } catch (_) {}
@@ -2273,8 +2335,8 @@ function renderMasthead() {
   const { freeCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
 
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
-  const userName = profile.display_name ? profile.display_name : rawUser;
-  const userInitial = rawUser.charAt(0).toUpperCase();
+  const userName = profile.display_name ? profile.display_name : getFallbackDisplayName();
+  const userInitial = userName.charAt(0).toUpperCase();
 
   const avatarDisplay = getAvatarHtml(profile.avatar, userInitial, 36);
 
@@ -4103,7 +4165,7 @@ function renderImportBankModal() {
    ========================================================================== */
 function renderHomeView() {
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
-  const userName = profile.display_name ? profile.display_name : rawUser;
+  const userName = profile.display_name ? profile.display_name : getFallbackDisplayName();
 
   const inc = data.transactions
     .filter(t => t.type === 'income')
@@ -6665,13 +6727,13 @@ function renderModal() {
    ========================================================================== */
 function renderProfileModal() {
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
-  const userName = profile.display_name ? profile.display_name : rawUser;
-  const userInitial = rawUser.charAt(0).toUpperCase();
+  const userName = profile.display_name ? profile.display_name : getFallbackDisplayName();
+  const userInitial = userName.charAt(0).toUpperCase();
 
   const { totalCapital: currentBal } = getCapitalSnapshot(data.transactions, data.goals);
   const rank = getFinancialRank(currentBal, data.goals);
 
-  // Swiss minimalist icons system
+  const avatarPresets = ['💎', '⚡', '👑', '🦁', '🚀', '🔥', '🦅', '🐉', '🧘', '💼', '🎯', '🏆'];
 
   return `
     <div id="profile-modal" class="modal-backdrop" style="display: ${profileModalOpen ? 'flex' : 'none'};">
@@ -6700,29 +6762,41 @@ function renderProfileModal() {
         </div>
 
         <form id="profile-form">
-          <!-- Photo Upload & Current Avatar Card -->
+          <!-- Avatar Choice: Presets & Custom Photo -->
           <div class="form-group" style="margin-bottom: 20px;">
             <div class="avatar-section-title">
-              <label class="form-label" style="margin-bottom: 0;">Фото профиля</label>
-              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 8.60</span>
+              <label class="form-label" style="margin-bottom: 0;">Выберите аватар или загрузите своё фото</label>
+              <span style="font-size: 11px; color: var(--accent-jade); font-weight: 600;">FinKaif 10.0</span>
             </div>
 
-            <label class="avatar-upload-zone" for="input-avatar-upload" title="Нажмите для выбора фото с устройства">
+            <!-- Avatar Grid -->
+            <div class="avatar-grid" id="profile-avatar-grid">
+              <button type="button" class="avatar-opt-btn ${profile.avatar === 'monogram' ? 'active' : ''}" data-avatar="monogram" title="Монограмма: ${userInitial}">
+                ${userInitial}
+              </button>
+              ${avatarPresets.map(em => `
+                <button type="button" class="avatar-opt-btn ${(profile.avatar === em || (!profile.avatar && em === '💎')) ? 'active' : ''}" data-avatar="${em}" title="Аватар ${em}">
+                  ${em}
+                </button>
+              `).join('')}
+            </div>
+
+            <label class="avatar-upload-zone" for="input-avatar-upload" title="Нажмите для выбора фото с устройства" style="margin-top: 12px;">
               <div class="avatar-upload-icon">
                 ${icon('camera', 22)}
               </div>
               <div>
-                <div class="avatar-upload-title">Загрузить фото</div>
+                <div class="avatar-upload-title">Загрузить фото с устройства</div>
                 <div class="avatar-upload-sub">PNG, JPG, WebP до 5 МБ (автоматическая оптимизация)</div>
               </div>
               <input type="file" id="input-avatar-upload" accept="image/*" style="display: none;">
             </label>
 
-            ${(profile.avatar && (profile.avatar.startsWith('data:image/') || profile.avatar.startsWith('http'))) ? `
-              <div class="avatar-actions-bar">
+            ${(profile.avatar && (profile.avatar.startsWith('data:image/') || profile.avatar.startsWith('http') || profile.avatar !== '💎')) ? `
+              <div class="avatar-actions-bar" style="margin-top: 10px;">
                 <button type="button" class="btn-avatar-reset" id="btn-avatar-reset-default">
                   ${icon('trash', 12)}
-                  <span>Вернуть стандартную аватарку</span>
+                  <span>Сбросить на стандартный аватар 💎</span>
                 </button>
               </div>
             ` : ''}
@@ -7284,8 +7358,8 @@ function updateMastheadDynamicData() {
   const { freeCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
 
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
-  const userName = profile.display_name ? profile.display_name : rawUser;
-  const userInitial = rawUser.charAt(0).toUpperCase();
+  const userName = profile.display_name ? profile.display_name : getFallbackDisplayName();
+  const userInitial = userName.charAt(0).toUpperCase();
 
   const nameEl = document.querySelector('.user-name-text') || document.querySelector('.user-name');
   if (nameEl) nameEl.innerText = userName;
@@ -7854,9 +7928,10 @@ function bindInteractiveEvents() {
     };
   }
 
-  // Custom Photo Upload & Reset Handlers
+  // Custom Photo Upload, Presets & Reset Handlers
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
-  const userInitial = rawUser.charAt(0).toUpperCase();
+  const userName = profile.display_name ? profile.display_name : getFallbackDisplayName();
+  const userInitial = userName.charAt(0).toUpperCase();
 
   const updateModalAvatarPreview = () => {
     const preview = document.getElementById('profile-avatar-preview');
@@ -7868,6 +7943,35 @@ function bindInteractiveEvents() {
       mastAv.innerHTML = getAvatarHtml(profile.avatar, userInitial, 36);
     }
   };
+
+  // Preset Avatar Grid selection
+  $$('.avatar-opt-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const av = btn.getAttribute('data-avatar');
+      if (!av) return;
+      profile.avatar = av;
+      try {
+        localStorage.setItem('finkaif_avatar', profile.avatar);
+      } catch (_) {}
+      $$('.avatar-opt-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateModalAvatarPreview();
+      updateMastheadDynamicData();
+      try {
+        await api('profile', {
+          method: 'POST',
+          body: JSON.stringify({
+            display_name: profile.display_name,
+            avatar: profile.avatar,
+            currency: profile.currency
+          })
+        });
+        showToast('Аватар обновлён', 'success');
+      } catch (err) {
+        console.warn('Avatar select sync notice:', err.message);
+      }
+    };
+  });
 
   const inputUpload = document.getElementById('input-avatar-upload');
   if (inputUpload) {
@@ -7931,9 +8035,9 @@ function bindInteractiveEvents() {
   const btnResetAv = document.getElementById('btn-avatar-reset-default');
   if (btnResetAv) {
     btnResetAv.onclick = async () => {
-      profile.avatar = 'default';
+      profile.avatar = '💎';
       try {
-        localStorage.setItem('finkaif_avatar', 'default');
+        localStorage.setItem('finkaif_avatar', '💎');
       } catch (_) {}
       updateModalAvatarPreview();
       updateMastheadDynamicData();
@@ -7942,11 +8046,11 @@ function bindInteractiveEvents() {
           method: 'POST',
           body: JSON.stringify({
             display_name: profile.display_name,
-            avatar: 'default',
+            avatar: '💎',
             currency: profile.currency
           })
         });
-        showToast('Стандартный аватар восстановлен и синхронизирован', 'success');
+        showToast('Стандартный аватар 💎 восстановлен', 'success');
       } catch (err) {
         console.warn('Avatar reset notice:', err.message);
       }
@@ -7984,7 +8088,8 @@ function bindInteractiveEvents() {
     profileForm.onsubmit = async e => {
       e.preventDefault();
       const inputName = document.getElementById('profile-input-name');
-      profile.display_name = inputName ? inputName.value.trim() : '';
+      const enteredName = inputName ? inputName.value.trim() : '';
+      profile.display_name = enteredName || getFallbackDisplayName();
 
       try {
         const savedProf = await api('profile', {
