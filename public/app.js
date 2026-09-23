@@ -129,6 +129,7 @@ let data = {
   transactions: [],
   budgets: [],
   goals: [],
+  capitalAdjustment: 0,
   chat: [],
   subscriptions: []
 };
@@ -657,10 +658,9 @@ async function executeAssistantAction(actType, actData) {
       const amt = Number(actData.amount) || 0;
       const goal = (data.goals || []).find(g => (g.name || '').toLowerCase().includes(gName)) || data.goals[0];
       if (goal && amt > 0) {
-        const newSaved = Number(goal.saved_amount || 0) + amt;
-        await api('goals/' + goal.id, {
-          method: 'PUT',
-          body: JSON.stringify({ saved_amount: newSaved })
+        await api('goals/' + goal.id + '/topup', {
+          method: 'POST',
+          body: JSON.stringify({ amount: amt, expected_saved_amount: goal.saved_amount })
         });
         await refreshAllData();
         renderApp();
@@ -1855,7 +1855,7 @@ function financialAmountToCents(value) {
   return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
 }
 
-function getCapitalSnapshot(transactions = [], goals = []) {
+function getCapitalSnapshot(transactions = [], goals = [], adjustment = (typeof data === 'undefined' ? 0 : data.capitalAdjustment)) {
   const ledgerCapitalCents = (transactions || []).reduce((sum, tx) => {
     const amountCents = financialAmountToCents(tx?.amount);
     if (tx?.type === 'income') return sum + amountCents;
@@ -1867,18 +1867,15 @@ function getCapitalSnapshot(transactions = [], goals = []) {
     0
   );
 
-  // Goal balances are proof of owned funds even when their original deposits
-  // predate the imported transaction history. When the ledger is positive it
-  // already includes goal allocations, so goals only establish a lower bound.
-  // A negative ledger remains a liability and reduces net capital.
-  const totalCapitalCents = ledgerCapitalCents >= 0
-    ? Math.max(ledgerCapitalCents, savedInGoalsCents)
-    : savedInGoalsCents + ledgerCapitalCents;
+  const freeCapitalCents = ledgerCapitalCents + financialAmountToCents(adjustment);
+  // Savings stay owned capital until the goal balance itself changes.
+  // Internal goal transfers are reflected in the persisted free adjustment.
+  const totalCapitalCents = savedInGoalsCents + Math.max(0, freeCapitalCents);
 
   return {
     totalCapital: totalCapitalCents / 100,
     savedInGoals: savedInGoalsCents / 100,
-    freeCapital: (totalCapitalCents - savedInGoalsCents) / 100
+    freeCapital: freeCapitalCents / 100
   };
 }
 
@@ -2120,7 +2117,7 @@ function initAmbientCanvas() {
    NAVIGATION / MASTHEAD
    ========================================================================== */
 function renderMasthead() {
-  const { totalCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
+  const { freeCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
 
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
   const userName = profile.display_name ? profile.display_name : rawUser;
@@ -2226,7 +2223,7 @@ function renderMasthead() {
       </nav>
 
       <div class="masthead-actions">
-        <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать общий капитал (горячая клавиша P)' : 'Общий капитал — все средства, включая накопления в целях'}">
+        <div class="balance-pill num" id="masthead-balance-pill" title="${privacyMode ? 'Показать свободные деньги (горячая клавиша P)' : 'Свободные деньги — доступны вне целей'}">
           <span class="pulse-dot"></span>
           <span id="masthead-balance-figure">${money(balance)}</span>
           ${showDelta ? `
@@ -7227,7 +7224,7 @@ function getViewHtmlForTab(targetTab) {
 }
 
 function updateMastheadDynamicData() {
-  const { totalCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
+  const { freeCapital: balance } = getCapitalSnapshot(data.transactions, data.goals);
 
   const rawUser = me ? (me.email ? me.email.split('@')[0] : 'Пользователь') : 'Гость';
   const userName = profile.display_name ? profile.display_name : rawUser;
@@ -7254,8 +7251,8 @@ function updateMastheadDynamicData() {
   const mastPill = document.getElementById('masthead-balance-pill');
   if (mastPill) {
     mastPill.title = privacyMode
-      ? 'Показать общий капитал (горячая клавиша P)'
-      : 'Общий капитал — все средства, включая накопления в целях';
+      ? 'Показать свободные деньги (горячая клавиша P)'
+      : 'Свободные деньги — доступны вне целей';
   }
 
   const deltaEl = document.querySelector('.masthead .balance-delta');
@@ -7703,7 +7700,7 @@ function bindInteractiveEvents() {
     }
     const mastBalEl = document.getElementById('masthead-balance-figure');
     if (mastBalEl) {
-      const { totalCapital: balInRub } = getCapitalSnapshot(data.transactions, data.goals);
+      const { freeCapital: balInRub } = getCapitalSnapshot(data.transactions, data.goals);
       const balConv = convertFromRub(balInRub);
       animateNumber(mastBalEl, balConv, 650, curPrefix, sym);
     }
@@ -10136,18 +10133,21 @@ function bindInteractiveEvents() {
   const btnPaydaySplitGoal = document.getElementById('btn-payday-split-goal');
   if (btnPaydaySplitGoal) {
     btnPaydaySplitGoal.onclick = async () => {
+      if (btnPaydaySplitGoal.disabled) return;
       const goalId = btnPaydaySplitGoal.getAttribute('data-goal-id');
       const splitAmt = Number(btnPaydaySplitGoal.getAttribute('data-split-amt'));
       const goal = (data.goals || []).find(g => String(g.id) === String(goalId));
       if (goal && splitAmt > 0) {
+        btnPaydaySplitGoal.disabled = true;
         try {
-          const newSaved = Number(goal.saved_amount || 0) + splitAmt;
-          await api('goals/' + goalId, {
-            method: 'PUT',
-            body: JSON.stringify({ saved_amount: newSaved })
+          await api('goals/' + goalId + '/topup', {
+            method: 'POST',
+            body: JSON.stringify({ amount: splitAmt, expected_saved_amount: goal.saved_amount })
           });
         } catch (e) {
-          console.error('Ошибка пополнения цели:', e);
+          btnPaydaySplitGoal.disabled = false;
+          showToast('Ошибка пополнения цели: ' + e.message, 'error');
+          return;
         }
       }
       paydaySplitData = null;
@@ -10267,11 +10267,14 @@ function bindInteractiveEvents() {
   if (goalForm) {
     goalForm.onsubmit = async e => {
       e.preventDefault();
+      const submitBtn = goalForm.querySelector('button[type="submit"]');
+      if (submitBtn?.disabled) return;
       const name = document.getElementById('goal-name').value.trim();
       const target_amount = Number(document.getElementById('goal-target').value);
       const saved_amount = Number(document.getElementById('goal-saved').value) || 0;
       if (!name || target_amount <= 0) return;
 
+      if (submitBtn) submitBtn.disabled = true;
       try {
         await api('goals', {
           method: 'POST',
@@ -10281,6 +10284,8 @@ function bindInteractiveEvents() {
         renderApp();
       } catch (err) {
         showToast('Ошибка создания цели: ' + err.message, 'error');
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
       }
     };
   }
@@ -10312,6 +10317,7 @@ function bindInteractiveEvents() {
   // Goals: Top-up / Add saved amount
   $$('.goal-topup-btn').forEach(btn => {
     btn.onclick = async () => {
+      if (btn.disabled) return;
       const id = btn.getAttribute('data-id');
       const input = document.querySelector(`.goal-topup-input[data-id="${id}"]`);
       const addVal = Number(input?.value);
@@ -10320,16 +10326,18 @@ function bindInteractiveEvents() {
       const targetGoal = data.goals.find(g => g.id === id);
       if (!targetGoal) return;
 
-      const newSaved = Number(targetGoal.saved_amount) + addVal;
+      btn.disabled = true;
       try {
-        await api('goals/' + id, {
-          method: 'PUT',
-          body: JSON.stringify({ saved_amount: newSaved })
+        await api('goals/' + id + '/topup', {
+          method: 'POST',
+          body: JSON.stringify({ amount: addVal, expected_saved_amount: targetGoal.saved_amount })
         });
         await refreshAllData();
         renderApp();
       } catch (err) {
         showToast('Ошибка пополнения: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
       }
     };
   });
@@ -10351,6 +10359,7 @@ function bindInteractiveEvents() {
   // Goals: 1-Click Instant Deposit Chips
   $$('.goal-instant-chip').forEach(btn => {
     btn.onclick = async () => {
+      if (btn.disabled) return;
       const id = btn.getAttribute('data-id');
       const addVal = Number(btn.getAttribute('data-amount')) || 0;
       if (!addVal || addVal <= 0) return;
@@ -10358,17 +10367,19 @@ function bindInteractiveEvents() {
       const targetGoal = (data.goals || []).find(g => String(g.id) === String(id));
       if (!targetGoal) return;
 
-      const newSaved = Number(targetGoal.saved_amount || 0) + addVal;
+      btn.disabled = true;
       try {
-        await api('goals/' + id, {
-          method: 'PUT',
-          body: JSON.stringify({ saved_amount: newSaved })
+        await api('goals/' + id + '/topup', {
+          method: 'POST',
+          body: JSON.stringify({ amount: addVal, expected_saved_amount: targetGoal.saved_amount })
         });
         await refreshAllData();
         renderApp();
         showToast(`В цель «${targetGoal.name}» внесено +${money(addVal)}!`, 'success');
       } catch (err) {
         showToast('Ошибка пополнения: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
       }
     };
   });
@@ -11087,18 +11098,20 @@ function bindBankImportModalEvents() {
    ========================================================================== */
 async function refreshAllData() {
   try {
-    const [txs, bgs, gls, cht, subs, prof] = await Promise.all([
+    const [txs, bgs, gls, cht, subs, prof, capitalState] = await Promise.all([
       api('transactions').catch(() => []),
       api('budgets').catch(() => []),
       api('goals').catch(() => []),
       api('chat').catch(() => []),
       api('subscriptions').catch(() => []),
-      api('profile').catch(() => null)
+      api('profile').catch(() => null),
+      api('capital-state')
     ]);
 
     data.transactions = Array.isArray(txs) ? txs : [];
     data.budgets = Array.isArray(bgs) ? bgs : [];
     data.goals = Array.isArray(gls) ? gls : [];
+    data.capitalAdjustment = Number(capitalState?.free_adjustment) || 0;
     data.chat = Array.isArray(cht) ? cht : [];
     data.subscriptions = Array.isArray(subs) ? subs : [];
 
