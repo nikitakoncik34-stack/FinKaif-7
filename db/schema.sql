@@ -8,6 +8,15 @@ alter table users add column if not exists two_factor_updated_at timestamptz;
 create table if not exists transactions(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,type text not null check(type in ('income','expense','transfer')),category text not null,description text default '',amount numeric(14,2) not null check(amount>0),occurred_on date not null default current_date,created_at timestamptz not null default now());
 create table if not exists budgets(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,category text not null,limit_amount numeric(14,2) not null check(limit_amount>0),created_at timestamptz not null default now(),unique(user_id,category));
 create table if not exists goals(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,name text not null,target_amount numeric(14,2) not null check(target_amount>0),saved_amount numeric(14,2) not null default 0 check(saved_amount>=0),created_at timestamptz not null default now());
+create table if not exists user_capital_state(user_id uuid primary key references users(id) on delete cascade,free_adjustment numeric(14,2) not null default 0);
+-- Freeze only the overlap already visible in historical operations at migration time.
+-- New operations then change free cash immediately; goal balances remain owned capital.
+insert into user_capital_state(user_id,free_adjustment)
+select u.id, -least(coalesce(g.saved,0),greatest(coalesce(t.net,0),0))
+from users u
+left join (select user_id,sum(saved_amount) as saved from goals group by user_id) g on g.user_id=u.id
+left join (select user_id,sum(case when type='income' then amount when type='expense' then -amount else 0 end) as net from transactions group by user_id) t on t.user_id=u.id
+on conflict(user_id) do nothing;
 create table if not exists chat_messages(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,role text not null check(role in ('user','assistant')),content text not null,created_at timestamptz not null default now());
 create table if not exists user_settings(user_id uuid primary key references users(id) on delete cascade,display_name text default '',avatar text default '⚡',currency text default 'RUB',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
 create table if not exists subscriptions(id uuid primary key default gen_random_uuid(),user_id uuid not null references users(id) on delete cascade,name text not null,amount numeric(14,2) not null check(amount>0),category text not null default 'Подписки',day_of_month integer not null default 1,created_at timestamptz not null default now());
