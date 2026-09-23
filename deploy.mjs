@@ -25,15 +25,16 @@ if (!TOKEN) {
 }
 
 const filesToDeploy = [
+  { path: 'db/schema.sql', msg: 'fix(finance): persist free cash adjustments' },
+  { path: 'server.js', msg: 'fix(finance): reconcile goals and free cash' },
+  { path: 'public/app.js', msg: 'fix(finance): display spendable cash in masthead' },
+  { path: 'public/index.html', msg: 'chore(release): refresh application cache' },
   { path: 'public/style.css', msg: 'style(ui): update styles' },
-  { path: 'public/app.js', msg: 'feat(ui): update application logic' },
-  { path: 'public/index.html', msg: 'chore(release): bump cache-busting version' },
   { path: 'package.json', msg: 'chore: update package.json' },
-  { path: 'db/schema.sql', msg: 'feat(auth): add two-factor authentication schema' },
   { path: '.env.example', msg: 'docs(auth): document 2FA encryption key' },
-  { path: 'server.js', msg: 'fix(server): update backend' },
-  { path: 'tests/statements.test.mjs', msg: 'test(import): add statement regression coverage' },
-  { path: 'deploy.mjs', msg: 'chore(deploy): include statement tests' }
+  { path: 'FINANCIAL_INVARIANTS.md', msg: 'docs(finance): define goal capital invariant' },
+  { path: 'tests/statements.test.mjs', msg: 'test(finance): verify goal capital and transfers' },
+  { path: 'deploy.mjs', msg: 'chore(deploy): ship capital model' }
 ];
 
 async function getGitHubFile(relPath) {
@@ -96,7 +97,7 @@ async function pushFile(relPath, commitMsg) {
 }
 
 async function main() {
-  console.log('🚀 Deploying FinKaif authentication and 2FA update to GitHub...');
+  console.log('🚀 Deploying FinKaif capital and free cash correction to GitHub...');
   for (const item of filesToDeploy) {
     await pushFile(item.path, item.msg);
   }
