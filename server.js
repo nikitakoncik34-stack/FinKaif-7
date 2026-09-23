@@ -382,22 +382,73 @@ function parseRussianAmount(numStr) {
   return isNaN(val) ? 0 : Math.round(val * 100) / 100;
 }
 
-function parseTxFallback(raw) {
+// ============================================================================
+// CURRENCY EXCHANGE RATES (CBR Central Bank of Russia with caching & fallbacks)
+// ============================================================================
+let cachedRates = {
+  base: "RUB",
+  date: new Date().toISOString().slice(0, 10),
+  rates: { RUB: 1, USD: 0.0108, EUR: 0.00988, KZT: 5.26 },
+  quotes: { USD: 92.5, EUR: 101.2, KZT: 0.19, RUB: 1 },
+  updated_at: new Date().toISOString()
+};
+let lastRatesFetch = 0;
+
+function convertBetweenCurrencies(amount, fromCur, toCur) {
+  const amt = Number(amount) || 0;
+  if (!fromCur || !toCur || fromCur === toCur) return amt;
+  const quotes = cachedRates?.quotes || { USD: 92.5, EUR: 101.2, KZT: 0.19, RUB: 1 };
+  const fromQuote = quotes[fromCur] || 1;
+  const toQuote = quotes[toCur] || 1;
+  const inRub = amt * fromQuote;
+  const inTarget = inRub / toQuote;
+  if (toCur === 'USD' || toCur === 'EUR') {
+    return Math.round(inTarget * 100) / 100;
+  }
+  return inTarget % 1 === 0 ? inTarget : Math.round(inTarget * 100) / 100;
+}
+
+function parseTxFallback(raw, userCurrency = 'RUB') {
   const text = String(raw || '').trim();
   if (!text) return null;
 
+  const targetCur = userCurrency || 'RUB';
   const lower = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
   let cleanWords = ' ' + text + ' ';
   let amount = 0;
   let matchedNumStr = '';
+  let detectedCurrency = null;
 
-  // 0. Explicit price with currency or preposition: "за 100 рублей", "100 руб", "100р", "100 ₽", "за 350", "на 500", "100.000"
-  const explicitCurrency = lower.match(/(?:^|[^а-яa-z0-9])(?:(?:за|на)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:₽|\$|€|₸|рублей|рубля|рубль|руб\.?|р\.?)(?:$|[^а-яa-z0-9])/i);
-  if (explicitCurrency) {
-    const val = parseRussianAmount(explicitCurrency[1]);
-    if (val > 0) {
-      amount = Math.round(val);
-      matchedNumStr = explicitCurrency[0].trim();
+  // 0. Explicit price with currency: "за 100 долларов", "100$", "100 баксов", "20 евро", "1000 тенге", "100 рублей"
+  const CURRENCY_PATTERNS = [
+    {
+      cur: 'USD',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:доллар[а-я]*|дол|usd|\$|бакс[а-я]*|зелен[а-я]*)(?:$|[^а-яa-z0-9])/i
+    },
+    {
+      cur: 'EUR',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:евро|еврик[а-я]*|eur|€)(?:$|[^а-яa-z0-9])/i
+    },
+    {
+      cur: 'KZT',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:тенге|тнг|kzt|₸)(?:$|[^а-яa-z0-9])/i
+    },
+    {
+      cur: 'RUB',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:₽|рублей|рубля|рубль|руб\.?|р\.?|rub|деревянн[а-я]*)(?:$|[^а-яa-z0-9])/i
+    }
+  ];
+
+  for (const cp of CURRENCY_PATTERNS) {
+    const m = lower.match(cp.re);
+    if (m) {
+      const val = parseRussianAmount(m[1]);
+      if (val > 0) {
+        amount = val;
+        matchedNumStr = m[0].trim();
+        detectedCurrency = cp.cur;
+        break;
+      }
     }
   }
 
@@ -406,7 +457,7 @@ function parseTxFallback(raw) {
     if (zaNaDigits) {
       const val = parseRussianAmount(zaNaDigits[1]);
       if (val > 0) {
-        amount = Math.round(val);
+        amount = val;
         matchedNumStr = zaNaDigits[0].trim();
       }
     }
@@ -597,6 +648,26 @@ function parseTxFallback(raw) {
     cleanWords = cleanWords.replace(new RegExp(matchedNumStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
   }
 
+  if (!amount) return null;
+
+  // Multi-Currency Calculation & Auto-Conversion
+  let finalAmount = amount;
+  let originalAmount = null;
+  let originalCurrency = null;
+  let amountInRub = 0;
+
+  if (detectedCurrency && detectedCurrency !== targetCur) {
+    // Explicit currency specified that is different from user active currency: convert to targetCur!
+    originalAmount = amount;
+    originalCurrency = detectedCurrency;
+    finalAmount = convertBetweenCurrencies(amount, detectedCurrency, targetCur);
+    amountInRub = Math.round(convertBetweenCurrencies(amount, detectedCurrency, 'RUB') * 100) / 100;
+  } else {
+    // No currency specified OR matches active currency: amount is already in targetCur!
+    finalAmount = amount;
+    amountInRub = Math.round(convertBetweenCurrencies(amount, targetCur, 'RUB') * 100) / 100;
+  }
+
   // Moscow Date handling
   const mskNow = getMskDate();
   let occurred_on = getMskIsoDate(mskNow);
@@ -749,10 +820,20 @@ function parseTxFallback(raw) {
     }
   }
 
+  const CURRENCY_SYMBOLS = { RUB: '₽', USD: '$', EUR: '€', KZT: '₸' };
+  if (originalCurrency && originalAmount && !cleanDesc.includes(String(originalAmount))) {
+    const origSym = CURRENCY_SYMBOLS[originalCurrency] || originalCurrency;
+    cleanDesc += ` (${originalAmount} ${origSym})`;
+  }
+
   return {
     type,
     category,
-    amount,
+    amount: finalAmount,
+    currency: targetCur,
+    original_amount: originalAmount,
+    original_currency: originalCurrency,
+    amountInRub,
     description: cleanDesc || (type === 'income' ? 'Поступление средств' : category),
     occurred_on
   };
@@ -993,18 +1074,6 @@ app.post("/api/auth/2fa/disable", auth, authLimiter, async (req, res) => {
     fail(res, e);
   }
 });
-
-// ============================================================================
-// CURRENCY EXCHANGE RATES (CBR Central Bank of Russia with caching & fallbacks)
-// ============================================================================
-let cachedRates = {
-  base: "RUB",
-  date: new Date().toISOString().slice(0, 10),
-  rates: { RUB: 1, USD: 0.0108, EUR: 0.00988, KZT: 5.26 },
-  quotes: { USD: 92.5, EUR: 101.2, KZT: 0.19 },
-  updated_at: new Date().toISOString()
-};
-let lastRatesFetch = 0;
 
 async function fetchCbrRates() {
   if (Date.now() - lastRatesFetch < 60 * 60 * 1000) return cachedRates;
@@ -2238,12 +2307,13 @@ async function callGeminiFast(apiKey, systemPrompt, userMessage) {
 
 app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
   try {
-    const { text } = req.body || {};
+    const { text, currency } = req.body || {};
     if (!text || !String(text).trim()) {
       return res.status(400).json({ error: "Текст не передан." });
     }
     const cleanInput = String(text).trim();
-    const cacheKey = cleanInput.toLowerCase();
+    const userCur = (currency && ['RUB', 'USD', 'EUR', 'KZT'].includes(String(currency).toUpperCase())) ? String(currency).toUpperCase() : 'RUB';
+    const cacheKey = (cleanInput + '_' + userCur).toLowerCase();
 
     // 0ms Cache hit
     const cached = getCachedParsedTx(cacheKey);
@@ -2252,7 +2322,7 @@ app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
     }
 
     // High confidence local deterministic check (< 0.1ms)
-    const instantParse = parseTxFallback(cleanInput);
+    const instantParse = parseTxFallback(cleanInput, userCur);
     if (instantParse && instantParse.amount > 0 && instantParse.category !== 'Прочее') {
       setCachedParsedTx(cacheKey, instantParse);
       return res.json({ ok: true, parsed: instantParse, instant: true });
@@ -2284,8 +2354,18 @@ app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
 - "Подарки": подарили, донат, чаевые.
 - "Возврат долга": вернули долг, отдали долг.
 
+ВАЛЮТЫ И КОНВЕРТАЦИЯ:
+- Активная валюта пользователя: ${userCur}.
+- Если во фразе валюта НЕ указана явно (например "100 кофе", "такси 450", "купил арбуз на 350"), считай сумму в активной валюте ${userCur} ("currency": "${userCur}").
+- Если во фразе пользователь назвал ДРУГУЮ валюту (например "100 долларов", "50 баксов", "20 евро", "5000 рублей", "1000 тенге"):
+  1. Укажи "original_amount": число и "original_currency": "USD"|"EUR"|"KZT"|"RUB".
+  2. Переведи сумму в активную валюту пользователя (${userCur}) по курсам ЦБ:
+     1 USD = 92.5 RUB, 1 EUR = 101.2 RUB, 1 KZT = 0.19 RUB, 1 RUB = 1 RUB (формула: сумма_в_рублях = original_amount * курс_к_рублю; результат_в_${userCur} = сумма_в_рублях / курс_${userCur}_к_рублю).
+  3. В поле "amount" запиши итоговую сумму в активной валюте ${userCur} (округли до сотых или целого).
+  4. В "description" добавь пометку об исходной сумме, например: "Наушники (100 $)".
+
 СУММЫ И СЛЕНГ:
-- В русской финансовой речи и при распознавании голоса разделителем тысяч часто является точка или запятая: "100.000" или "100,000" — это СТО ТЫСЯЧ (100000), а НЕ 100 рублей! "1.000.000" — это миллион (1000000). В рублях копеек из 3 знаков не бывает. Если видишь "100.000", amount ДОЛЖЕН быть 100000! Копейки бывают только когда 1 или 2 знака (например 100.50).
+- В русской финансовой речи и при распознавании голоса разделителем тысяч часто является точка или запятая: "100.000" или "100,000" — это СТО ТЫСЯЧ (100000), а НЕ 100 рублей/тенге/долларов! "1.000.000" — это миллион (1000000). Копейки/центы бывают только когда 1 или 2 знака (например 100.50).
 - косарь, косаря, косарей, кусок, штука = 1 000
 - пятихатка, пятихат = 500
 - сотка при покупках = 100; сотка при зарплате/доходе = 100 000
@@ -2293,12 +2373,12 @@ app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
 - 50к, 50k = 50 000; 1.5к = 1 500
 - лям = 1 000 000; лимон (в контексте денег) = 1 000 000; полтора ляма = 1 500 000
 - ярд = 1 000 000 000
-ВАЖНО: "арбуз" — это ВСЕГДА фрукт/ягода (категория "Продукты"), а НЕ сумма! "лимоны" в покупках — это фрукты (категория "Продукты")! Сумма ВСЕГДА извлекается из явных цифр фразы (например "за 100 рублей" = 100).
+ВАЖНО: "арбуз" — это ВСЕГДА фрукт/ягода (категория "Продукты"), а НЕ сумма! "лимоны" в покупках — это фрукты (категория "Продукты")! Сумма ВСЕГДА извлекается из явных цифр фразы.
 
 ДАТЫ: сегодня = ${toIso(mskNow)}, вчера = ${toIso(dYesterday)}, позавчера = ${toIso(dBefore)}
 
 Ответь СТРОГО валидным JSON без markdown:
-{"type":"income"|"expense","category":"Категория","amount":число,"description":"Чистое название (без 'купил', 'взял', 'потратил' и сумм)","occurred_on":"YYYY-MM-DD"}`;
+{"type":"income"|"expense","category":"Категория","amount":число,"currency":"${userCur}","original_amount":null|число,"original_currency":null|"USD"|"EUR"|"KZT"|"RUB","description":"Чистое название (без 'купил', 'взял', 'потратил' и сумм)","occurred_on":"YYYY-MM-DD"}`;
 
     let parsed = null;
     for (const key of GEMINI_API_KEYS) {
@@ -2310,10 +2390,23 @@ app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
           let parsedAmount = parseRussianAmount(p.amount);
           if (!parsedAmount || isNaN(parsedAmount)) parsedAmount = Math.round(Number(p.amount));
           if (p && parsedAmount > 0) {
+            const finalCur = p.currency || userCur;
+            const origAmt = p.original_amount ? parseRussianAmount(p.original_amount) : null;
+            const origCur = p.original_currency || null;
+            let amountInRub = 0;
+            if (origCur && origAmt) {
+              amountInRub = Math.round(convertBetweenCurrencies(origAmt, origCur, 'RUB') * 100) / 100;
+            } else {
+              amountInRub = Math.round(convertBetweenCurrencies(parsedAmount, finalCur, 'RUB') * 100) / 100;
+            }
             parsed = {
               type: p.type === 'income' ? 'income' : 'expense',
               category: String(p.category || (p.type === 'income' ? 'Зарплата' : 'Прочее')),
               amount: parsedAmount,
+              currency: finalCur,
+              original_amount: origAmt,
+              original_currency: origCur,
+              amountInRub,
               description: String(p.description || cleanInput),
               occurred_on: String(p.occurred_on || toIso(mskNow)),
               ai: true
@@ -2327,7 +2420,7 @@ app.post("/api/parse-tx", auth, aiLimiter, async (req, res) => {
     }
 
     if (!parsed) {
-      parsed = instantParse || parseTxFallback(cleanInput);
+      parsed = instantParse || parseTxFallback(cleanInput, userCur);
     }
 
     if (parsed) {
