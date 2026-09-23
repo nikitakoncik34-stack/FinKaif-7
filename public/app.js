@@ -1856,7 +1856,7 @@ function financialAmountToCents(value) {
 }
 
 function getCapitalSnapshot(transactions = [], goals = []) {
-  const totalCapitalCents = (transactions || []).reduce((sum, tx) => {
+  const ledgerCapitalCents = (transactions || []).reduce((sum, tx) => {
     const amountCents = financialAmountToCents(tx?.amount);
     if (tx?.type === 'income') return sum + amountCents;
     if (tx?.type === 'expense') return sum - amountCents;
@@ -1866,6 +1866,14 @@ function getCapitalSnapshot(transactions = [], goals = []) {
     (sum, goal) => sum + Math.max(0, financialAmountToCents(goal?.saved_amount)),
     0
   );
+
+  // Goal balances are proof of owned funds even when their original deposits
+  // predate the imported transaction history. When the ledger is positive it
+  // already includes goal allocations, so goals only establish a lower bound.
+  // A negative ledger remains a liability and reduces net capital.
+  const totalCapitalCents = ledgerCapitalCents >= 0
+    ? Math.max(ledgerCapitalCents, savedInGoalsCents)
+    : savedInGoalsCents + ledgerCapitalCents;
 
   return {
     totalCapital: totalCapitalCents / 100,
