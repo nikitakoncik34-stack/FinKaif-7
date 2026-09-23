@@ -152,40 +152,119 @@ test('ledger reconciliation requires the imported multiplicity to be newly prese
   assert.equal(c.didLedgerGainTransactions([], [row], [row, {...row}]), false);
 });
 
-test('capital contract: total includes goals while free capital subtracts allocated savings', () => {
+test('capital contract: goals remain capital while free cash tracks later operations', () => {
   const c = client();
   const serverCapital = vm.createContext({});
   vm.runInContext(section(serverSource, 'function getCapitalSnapshot', 'function generateBuiltinAdvice'), serverCapital);
-  const goalOnly = c.getCapitalSnapshot([], [{saved_amount:58888}]);
+  const goalOnly = c.getCapitalSnapshot([], [{saved_amount:58888}], 0);
   assert.equal(goalOnly.totalCapital, 58888);
   assert.equal(goalOnly.savedInGoals, 58888);
   assert.equal(goalOnly.freeCapital, 0);
   assert.deepEqual(
-    JSON.parse(JSON.stringify(serverCapital.getCapitalSnapshot([], [{saved_amount:58888}]))),
+    JSON.parse(JSON.stringify(serverCapital.getCapitalSnapshot([], [{saved_amount:58888}], 0))),
     { totalCapital: 58888, savedInGoals: 58888, freeCapital: 0 }
   );
 
-  for (let i = 1; i <= 250; i++) {
-    const incomeCents = i * 9973;
-    const expenseCents = i * 3187;
-    const goalCents = i * 1129;
-    const snapshot = c.getCapitalSnapshot([
-      {type:'income', amount:incomeCents / 100},
-      {type:'expense', amount:expenseCents / 100},
-      {type:'transfer', amount:(i * 500) / 100}
-    ], [{saved_amount:goalCents / 100}]);
-    const ledgerCents = incomeCents - expenseCents;
-    assert.equal(Math.round(snapshot.totalCapital * 100), Math.max(ledgerCents, goalCents));
-    assert.equal(Math.round(snapshot.savedInGoals * 100), goalCents);
-    assert.equal(Math.round(snapshot.freeCapital * 100), Math.max(ledgerCents, goalCents) - goalCents);
-  }
+  const income = c.getCapitalSnapshot([{type:'income',amount:1000}], [{saved_amount:58888}], 0);
+  assert.equal(income.totalCapital, 59888);
+  assert.equal(income.freeCapital, 1000);
+  const expense = c.getCapitalSnapshot([{type:'expense',amount:1000}], [{saved_amount:58888}], 0);
+  assert.equal(expense.totalCapital, 58888);
+  assert.equal(expense.freeCapital, -1000);
+  const movedToGoal = c.getCapitalSnapshot([{type:'income',amount:1000}], [{saved_amount:59388}], -500);
+  assert.equal(movedToGoal.totalCapital, 59888);
+  assert.equal(movedToGoal.freeCapital, 500);
+  const twoGoals = c.getCapitalSnapshot([], [{saved_amount:58888},{saved_amount:40000}], 0);
+  assert.equal(twoGoals.totalCapital, 98888);
+  assert.equal(twoGoals.freeCapital, 0);
+  const historicalOverlap = c.getCapitalSnapshot([{type:'income',amount:30000}], [{saved_amount:58888}], -30000);
+  assert.equal(historicalOverlap.totalCapital, 58888);
+  assert.equal(historicalOverlap.freeCapital, 0);
+  const laterIncome = c.getCapitalSnapshot([{type:'income',amount:31000}], [{saved_amount:58888}], -30000);
+  assert.equal(laterIncome.totalCapital, 59888);
+  assert.equal(laterIncome.freeCapital, 1000);
 
-  const withLiability = c.getCapitalSnapshot(
-    [{type:'expense', amount:1000}],
-    [{saved_amount:58888}]
-  );
-  assert.equal(withLiability.totalCapital, 57888);
-  assert.equal(withLiability.freeCapital, -1000);
+  for (let i = 0; i < 10000; i++) {
+    const goalCents = (i * 1129) % 10000000;
+    const incomeCents = (i * 9973) % 2000000;
+    const expenseCents = (i * 3187) % 2000000;
+    const adjustmentCents = -((i * 137) % 100000);
+    const txs = [{type:'income',amount:incomeCents/100},{type:'expense',amount:expenseCents/100},{type:'transfer',amount:100}];
+    const goals = [{saved_amount:goalCents/100}];
+    const expectedFreeCents = incomeCents - expenseCents + adjustmentCents;
+    const expectedCapitalCents = goalCents + Math.max(0,expectedFreeCents);
+    for (const snapshot of [c.getCapitalSnapshot(txs,goals,adjustmentCents/100),serverCapital.getCapitalSnapshot(txs,goals,adjustmentCents/100)]) {
+      assert.equal(Math.round(snapshot.freeCapital*100),expectedFreeCents);
+      assert.equal(Math.round(snapshot.savedInGoals*100),goalCents);
+      assert.equal(Math.round(snapshot.totalCapital*100),expectedCapitalCents);
+    }
+  }
+});
+
+test('goal API moves available cash into goals and releases it on deletion', async () => {
+  const handlers = {};
+  const state = { adjustment: 0, goal: { id: 'g1', user_id: 'u1', saved_amount: 58888 }, ledger: 1000 };
+  const query = async (sql, args = []) => {
+    const q = sql.toLowerCase().replace(/\s+/g, ' ');
+    if (['begin', 'commit', 'rollback'].includes(q) || q.startsWith('insert into user_capital_state')) return { rows: [] };
+    if (q.startsWith('select free_adjustment from user_capital_state')) return { rows: [{ free_adjustment: state.adjustment }] };
+    if (q.startsWith('select * from goals') || q.startsWith('select saved_amount from goals')) return { rows: state.goal ? [{ ...state.goal }] : [] };
+    if (q.startsWith('select coalesce(sum(case when type=')) return { rows: [{ net: state.ledger }] };
+    if (q.startsWith('update goals set saved_amount=saved_amount+')) {
+      state.goal.saved_amount += args[0];
+      return { rows: [{ ...state.goal }] };
+    }
+    if (q.startsWith('update user_capital_state set free_adjustment=')) {
+      state.adjustment = args[0];
+      return { rows: [] };
+    }
+    if (q.startsWith('delete from goals')) {
+      state.goal = null;
+      return { rows: [] };
+    }
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+  const ctx = vm.createContext({
+    app: {
+      post: (path, ...args) => { handlers[`POST ${path}`] = args.at(-1); },
+      put: (path, ...args) => { handlers[`PUT ${path}`] = args.at(-1); },
+      delete: (path, ...args) => { handlers[`DELETE ${path}`] = args.at(-1); }
+    },
+    auth() {},
+    db: { connect: async () => ({ query, release() {} }) },
+    fail: (res, err) => res.status(500).json({ error: err.message })
+  });
+  vm.runInContext(section(serverSource, 'function goalCents', 'app.post("/api/subscriptions"'), ctx);
+  vm.runInContext(section(serverSource, 'app.delete("/api/goals/:id"', 'app.delete("/api/:resource/:id"'), ctx);
+  const req = (amount, expected_saved_amount = state.goal?.saved_amount) => ({ user: { id: 'u1' }, params: { id: 'g1' }, body: { amount, expected_saved_amount } });
+
+  const first = response();
+  await handlers['POST /api/goals/:id/topup'](req(500), first);
+  assert.equal(first.code, 200);
+  assert.equal(Number(first.body.saved_amount), 59388);
+  assert.equal(state.adjustment, -500);
+
+  const duplicate = response();
+  await handlers['POST /api/goals/:id/topup'](req(500, 58888), duplicate);
+  assert.equal(duplicate.code, 409);
+  assert.equal(Number(state.goal.saved_amount), 59388);
+
+  const second = response();
+  await handlers['POST /api/goals/:id/topup'](req(700), second);
+  assert.equal(second.code, 200);
+  assert.equal(Number(second.body.saved_amount), 60088);
+  assert.equal(state.adjustment, -1000);
+
+  const invalid = response();
+  await handlers['POST /api/goals/:id/topup'](req(-1), invalid);
+  assert.equal(invalid.code, 400);
+  assert.equal(Number(state.goal.saved_amount), 60088);
+
+  const deleted = response();
+  await handlers['DELETE /api/goals/:id'](req(0), deleted);
+  assert.equal(deleted.code, 200);
+  assert.equal(state.goal, null);
+  assert.equal(state.adjustment, 59088);
 });
 
 test('short merchant keywords cannot match part of a surname, in both engines', () => {
