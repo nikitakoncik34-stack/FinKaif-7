@@ -1308,9 +1308,69 @@ const compactMoney = (num, force = false) => {
   return str + ' ' + sym;
 };
 
-// Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
+// Robust Russian currency amount parser: handles thousand dots (100.000 = 100k), thousand commas (100,000 = 100k),
+// European/Russian compound formatting (100.000,50), and decimal fractions (100.50, 100,50, 100.5)
+function parseRussianAmount(numStr) {
+  if (!numStr) return 0;
+  let s = String(numStr).trim().replace(/\s+/g, '');
 
-// // Smart Natural Language Financial Parser (with Full Russian Slang, Livestock/Pets, Composite Numbers & 0ms Latency)
+  // 1. Both dot and comma present (e.g. 100.000,50 or 100,000.50)
+  if (s.includes('.') && s.includes(',')) {
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+    const val = parseFloat(s);
+    return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+  }
+
+  // 2. Only dots present (e.g. "100.000", "1.000.000", "100.50", "100.5")
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    if (parts.length > 2) {
+      s = s.replace(/\./g, '');
+      const val = parseFloat(s);
+      return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+    }
+
+    if (parts[1] && parts[1].length === 3) {
+      s = parts[0] + parts[1];
+      const val = parseFloat(s);
+      return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+    }
+
+    const val = parseFloat(s);
+    return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+  }
+
+  // 3. Only commas present (e.g. "100,000", "1,000,000", "100,50", "100,5")
+  if (s.includes(',')) {
+    const parts = s.split(',');
+    if (parts.length > 2) {
+      s = s.replace(/,/g, '');
+      const val = parseFloat(s);
+      return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+    }
+
+    if (parts[1] && parts[1].length === 3) {
+      s = parts[0] + parts[1];
+      const val = parseFloat(s);
+      return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+    }
+
+    s = s.replace(',', '.');
+    const val = parseFloat(s);
+    return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+  }
+
+  const val = parseFloat(s);
+  return isNaN(val) ? 0 : Math.round(val * 100) / 100;
+}
+
+// Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
 function parseQuickTxInput(raw) {
   const text = String(raw || '').trim();
   if (!text) return null;
@@ -1320,23 +1380,21 @@ function parseQuickTxInput(raw) {
   let amount = 0;
   let matchedNumStr = '';
 
-  // 0. Explicit price with currency or preposition: "за 100 рублей", "100 руб", "100р", "100 ₽", "за 350", "на 500"
-  const explicitCurrency = lower.match(/(?:^|[^а-яa-z0-9])(?:(?:за|на)\s+)?(\d[\d\s]*(?:[.,]\d+)?)\s*(?:₽|\$|€|₸|рублей|рубля|рубль|руб\.?|р\.?)(?:$|[^а-яa-z0-9])/i);
+  // 0. Explicit price with currency or preposition: "за 100 рублей", "100 руб", "100р", "100 ₽", "за 350", "на 500", "100.000"
+  const explicitCurrency = lower.match(/(?:^|[^а-яa-z0-9])(?:(?:за|на)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:₽|\$|€|₸|рублей|рубля|рубль|руб\.?|р\.?)(?:$|[^а-яa-z0-9])/i);
   if (explicitCurrency) {
-    const cleanNum = explicitCurrency[1].replace(/\s+/g, '').replace(',', '.');
-    const val = Math.round(parseFloat(cleanNum) * 100) / 100;
-    if (!isNaN(val) && val > 0) {
+    const val = parseRussianAmount(explicitCurrency[1]);
+    if (val > 0) {
       amount = val;
       matchedNumStr = explicitCurrency[0].trim();
     }
   }
 
   if (!amount) {
-    const zaNaDigits = lower.match(/(?:^|[^а-яa-z0-9])(?:за|на)\s+(\d[\d\s]*(?:[.,]\d+)?)(?:$|[^а-яa-z0-9])/i);
+    const zaNaDigits = lower.match(/(?:^|[^а-яa-z0-9])(?:за|на)\s+(\d[\d\s.,]*\d|\d)(?:$|[^а-яa-z0-9])/i);
     if (zaNaDigits) {
-      const cleanNum = zaNaDigits[1].replace(/\s+/g, '').replace(',', '.');
-      const val = Math.round(parseFloat(cleanNum) * 100) / 100;
-      if (!isNaN(val) && val > 0) {
+      const val = parseRussianAmount(zaNaDigits[1]);
+      if (val > 0) {
         amount = val;
         matchedNumStr = zaNaDigits[0].trim();
       }
@@ -1521,11 +1579,10 @@ function parseQuickTxInput(raw) {
 
   // G. Standard digits fallback
   if (!amount) {
-    const stdNum = lower.match(/(?:^|[^а-яa-z0-9])(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яa-z0-9])/i);
+    const stdNum = lower.match(/(?:^|[^а-яa-z0-9])(\d[\d\s.,]*\d|\d)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:$|[^а-яa-z0-9])/i);
     if (stdNum) {
-      const cleanNum = stdNum[1].replace(/\s+/g, '').replace(',', '.');
-      const val = Math.round(parseFloat(cleanNum) * 100) / 100;
-      if (!isNaN(val) && val > 0) {
+      const val = parseRussianAmount(stdNum[1]);
+      if (val > 0) {
         amount = val;
         matchedNumStr = stdNum[0].trim();
       }
@@ -10438,11 +10495,11 @@ function bindInteractiveEvents() {
         const qLower = text.toLowerCase();
         let detectedAmt = null;
         const kM = text.match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(?:k|к|тыс\.?|тыщ)(?:\s|$)/i);
-        const numM = text.match(/(?:^|\s)(\d[\d\s]*(?:[.,]\d+)?)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:\s|$)/i);
+        const numM = text.match(/(?:^|\s)(\d[\d\s.,]*\d|\d)(?:\s*(?:₽|\$|€|₸|руб\.?|р\.?))?(?:\s|$)/i);
         if (kM) detectedAmt = Math.round(parseFloat(kM[1].replace(',', '.')) * 1000);
         else if (numM) {
-          const rawV = numM[1].replace(/\s+/g, '').replace(',', '.');
-          if (!isNaN(parseFloat(rawV)) && parseFloat(rawV) > 0) detectedAmt = Math.round(parseFloat(rawV));
+          const val = parseRussianAmount(numM[1]);
+          if (val > 0) detectedAmt = Math.round(val);
         }
 
         if (/(?:создай|поставь|добавь|хочу накопить)\s+(?:цель|накопление)/i.test(qLower) && detectedAmt) {
