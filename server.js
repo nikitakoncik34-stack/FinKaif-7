@@ -2242,6 +2242,31 @@ function getPoliteProfanityReply() {
   return POLITE_FINANCIAL_RESPONSES[idx];
 }
 
+function getCapitalSnapshot(transactions = [], goals = []) {
+  const toCents = (value) => {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  };
+  const ledgerCapitalCents = transactions.reduce((sum, tx) => {
+    const amountCents = toCents(tx?.amount);
+    if (tx?.type === "income") return sum + amountCents;
+    if (tx?.type === "expense") return sum - amountCents;
+    return sum;
+  }, 0);
+  const savedInGoalsCents = goals.reduce(
+    (sum, goal) => sum + Math.max(0, toCents(goal?.saved_amount)),
+    0
+  );
+  const totalCapitalCents = ledgerCapitalCents >= 0
+    ? Math.max(ledgerCapitalCents, savedInGoalsCents)
+    : savedInGoalsCents + ledgerCapitalCents;
+  return {
+    totalCapital: totalCapitalCents / 100,
+    savedInGoals: savedInGoalsCents / 100,
+    freeCapital: (totalCapitalCents - savedInGoalsCents) / 100
+  };
+}
+
 function generateBuiltinAdvice(question, transactions = [], budgets = [], goals = []) {
   if (containsProfanity(question)) {
     return getPoliteProfanityReply();
@@ -2253,6 +2278,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
   const inc = transactions.filter(x => x.type === "income").reduce((s, x) => s + Number(x.amount || 0), 0);
   const exp = transactions.filter(x => x.type === "expense").reduce((s, x) => s + Number(x.amount || 0), 0);
   const balance = inc - exp;
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals);
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : (balance > 0 ? 35 : 0);
 
   // Category Breakdown
@@ -2284,8 +2310,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
 
   // Cushion & Runway
   const cushionGoal = (goals || []).find(g => /подушк|резерв|безопасн/i.test(g.name || ''));
-  const totalSavedInGoals = (goals || []).reduce((s, g) => s + Number(g.saved_amount || 0), 0);
-  const liquidCushion = cushionGoal ? Number(cushionGoal.saved_amount || 0) : (Math.max(0, balance) + totalSavedInGoals * 0.5);
+  const liquidCushion = cushionGoal ? Number(cushionGoal.saved_amount || 0) : Math.max(0, totalCapital);
   const runwayMonths = monthlyNeeds > 0 ? (liquidCushion / monthlyNeeds).toFixed(1) : "3.0";
 
   // Parse numbers from user input (e.g. 100к, 50000)
@@ -2415,7 +2440,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
     const annualLivingExp = monthlyExp * 12;
     const fireNumber = Math.round(annualLivingExp * 25);
     const fatFireNumber = Math.round(annualLivingExp * 33);
-    const currentCapital = Math.max(0, balance) + totalSavedInGoals;
+    const currentCapital = Math.max(0, totalCapital);
     const progressPct = Math.min(100, Math.round((currentCapital / (fireNumber || 1)) * 100));
 
     const annualSavings = Math.max(monthlySurplus * 12, 120000);
@@ -2528,7 +2553,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
 
   // 5. ПРОГНОЗ КАПИТАЛА & СЛОЖНЫЙ ПРОЦЕНТ (1, 3, 5, 10 ЛЕТ)
   if (/прогноз|сложн.*процент|через.*лет|через год|инвести|будущ|рост капитал/i.test(q)) {
-    const initialCap = Math.max(0, balance) + totalSavedInGoals || 100000;
+    const initialCap = Math.max(0, totalCapital) || 100000;
     const monthlyInv = askedAmount && askedAmount <= 200000 ? askedAmount : (monthlySurplus > 0 ? monthlySurplus : 25000);
     const annualRate = 0.12;
     const rMonthly = annualRate / 12;
@@ -2564,7 +2589,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
     const scoreCushion = Math.min(25, Math.round(Number(runwayMonths) * 6));
     const scoreSavings = Math.min(25, Math.max(0, Math.round(savingsRate)));
     const scoreBudgets = budgets.length > 0 ? 25 : 12;
-    const scoreCapital = balance >= 0 ? 25 : 5;
+    const scoreCapital = totalCapital >= 0 ? 25 : 5;
     const totalScore = scoreCushion + scoreSavings + scoreBudgets + scoreCapital;
 
     let grade = 'B+ • Устойчивый уровень';
@@ -2577,7 +2602,7 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
       `1. **Запас прочности (${scoreCushion}/25 б):** Подушка на **${runwayMonths} мес.** базовых расходов.\n` +
       `2. **Норма сбережений (${scoreSavings}/25 б):** Сберегается **${savingsRate}%** от поступающего дохода.\n` +
       `3. **Бюджетная дисциплина (${scoreBudgets}/25 б):** Настроено **${budgets.length}** лимитов категорий.\n` +
-      `4. **Динамика капитала (${scoreCapital}/25 б):** Чистый баланс **${balance.toLocaleString('ru-RU')} ₽**.\n\n` +
+      `4. **Динамика капитала (${scoreCapital}/25 б):** Общий капитал **${totalCapital.toLocaleString('ru-RU')} ₽**.\n\n` +
       `🎯 **Главный рычаг роста прямо сейчас:**\n` +
       (scoreBudgets < 20 ? `• Зафиксируйте лимиты на категории в разделе «Бюджеты», чтобы добавить +12 баллов к FinScore.\n` : `• Автоматизируйте пополнение инвестиционной цели в день зарплаты, чтобы выйти в элитный клуб 90+ FinScore.\n\n`) +
       `[ACTION:budgets:bg-all:Настроить лимиты бюджетов]\n` +
@@ -2608,7 +2633,9 @@ function generateBuiltinAdvice(question, transactions = [], budgets = [], goals 
   // 8. ДЕФОЛТНЫЙ УМНЫЙ СОВЕТНИК
   return `🤖 **Финансовый интеллект FinKaif OS:**\n\n` +
     `Я проанализировал вашу финансовую модель:\n` +
-    `• Чистый баланс капитала: **${balance.toLocaleString('ru-RU')} ₽**\n` +
+    `• Общий капитал: **${totalCapital.toLocaleString('ru-RU')} ₽**\n` +
+    `• Свободно на расходы: **${freeCapital.toLocaleString('ru-RU')} ₽**\n` +
+    `• В целях: **${savedInGoals.toLocaleString('ru-RU')} ₽**\n` +
     `• Норма сбережений (Savings Rate): **${savingsRate}%**\n` +
     `• Запас автономности (Runway): **${runwayMonths} мес.**\n` +
     `• Активных целей: **${goals.length}** | Лимитов бюджета: **${budgets.length}**\n\n` +
@@ -2626,9 +2653,10 @@ function buildSystemPrompt(transactions, budgets, goals) {
   const inc = safeSum(transactions.filter(x => x.type === "income"));
   const exp = safeSum(transactions.filter(x => x.type === "expense"));
   const balance = Math.round((inc - exp) * 100) / 100;
+  const { totalCapital, savedInGoals, freeCapital } = getCapitalSnapshot(transactions, goals);
   const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
   const monthlyExp = exp > 0 ? Math.max(exp, 35000) : 45000;
-  const runwayMonths = monthlyExp > 0 ? (Math.max(0, balance) / monthlyExp).toFixed(1) : "0.0";
+  const runwayMonths = monthlyExp > 0 ? (Math.max(0, totalCapital) / monthlyExp).toFixed(1) : "0.0";
   const fireNumber = Math.round(monthlyExp * 12 * 25);
 
   // --- Per-category breakdown ---
@@ -2731,7 +2759,10 @@ function buildSystemPrompt(transactions, budgets, goals) {
 ОБЩАЯ КАРТИНА:
 • Всего доходов зафиксировано: ${inc.toLocaleString("ru-RU")} ₽
 • Всего расходов зафиксировано: ${exp.toLocaleString("ru-RU")} ₽
-• Чистый баланс: ${balance.toLocaleString("ru-RU")} ₽
+• Денежный поток по операциям: ${balance.toLocaleString("ru-RU")} ₽
+• Общий капитал: ${totalCapital.toLocaleString("ru-RU")} ₽
+• Свободно на расходы: ${freeCapital.toLocaleString("ru-RU")} ₽
+• В целях: ${savedInGoals.toLocaleString("ru-RU")} ₽
 • Норма сбережений (Savings Rate): ${savingsRate}%
 • Runway (автономия без дохода): ${runwayMonths} мес.
 • Целевой капитал FIRE (4% SWR): ${fireNumber.toLocaleString("ru-RU")} ₽
