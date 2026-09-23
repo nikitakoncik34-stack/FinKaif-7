@@ -234,6 +234,17 @@ function convertToRub(amountInForeign, cur = profile.currency) {
   return amt * quote;
 }
 
+function convertBetweenCurrencies(amount, fromCur, toCur) {
+  const amt = Number(amount) || 0;
+  if (!fromCur || !toCur || fromCur === toCur) return amt;
+  const inRub = convertToRub(amt, fromCur);
+  const inTarget = convertFromRub(inRub, toCur);
+  if (toCur === 'USD' || toCur === 'EUR') {
+    return Math.round(inTarget * 100) / 100;
+  }
+  return inTarget % 1 === 0 ? inTarget : Math.round(inTarget * 100) / 100;
+}
+
 const money = (n, force = false, isAlreadyConverted = false) => {
   const cur = profile.currency || 'RUB';
   const sym = currencySymbols[cur] || '₽';
@@ -1370,23 +1381,48 @@ function parseRussianAmount(numStr) {
   return isNaN(val) ? 0 : Math.round(val * 100) / 100;
 }
 
-// Smart Natural Language Financial Parser (with Full Russian Slang & Colloquial Support)
-function parseQuickTxInput(raw) {
+// Smart Natural Language Financial Parser (with Full Russian Slang, Colloquial & Multi-Currency Engine)
+function parseQuickTxInput(raw, activeCurrency) {
   const text = String(raw || '').trim();
   if (!text) return null;
 
+  const targetCur = activeCurrency || (typeof profile !== 'undefined' && profile.currency) || 'RUB';
   const lower = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
   let cleanWords = ' ' + text + ' ';
   let amount = 0;
   let matchedNumStr = '';
+  let detectedCurrency = null;
 
-  // 0. Explicit price with currency or preposition: "за 100 рублей", "100 руб", "100р", "100 ₽", "за 350", "на 500", "100.000"
-  const explicitCurrency = lower.match(/(?:^|[^а-яa-z0-9])(?:(?:за|на)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:₽|\$|€|₸|рублей|рубля|рубль|руб\.?|р\.?)(?:$|[^а-яa-z0-9])/i);
-  if (explicitCurrency) {
-    const val = parseRussianAmount(explicitCurrency[1]);
-    if (val > 0) {
-      amount = val;
-      matchedNumStr = explicitCurrency[0].trim();
+  // 0. Explicit price with currency: "за 100 долларов", "100$", "100 баксов", "20 евро", "1000 тенге", "100 рублей"
+  const CURRENCY_PATTERNS = [
+    {
+      cur: 'USD',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:доллар[а-я]*|дол|usd|\$|бакс[а-я]*|зелен[а-я]*)(?:$|[^а-яa-z0-9])/i
+    },
+    {
+      cur: 'EUR',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:евро|еврик[а-я]*|eur|€)(?:$|[^а-яa-z0-9])/i
+    },
+    {
+      cur: 'KZT',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:тенге|тнг|kzt|₸)(?:$|[^а-яa-z0-9])/i
+    },
+    {
+      cur: 'RUB',
+      re: /(?:^|[^а-яa-z0-9])(?:(?:за|на|в|по)\s+)?(\d[\d\s.,]*\d|\d)\s*(?:₽|рублей|рубля|рубль|руб\.?|р\.?|rub|деревянн[а-я]*)(?:$|[^а-яa-z0-9])/i
+    }
+  ];
+
+  for (const cp of CURRENCY_PATTERNS) {
+    const m = lower.match(cp.re);
+    if (m) {
+      const val = parseRussianAmount(m[1]);
+      if (val > 0) {
+        amount = val;
+        matchedNumStr = m[0].trim();
+        detectedCurrency = cp.cur;
+        break;
+      }
     }
   }
 
@@ -1592,6 +1628,26 @@ function parseQuickTxInput(raw) {
   // Remove matched number from description string
   if (matchedNumStr) {
     cleanWords = cleanWords.replace(new RegExp(matchedNumStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
+  }
+
+  if (!amount) return null;
+
+  // Multi-Currency Calculation & Auto-Conversion
+  let finalAmount = amount;
+  let originalAmount = null;
+  let originalCurrency = null;
+  let amountInRub = 0;
+
+  if (detectedCurrency && detectedCurrency !== targetCur) {
+    // Explicit currency specified that is different from user active currency: convert to targetCur!
+    originalAmount = amount;
+    originalCurrency = detectedCurrency;
+    finalAmount = convertBetweenCurrencies(amount, detectedCurrency, targetCur);
+    amountInRub = Math.round(convertToRub(amount, detectedCurrency) * 100) / 100;
+  } else {
+    // No currency specified OR matches active currency: amount is already in targetCur!
+    finalAmount = amount;
+    amountInRub = Math.round(convertToRub(amount, targetCur) * 100) / 100;
   }
 
   // 2. Relative Dates (Synchronized with Moscow Time)
@@ -1806,9 +1862,19 @@ function parseQuickTxInput(raw) {
     }
   }
 
+  // If currency was converted, append original amount note if not already there
+  if (originalCurrency && originalAmount && !cleanDesc.includes(String(originalAmount))) {
+    const origSym = currencySymbols[originalCurrency] || originalCurrency;
+    cleanDesc += ` (${originalAmount} ${origSym})`;
+  }
+
   return {
     raw: text,
-    amount,
+    amount: finalAmount,
+    currency: targetCur,
+    originalAmount,
+    originalCurrency,
+    amountInRub,
     type,
     category,
     icon: iconEmoji,
@@ -4635,7 +4701,7 @@ function renderHomeView() {
           <div class="quick-ai-badge">
             <span class="quick-input-icon">${icon('sparkle', 16)}</span>
           </div>
-          <input id="quick-express-input" placeholder="Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»..." autocomplete="off" aria-label="Быстрая запись расхода или дохода">
+          <input id="quick-express-input" placeholder="Экспресс-запись (${currencySymbols[profile.currency] || '₽'}): «кофе 250», «получил 50к», «100$»..." autocomplete="off" aria-label="Быстрая запись расхода или дохода">
           <div class="quick-input-right-actions">
             <button type="button" class="btn-clear-quick" id="btn-clear-quick" style="display: none;" title="Очистить" aria-label="Очистить поле ввода">${icon('close', 12)}</button>
             <button type="button" class="btn-voice-express" id="btn-voice-express" title="Голосовой ввод: нажмите и говорите" aria-label="Голосовой ввод расхода или дохода">
@@ -4653,7 +4719,7 @@ function renderHomeView() {
       <!-- Live parse preview bar -->
       <div id="quick-parse-preview" class="quick-parse-preview" style="display: none;"></div>
 
-      <!-- Express Smart Guide Explanation Banner -->
+      <!-- Express Smart Guide Explanation Banner & Quick Currency Switcher -->
       <div class="express-guide-banner">
         <div class="express-guide-header">
           <div class="express-ai-chip">
@@ -4661,7 +4727,13 @@ function renderHomeView() {
             <span>ИИ-ввод</span>
           </div>
           <div class="express-guide-desc">
-            Пишите в свободной форме или надиктуйте через <span class="express-mic-tag">${icon('mic', 12)} микрофон</span> — система сама определит сумму, категорию и дату
+            Ввод в <strong class="express-active-cur-label">${profile.currency} (${currencySymbols[profile.currency] || '₽'})</strong>. Для другой валюты просто назовите её: <span class="express-cur-example">«100$»</span>, <span class="express-cur-example">«20 евро»</span>
+          </div>
+          <div class="express-cur-switcher" data-active-cur="${profile.currency}" title="Быстрое переключение валюты">
+            <button type="button" class="express-cur-btn ${profile.currency === 'RUB' ? 'active' : ''}" data-cur="RUB" title="Российский рубль">₽</button>
+            <button type="button" class="express-cur-btn ${profile.currency === 'USD' ? 'active' : ''}" data-cur="USD" title="Доллар США">$</button>
+            <button type="button" class="express-cur-btn ${profile.currency === 'EUR' ? 'active' : ''}" data-cur="EUR" title="Евро">€</button>
+            <button type="button" class="express-cur-btn ${profile.currency === 'KZT' ? 'active' : ''}" data-cur="KZT" title="Казахстанский тенге">₸</button>
           </div>
         </div>
       </div>
@@ -9785,11 +9857,25 @@ function bindInteractiveEvents() {
     }
 
     if (parsed && parsed.amount > 0) {
+      const cur = parsed.currency || profile.currency || 'RUB';
+      const sym = currencySymbols[cur] || '₽';
+      const formattedAmt = new Intl.NumberFormat('ru-RU', {
+        maximumFractionDigits: parsed.amount % 1 !== 0 ? 2 : 0
+      }).format(parsed.amount);
+
+      let convBadge = '';
+      if (parsed.originalCurrency && parsed.originalCurrency !== cur && parsed.originalAmount) {
+        const origSym = currencySymbols[parsed.originalCurrency] || parsed.originalCurrency;
+        const origFmt = new Intl.NumberFormat('ru-RU').format(parsed.originalAmount);
+        convBadge = `<span class="preview-pill cur-conv" title="Сконвертировано по курсу ЦБ">${origFmt} ${origSym} → ${formattedAmt} ${sym}</span>`;
+      }
+
       previewBox.style.display = 'flex';
       previewBox.innerHTML = `
         <span class="preview-pill type ${parsed.type}"><span class="status-dot ${parsed.type === 'income' ? 'jade' : 'coral'}"></span> ${parsed.type === 'income' ? 'Поступление' : 'Расход'}</span>
         <span class="preview-pill cat">${getCategoryIcon(parsed.category, parsed.type, 13)} ${esc(parsed.category)}</span>
-        <span class="preview-pill amt num">${parsed.type === 'income' ? '+' : '−'}${new Intl.NumberFormat('ru-RU').format(parsed.amount)} ₽</span>
+        <span class="preview-pill amt num">${parsed.type === 'income' ? '+' : '−'}${formattedAmt} ${sym}</span>
+        ${convBadge}
         <span class="preview-pill date">${icon('calendar', 12)} ${esc(parsed.dateLabel || 'Сегодня')}</span>
         <span class="preview-pill desc">«${esc(parsed.description)}»</span>
         ${isAi ? `<span class="preview-pill ai-tag">${icon('sparkle', 11)} ИИ</span>` : ''}
@@ -9812,14 +9898,15 @@ function bindInteractiveEvents() {
       return;
     }
 
-    // Check if we have cached AI result for this exact text
-    if (cachedAiTx && cachedAiTx.raw === rawVal) {
+    // Check if we have cached AI result for this exact text and currency
+    const activeCur = profile.currency || 'RUB';
+    if (cachedAiTx && cachedAiTx.raw === rawVal && cachedAiTx.currency === activeCur) {
       renderQuickPreviewBox(cachedAiTx, true, false);
       return;
     }
 
     // Immediate zero-latency local parse
-    const localParsed = parseQuickTxInput(rawVal);
+    const localParsed = parseQuickTxInput(rawVal, activeCur);
     if (localParsed && localParsed.amount > 0) {
       renderQuickPreviewBox(localParsed, false, false);
     } else if (rawVal.length >= 3) {
@@ -9836,17 +9923,25 @@ function bindInteractiveEvents() {
         try {
           const aiRes = await api('parse-tx', {
             method: 'POST',
-            body: JSON.stringify({ text: rawVal })
+            body: JSON.stringify({
+              text: rawVal,
+              currency: profile.currency || 'RUB'
+            })
           });
           if (aiRes && aiRes.parsed && Number(aiRes.parsed.amount) > 0 && quickInput.value.trim() === rawVal) {
             const p = aiRes.parsed;
             const iconEmoji = getCategoryIcon(p.category, p.type);
             const isToday = !p.occurred_on || p.occurred_on === toDateIso(getMskDate());
+            const cur = p.currency || profile.currency || 'RUB';
             cachedAiTx = {
               raw: rawVal,
               type: p.type || 'expense',
               category: p.category || 'Прочее',
               amount: Number(p.amount),
+              currency: cur,
+              originalAmount: p.original_amount || null,
+              originalCurrency: p.original_currency || null,
+              amountInRub: p.amountInRub || (cur === 'RUB' ? Number(p.amount) : Math.round(convertToRub(Number(p.amount), cur))),
               occurred_on: p.occurred_on || toDateIso(getMskDate()),
               dateLabel: isToday ? 'Сегодня' : p.occurred_on,
               description: p.description || rawVal,
@@ -9891,7 +9986,7 @@ function bindInteractiveEvents() {
     setupVoiceInputHandler({
       btnEl: btnVoiceExpress,
       inputEl: quickInput,
-      defaultPlaceholder: 'Экспресс-запись: «кофе 250», «получил 50к», «зарплата 80к вчера»...',
+      defaultPlaceholder: `Экспресс-запись (${currencySymbols[profile.currency] || '₽'}): «кофе 250», «получил 50к», «зарплата 80к вчера»...`,
       listeningPlaceholder: 'Слушаю... (например: «я сегодня получил 50 тысяч рублей»)',
       onResult: () => updateQuickPreview(true),
       onEnd: () => updateQuickPreview(true)
@@ -9902,11 +9997,12 @@ function bindInteractiveEvents() {
     btnSubmitExpress.onclick = async () => {
       const rawVal = quickInput.value.trim();
       let parsed = null;
+      const activeCur = profile.currency || 'RUB';
 
-      if (cachedAiTx && cachedAiTx.raw === rawVal) {
+      if (cachedAiTx && cachedAiTx.raw === rawVal && cachedAiTx.currency === activeCur) {
         parsed = cachedAiTx;
       } else {
-        parsed = parseQuickTxInput(rawVal);
+        parsed = parseQuickTxInput(rawVal, activeCur);
       }
 
       // AI Fallback for complex colloquial / slang input
@@ -9916,14 +10012,22 @@ function bindInteractiveEvents() {
           btnSubmitExpress.innerText = 'ИИ анализирует...';
           const aiRes = await api('parse-tx', {
             method: 'POST',
-            body: JSON.stringify({ text: rawVal })
+            body: JSON.stringify({
+              text: rawVal,
+              currency: activeCur
+            })
           });
           if (aiRes && aiRes.parsed && Number(aiRes.parsed.amount) > 0) {
             const p = aiRes.parsed;
+            const cur = p.currency || activeCur;
             parsed = {
               type: p.type || 'expense',
               category: p.category || 'Прочее',
               amount: Number(p.amount),
+              currency: cur,
+              originalAmount: p.original_amount || null,
+              originalCurrency: p.original_currency || null,
+              amountInRub: p.amountInRub || (cur === 'RUB' ? Number(p.amount) : Math.round(convertToRub(Number(p.amount), cur))),
               occurred_on: p.occurred_on || toDateIso(getMskDate()),
               dateLabel: 'Сегодня',
               description: p.description || rawVal,
@@ -9947,19 +10051,24 @@ function bindInteractiveEvents() {
         btnSubmitExpress.disabled = true;
         btnSubmitExpress.innerText = 'Запись...';
 
+        const cur = parsed.currency || activeCur;
+        const amountToSave = parsed.amountInRub !== undefined ? parsed.amountInRub : (
+          cur === 'RUB' ? parsed.amount : Math.round(convertToRub(parsed.amount, cur))
+        );
+
         await api('transactions', {
           method: 'POST',
           body: JSON.stringify({
             type: parsed.type,
             category: parsed.category,
-            amount: parsed.amount,
+            amount: amountToSave,
             occurred_on: parsed.occurred_on,
             description: parsed.description
           })
         });
 
-        if (parsed.type === 'income' && parsed.amount >= 15000) {
-          paydaySplitData = { amount: parsed.amount };
+        if (parsed.type === 'income' && amountToSave >= 15000) {
+          paydaySplitData = { amount: amountToSave };
         }
 
         quickInput.value = '';
@@ -9972,6 +10081,21 @@ function bindInteractiveEvents() {
       }
     };
   }
+
+  // Express card 1-tap currency switcher
+  $$('.express-cur-btn').forEach(btn => {
+    btn.onclick = async e => {
+      e.stopPropagation();
+      const newCur = btn.getAttribute('data-cur');
+      if (!newCur || newCur === profile.currency) return;
+      profile.currency = newCur;
+      try {
+        localStorage.setItem('finkaif_currency', profile.currency);
+        await api('profile', { method: 'POST', body: JSON.stringify({ currency: profile.currency }) });
+      } catch (err) {}
+      renderApp();
+    };
+  });
 
   // Home Screen 1-Tap Suggestion Chips
   $$('.quick-chip').forEach(chip => {
